@@ -1,0 +1,14 @@
+Put view page files here
+
+The view page file is a centralized file that imports and uses other components 
+
+When you create a new empty vue file, copy the following into it:
+
+<template>
+    html content here
+</template>
+
+<script setup>
+</script>
+
+<style scoped></style>

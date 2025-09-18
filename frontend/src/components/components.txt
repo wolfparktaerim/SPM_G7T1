@@ -1,0 +1,3 @@
+Put your reusable / non-reusable component files here 
+
+If a view page uses multiple components, make a folder for them (eg: make a folder called "Tasks" for all task related components, which i assume will be quite alot)
