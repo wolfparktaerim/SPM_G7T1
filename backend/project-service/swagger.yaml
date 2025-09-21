@@ -1,0 +1,341 @@
+openapi: 3.0.0
+info:
+  title: Project Management API
+  description: API for CRUD operations on projects with role and ownership validation using Firebase Realtime Database.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5007
+    description: Local Flask server
+
+paths:
+  /project/create:
+    post:
+      summary: Create a new project
+      description: Create a project only if role is 'manager' or 'director'.
+      requestBody:
+        description: Project creation payload including userid, role, and project fields
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - role
+              properties:
+                userid:
+                  type: string
+                  example: "user123"
+                role:
+                  type: string
+                  enum: [manager, director, employee]
+                  example: "manager"
+                title:
+                  type: string
+                  example: "New Project"
+                collaborators:
+                  type: array
+                  items:
+                    type: string
+                  example: ["user234", "user345"]
+                description:
+                  type: string
+                  example: "Project description here"
+                status:
+                  type: string
+                  example: "ongoing"
+                deadline:
+                  type: string
+                  format: date-time
+                  example: "2025-12-31T23:59:59Z"
+                comments:
+                  type: array
+                  items:
+                    type: string
+                  example: ["Initial comment"]
+      responses:
+        '201':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Project created"
+                  project:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+                        example: "-Mabcd1234xyz"
+                      title:
+                        type: string
+                      ownerUid:
+                        type: string
+                      collaborators:
+                        type: array
+                        items:
+                          type: string
+                      description:
+                        type: string
+                      status:
+                        type: string
+                      deadline:
+                        type: string
+                      creationDate:
+                        type: string
+                      comments:
+                        type: array
+                        items:
+                          type: string
+        '400':
+          description: Missing required fields or invalid input
+        '403':
+          description: Unauthorized - role not allowed to create
+
+  /project/{userid}:
+    get:
+      summary: Get all projects owned by userid
+      description: Fetch projects where ownerUid equals the given userid.
+      parameters:
+        - name: userid
+          in: path
+          description: User ID of project owner
+          required: true
+          schema:
+            type: string
+            example: "user123"
+      responses:
+        '200':
+          description: List of projects owned by userid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        collaborators:
+                          type: array
+                          items:
+                            type: string
+                          example: ["user234", "user345"]
+                        comments:
+                          type: array
+                          items:
+                            type: string
+                          example: ["Initial comment"]
+                        creationDate:
+                          type: string
+                          format: date-time
+                          example: "2025-09-21T03:57:07.754494+00:00"
+                        deadline:
+                          type: string
+                          format: date-time
+                          example: "2025-12-31T23:59:59Z"
+                        description:
+                          type: string
+                          example: "Project description here"
+                        ownerUid:
+                          type: string
+                          example: "user123"
+                        status:
+                          type: string
+                          example: "ongoing"
+                        title:
+                          type: string
+                          example: "New Project"
+                        uid:
+                          type: string
+                          example: "-O_ePl_9Fc7DAgspQqFT"
+        '404':
+          description: User or projects not found
+
+  /project/delete:
+    post:
+      summary: Delete a project
+      description: Delete a project only if userid matches the ownerUid of the project.
+      requestBody:
+        description: Payload containing userid and project uid to delete
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - uid
+              properties:
+                userid:
+                  type: string
+                  example: "user123"
+                uid:
+                  type: string
+                  example: "-Mabcd1234xyz"
+      responses:
+        '200':
+          description: Project deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Project deleted"
+        '400':
+          description: Missing required fields
+        '403':
+          description: Unauthorized - only owner can delete
+        '404':
+          description: Project not found
+  /project/add-collaborator:
+    post:
+      summary: Add a collaborator to a project
+      description: Only the project owner can add collaborators.
+      requestBody:
+        description: JSON with userid (owner), adduserid (user to add), and uid (project id)
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - adduserid
+                - uid
+              properties:
+                userid:
+                  type: string
+                  example: "owner123"
+                adduserid:
+                  type: string
+                  example: "collaborator456"
+                uid:
+                  type: string
+                  example: "-Mabcd1234xyz"
+      responses:
+        '200':
+          description: Collaborator added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Collaborator added"
+                  project:
+                    type: object
+        '400':
+          description: Missing or invalid input
+        '403':
+          description: Unauthorized - only owner can add collaborators
+        '404':
+          description: Project not found
+  /project/update:
+    post:
+      summary: Update project data
+      description: 'Only the project owner can update fields: deadline, description, status, or title.'
+      requestBody:
+        description: JSON with userid, uid, and at least one field to update (deadline, description, status, title)
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - uid
+              properties:
+                userid:
+                  type: string
+                  example: "owner123"
+                uid:
+                  type: string
+                  example: "-Mabcd1234xyz"
+                deadline:
+                  type: string
+                  format: date-time
+                  example: "2025-12-31T23:59:59Z"
+                description:
+                  type: string
+                  example: "Updated project description"
+                status:
+                  type: string
+                  example: "completed"
+                title:
+                  type: string
+                  example: "Updated Project Title"
+      responses:
+        '200':
+          description: Project updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Project updated"
+                  project:
+                    type: object
+        '400':
+          description: Missing required fields or no update fields provided
+        '403':
+          description: Unauthorized - only owner can update
+        '404':
+          description: Project not found
+  /project/change-owner:
+    post:
+      summary: Change ownership of a project
+      description: |
+        Change the ownerUid of a project only if status is 'unassigned'.
+        - Director can delegate ownership only to a manager.
+        - Manager can delegate ownership to anyone except manager or director.
+        Checks roles from /users in the database.
+      requestBody:
+        description: JSON with userid (current owner), changeuserid (new owner), and uid (project id)
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - changeuserid
+                - uid
+              properties:
+                userid:
+                  type: string
+                  example: "owner123"
+                changeuserid:
+                  type: string
+                  example: "newowner456"
+                uid:
+                  type: string
+                  example: "-Mabcd1234xyz"
+      responses:
+        '200':
+          description: Ownership changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Project ownership changed"
+                  project:
+                    type: object
+        '400':
+          description: Bad request or invalid state (e.g., status not 'unassigned')
+        '403':
+          description: Unauthorized - delegation rules violated or not current owner
+        '404':
+          description: Project or user roles not found
