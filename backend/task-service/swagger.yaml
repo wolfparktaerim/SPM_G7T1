@@ -1,55 +1,17 @@
 openapi: 3.0.3
 info:
-  title: Session Management API
+  title: Task and Subtask Management API
+  description: API for creating and managing tasks and subtasks in Firebase with role-based ownership and collaboration.
   version: 1.0.0
-  description: Handles creation, retrieval, and updating of session data stored in Supabase.
-
 servers:
-  - url: http://localhost:9697
+  - url: http://localhost:6002
     description: Local development server
 
 paths:
-  /add_session/{modsecyear}:
-    get:
-      summary: Create missing weekly sessions for a given modsecyear
-      parameters:
-        - name: modsecyear
-          in: path
-          required: true
-          schema:
-            type: string
-            example: "Y2S1"
-      responses:
-        '200':
-          description: Sessions created or already existed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  new_sessions:
-                    type: array
-                    items:
-                      type: string
-                  existing_sessions:
-                    type: array
-                    items:
-                      type: string
-        '500':
-          description: Server error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-
-  /update_active:
+  /task/create:
     post:
-      summary: Updates the active session for a given modsecyear
+      summary: Create a new task
+      description: Create a task with required and optional fields, with role-based ownership rules.
       requestBody:
         required: true
         content:
@@ -57,22 +19,51 @@ paths:
             schema:
               type: object
               required:
-                - modsecyear
+                - userid
+                - role
                 - title
-                - active
+                - deadline
               properties:
-                modsecyear:
+                userid:
                   type: string
-                  example: "Y2S1"
+                  description: ID of user creating the task
+                role:
+                  type: string
+                  enum: [staff, manager, director]
+                  description: Role of the user creating the task
                 title:
                   type: string
-                  example: "w3"
-                active:
-                  type: boolean
-                  example: true
+                  description: Title of the task
+                deadline:
+                  type: string
+                  format: date-time
+                  description: Deadline of the task in ISO 8601 format
+                status:
+                  type: string
+                  enum: [Unassigned, Ongoing, Under Review, Completed]
+                  description: Status of task (overridden by system rules)
+                ownerUid:
+                  type: string
+                  description: Optional owner user ID (only assignable by manager/director)
+                collaborators:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional list of collaborator user IDs
+                notes:
+                  type: string
+                  description: Optional notes for the task
+                attachments:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional list of attachment URLs or identifiers
+                project:
+                  type: string
+                  description: Optional project associated with the task
       responses:
-        '200':
-          description: Session status updated
+        '201':
+          description: Task created successfully
           content:
             application/json:
               schema:
@@ -80,12 +71,58 @@ paths:
                 properties:
                   message:
                     type: string
-                  data:
-                    type: array
-                    items:
-                      type: object
+                  task:
+                    type: object
+                    properties:
+                      uid:
+                        type: string
+                      title:
+                        type: string
+                      deadline:
+                        type: string
+                        format: date-time
+                      status:
+                        type: string
+                      ownerUid:
+                        type: string
+                      collaborators:
+                        type: array
+                        items:
+                          type: string
+                      project:
+                        type: string
+                      notes:
+                        type: string
+                      attachments:
+                        type: array
+                        items:
+                          type: string
+                      creationDate:
+                        type: string
+                        format: date-time
+                      subtasks:
+                        type: object
+                        description: Empty subtasks object on creation
+        '400':
+          description: Invalid or missing input data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '403':
+          description: Unauthorized due to role restrictions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
         '500':
-          description: Server error
+          description: Server error or database failure
           content:
             application/json:
               schema:
@@ -94,28 +131,73 @@ paths:
                   error:
                     type: string
 
-  /get_active:
-    get:
-      summary: Get active session status
-      parameters:
-        - name: session_id
-          in: query
-          required: false
-          schema:
-            type: integer
-        - name: modsecyear
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: title
-          in: query
-          required: false
-          schema:
-            type: string
+  /subtask/create:
+    post:
+      summary: Create a new subtask
+      description: Create a subtask linked to a parent task with the specified structure and role-based rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - role
+                - taskId
+                - title
+                - deadline
+              properties:
+                userid:
+                  type: string
+                  description: ID of the user creating the subtask
+                  example: user123
+                role:
+                  type: string
+                  description: Role of the user creating the subtask
+                  enum: [staff, manager, director]
+                  example: manager
+                taskId:
+                  type: string
+                  description: Parent task ID to link this subtask under
+                  example: task789
+                title:
+                  type: string
+                  description: Title of the subtask
+                  example: Design database schema
+                deadline:
+                  type: string
+                  format: date-time
+                  description: Deadline for the subtask
+                  example: '2025-09-30T23:59:59Z'
+                status:
+                  type: string
+                  description: Status of the subtask (optional, overridden by system)
+                  enum: [Unassigned, Ongoing, Under Review, Completed]
+                  example: Ongoing
+                owner:
+                  type: string
+                  description: User ID of the subtask owner (optional; only managers/directors can assign)
+                  example: user456
+                collaborators:
+                  type: array
+                  items:
+                    type: string
+                  description: List of collaborator user IDs (optional)
+                  example: [user123, user789]
+                notes:
+                  type: string
+                  description: Additional notes for the subtask (optional)
+                  example: Initial draft of DB schema
+                attachments:
+                  type: array
+                  items:
+                    type: string
+                  description: URLs or identifiers of attachments (optional)
+                  example: ["attachment1.pdf", "design.png"]
       responses:
-        '200':
-          description: Active session(s) retrieved
+        '201':
+          description: Subtask created successfully
           content:
             application/json:
               schema:
@@ -123,102 +205,768 @@ paths:
                 properties:
                   message:
                     type: string
-                  data:
-                    type: array
-                    items:
-                      type: object
+                    example: Subtask created
+                  subtask:
+                    type: object
+                    properties:
+                      subtaskId:
+                        type: string
+                        example: abc123xyz
+                      title:
+                        type: string
+                        example: Design database schema
+                      owner:
+                        type: string
+                        example: user456
+                      collaborators:
+                        type: array
+                        items:
+                          type: string
+                        example: [user123, user456]
+                      notes:
+                        type: string
+                        example: Initial draft of DB schema
+                      attachments:
+                        type: array
+                        items:
+                          type: string
+                        example: ["attachment1.pdf", "design.png"]
+                      taskId:
+                        type: string
+                        example: task789
+                      status:
+                        type: string
+                        example: Ongoing
+                      deadline:
+                        type: string
+                        format: date-time
+                        example: '2025-09-30T23:59:59Z'
+                      creationDate:
+                        type: string
+                        format: date-time
+                        example: '2025-09-20T10:00:00Z'
+                      comments:
+                        type: array
+                        items:
+                          type: string
+                        example: []
         '400':
-          description: Missing query parameters
-        '500':
-          description: Server error
-
-  /get_session_id:
-    get:
-      summary: Retrieve session_id for a specific modsecyear and title
-      parameters:
-        - name: modsecyear
-          in: query
-          required: true
-          schema:
-            type: string
-            example: "Y2S1"
-        - name: title
-          in: query
-          required: true
-          schema:
-            type: string
-            example: "w2"
-      responses:
-        '200':
-          description: Session ID found
+          description: Validation error - missing or invalid fields
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  session_id:
-                    type: integer
-        '400':
-          description: Missing query parameters
-        '404':
-          description: Session not found
-        '500':
-          description: Server error
-
-  /get_modsecyear:
-    get:
-      summary: Get modsecyear by session_id
-      parameters:
-        - name: session_id
-          in: query
-          required: true
-          schema:
-            type: integer
-            example: 45
-      responses:
-        '200':
-          description: modsecyear found
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  modsecyear:
+                  error:
                     type: string
-        '400':
-          description: Missing session_id
+                    example: 'Missing required fields: title and deadline'
+        '403':
+          description: Forbidden - unauthorized owner assignment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Only managers/directors can assign a different owner on subtask creation
         '404':
-          description: Not found
+          description: Parent task not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Parent task not found
         '500':
-          description: Server error
-
-  /get_all_title/{modsecyear}:
+          description: Internal server error while creating subtask
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Failed to create subtask: <error_details>'
+  /task/{projectid}:
     get:
-      summary: Retrieve all session titles and IDs for a modsecyear
+      summary: Get all tasks by project ID
+      description: Retrieve all tasks filtered by matching project ID
       parameters:
-        - name: modsecyear
+        - name: projectid
           in: path
           required: true
           schema:
             type: string
-            example: "Y2S1"
+          description: Project ID to filter tasks
+          example: project123
       responses:
         '200':
-          description: List of session titles and IDs
+          description: List of tasks belonging to the project
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    title:
-                      type: string
-                    session_id:
-                      type: integer
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uid:
+                          type: string
+                          example: task789
+                        title:
+                          type: string
+                          example: Project Task 1
+                        deadline:
+                          type: string
+                          format: date-time
+                          example: '2025-09-30T23:59:59Z'
+                        status:
+                          type: string
+                          example: Ongoing
+                        ownerUid:
+                          type: string
+                          example: user123
+                        collaborators:
+                          type: array
+                          items:
+                            type: string
+                          example: [user123, user456]
+                        project:
+                          type: string
+                          example: project123
+                        notes:
+                          type: string
+                          example: Initial notes
+                        attachments:
+                          type: array
+                          items:
+                            type: string
+                          example: ["file1.pdf"]
+                        creationDate:
+                          type: string
+                          format: date-time
+                          example: '2025-09-20T10:00:00Z'
+                        subtasks:
+                          type: object
+                          example: {}
+
+  /subtask/{taskid}:
+    get:
+      summary: Get all subtasks by task ID
+      description: Retrieve all subtasks filtered by matching task ID
+      parameters:
+        - name: taskid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Task ID to filter subtasks
+          example: task789
+      responses:
+        '200':
+          description: List of subtasks belonging to the task
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subtasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subtaskId:
+                          type: string
+                          example: subtask123
+                        title:
+                          type: string
+                          example: Design database schema
+                        owner:
+                          type: string
+                          example: user456
+                        collaborators:
+                          type: array
+                          items:
+                            type: string
+                          example: [user123, user456, user789]
+                        notes:
+                          type: string
+                          example: Initial design notes
+                        attachments:
+                          type: array
+                          items:
+                            type: string
+                          example: ["design.png"]
+                        taskId:
+                          type: string
+                          example: task789
+                        status:
+                          type: string
+                          example: Ongoing
+                        deadline:
+                          type: string
+                          format: date-time
+                          example: '2025-09-30T23:59:59Z'
+                        creationDate:
+                          type: string
+                          format: date-time
+                          example: '2025-09-20T10:00:00Z'
+                        comments:
+                          type: array
+                          items:
+                            type: string
+                          example: []
         '400':
-          description: Missing modsecyear
+          description: Invalid task ID supplied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Invalid task ID
+
+  /task/update:
+    post:
+      summary: Update an existing task
+      description: Update allowed fields of a task. Only the owner can update. Managers/directors only for owner changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - role
+                - uid
+              properties:
+                userid:
+                  type: string
+                  description: ID of the user performing the update
+                  example: user123
+                role:
+                  type: string
+                  description: Role of the user
+                  enum: [staff, manager, director]
+                  example: manager
+                uid:
+                  type: string
+                  description: Task ID to update
+                  example: task789
+                title:
+                  type: string
+                  description: New title of the task
+                  example: Updated task title
+                deadline:
+                  type: string
+                  format: date-time
+                  description: New deadline
+                  example: '2025-10-15T23:59:59Z'
+                status:
+                  type: string
+                  enum: [Unassigned, Ongoing, Under Review, Completed]
+                  description: Updated status of the task
+                notes:
+                  type: string
+                  description: Updated notes
+                attachments:
+                  type: array
+                  items:
+                    type: string
+                  description: Updated attachments
+                ownerUid:
+                  type: string
+                  description: New owner user ID (only managers/directors can update)
+                collaborators:
+                  type: array
+                  items:
+                    type: string
+                  description: Updated list of collaborators
+                project:
+                  type: string
+                  description: Updated project ID
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Task updated
+                  task:
+                    type: object
+                    description: Updated task object
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Title cannot be empty
+        '403':
+          description: Unauthorized action
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Only managers/directors can change task owner
         '404':
-          description: Not found
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Task not found
         '500':
-          description: Server error
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+  /subtask/update:
+    post:
+      summary: Update an existing subtask
+      description: Update allowed fields of a subtask. Only the owner can update. Managers/directors only for owner changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - role
+                - subtaskId
+              properties:
+                userid:
+                  type: string
+                  description: ID of the user performing the update
+                  example: user123
+                role:
+                  type: string
+                  description: Role of the user
+                  enum: [staff, manager, director]
+                  example: staff
+                subtaskId:
+                  type: string
+                  description: Subtask ID to update
+                  example: subtask456
+                title:
+                  type: string
+                  description: New title of the subtask
+                  example: Updated subtask title
+                deadline:
+                  type: string
+                  format: date-time
+                  description: New deadline
+                  example: '2025-10-15T23:59:59Z'
+                status:
+                  type: string
+                  enum: [Unassigned, Ongoing, Under Review, Completed]
+                  description: Updated status of the subtask
+                notes:
+                  type: string
+                  description: Updated notes
+                attachments:
+                  type: array
+                  items:
+                    type: string
+                  description: Updated attachments
+                owner:
+                  type: string
+                  description: New owner user ID (only managers/directors can update)
+                collaborators:
+                  type: array
+                  items:
+                    type: string
+                  description: Updated list of collaborators
+      responses:
+        '200':
+          description: Subtask updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Subtask updated
+                  subtask:
+                    type: object
+                    description: Updated subtask object
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Title cannot be empty
+        '403':
+          description: Unauthorized action
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Only managers/directors can change subtask owner
+        '404':
+          description: Subtask not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Subtask not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+  /task/delete:
+    post:
+      summary: Delete an existing task and its subtasks
+      description: >
+        Delete a task by its ID along with all associated subtasks.
+        Only the owner of the task can perform the deletion.
+        The system returns a confirmation or error message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - uid
+              properties:
+                userid:
+                  type: string
+                  description: ID of user performing the delete
+                  example: user123
+                uid:
+                  type: string
+                  description: Task ID to delete
+                  example: task789
+      responses:
+        '200':
+          description: Task and associated subtasks deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Task and its subtasks deleted
+        '400':
+          description: Missing or invalid fields in request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: userid and uid required
+        '403':
+          description: Unauthorized action (not the owner)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Unauthorized: only owner can delete task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Task not found
+        '500':
+          description: Internal server error during deletion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+  /subtask/delete:
+    post:
+      summary: Delete an existing subtask
+      description: >
+        Delete a subtask by its ID.
+        Only the owner of the subtask can perform deletion.
+        The system returns confirmation or error messages.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - subtaskId
+              properties:
+                userid:
+                  type: string
+                  description: ID of user performing the delete
+                  example: user123
+                subtaskId:
+                  type: string
+                  description: Subtask ID to delete
+                  example: subtask456
+      responses:
+        '200':
+          description: Subtask deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Subtask deleted
+        '400':
+          description: Missing or invalid fields in request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: userid and subtaskId required
+        '403':
+          description: Unauthorized action (not the owner)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Unauthorized: only owner can delete subtask'
+        '404':
+          description: Subtask not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Subtask not found
+        '500':
+          description: Internal server error during deletion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+  /task/add-collaborator:
+    post:
+      summary: Add a collaborator to a task
+      description: >
+        Add a new collaborator to a task. Only the owner of the task can add collaborators.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - uid
+                - adduserid
+              properties:
+                userid:
+                  type: string
+                  description: ID of the user performing the action (must be owner)
+                  example: user123
+                uid:
+                  type: string
+                  description: Task ID to which collaborator will be added
+                  example: task789
+                adduserid:
+                  type: string
+                  description: User ID to add as collaborator
+                  example: user456
+      responses:
+        '200':
+          description: Collaborator added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Collaborator added
+                  task:
+                    type: object
+                    description: Updated task object with collaborator added
+        '400':
+          description: Invalid input or missing fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: userid, uid and adduserid required
+        '403':
+          description: Unauthorized action (not the owner)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Unauthorized: only owner can add collaborators'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Task not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+  /subtask/add-collaborator:
+    post:
+      summary: Add a collaborator to a subtask
+      description: >
+        Add a new collaborator to a subtask. Only the owner of the subtask can add collaborators.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - subtaskId
+                - adduserid
+              properties:
+                userid:
+                  type: string
+                  description: ID of the user performing the action (must be owner)
+                  example: user123
+                subtaskId:
+                  type: string
+                  description: Subtask ID to which collaborator will be added
+                  example: subtask456
+                adduserid:
+                  type: string
+                  description: User ID to add as collaborator
+                  example: user789
+      responses:
+        '200':
+          description: Collaborator added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Collaborator added
+                  subtask:
+                    type: object
+                    description: Updated subtask object with collaborator added
+        '400':
+          description: Invalid input or missing fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: userid, subtaskId and adduserid required
+        '403':
+          description: Unauthorized action (not the owner)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'Unauthorized: only owner can add collaborators'
+        '404':
+          description: Subtask not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Subtask not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string

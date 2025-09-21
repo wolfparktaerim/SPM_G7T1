@@ -8,6 +8,13 @@ services:
       - name: project-route
         paths: [/project]
         strip_path: false
+        
+  - name: task-service
+    url: ${TASK_SERVICE_URL}
+    routes:
+      - name: task-route
+        paths: [/task]
+        strip_path: false
 
 
 

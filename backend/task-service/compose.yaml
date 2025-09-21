@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  task-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "6002:6002"
+    volumes:
+      - ../firebase-cred.json:/app/firebase.json
+    environment:
+      JSON_PATH: "/app/firebase.json"
+      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+

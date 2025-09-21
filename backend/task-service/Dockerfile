@@ -1,5 +1,5 @@
 # Use an official Python runtime as base image
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # Set working directory
 WORKDIR /app
@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose port 5000 for Flask
-EXPOSE 5007
+EXPOSE 6002
 
 # Run the app
 CMD ["python", "app.py"]
