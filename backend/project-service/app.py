@@ -97,8 +97,17 @@ def delete_project():
     if project.get("ownerUid") != userid:
         return jsonify(error="Unauthorized: only owner can delete"), 403
 
+    # Check if any tasks exist under this project
+    tasks_ref = db.reference("tasks")
+    all_tasks = tasks_ref.get() or {}
+    project_tasks = [t for t in all_tasks.values() if t.get("project") == uid]
+
+    if project_tasks:
+        return jsonify(error="Cannot delete project with existing tasks"), 400
+
     project_ref.delete()
     return jsonify({"message": "Project deleted"}), 200
+
 
 @app.route("/project/update", methods=["POST"])
 def update_project():

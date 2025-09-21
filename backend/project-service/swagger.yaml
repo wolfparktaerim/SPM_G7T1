@@ -158,10 +158,11 @@ paths:
 
   /project/delete:
     post:
-      summary: Delete a project
-      description: Delete a project only if userid matches the ownerUid of the project.
+      summary: Delete a project if no associated tasks exist
+      description: >
+        Deletes a project by its ID only if no tasks belong to it. Denies deletion if tasks exist.
+        Only the owner can delete the project.
       requestBody:
-        description: Payload containing userid and project uid to delete
         required: true
         content:
           application/json:
@@ -173,10 +174,12 @@ paths:
               properties:
                 userid:
                   type: string
-                  example: "user123"
+                  description: ID of the user performing deletion
+                  example: user123
                 uid:
                   type: string
-                  example: "-Mabcd1234xyz"
+                  description: Project ID to delete
+                  example: project456
       responses:
         '200':
           description: Project deleted successfully
@@ -187,13 +190,37 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: "Project deleted"
+                    example: Project deleted
         '400':
-          description: Missing required fields
+          description: Invalid request or project has tasks that block deletion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Cannot delete project with existing tasks
         '403':
-          description: Unauthorized - only owner can delete
+          description: Unauthorized action
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized: only owner can delete"
         '404':
           description: Project not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Project not found
   /project/add-collaborator:
     post:
       summary: Add a collaborator to a project
