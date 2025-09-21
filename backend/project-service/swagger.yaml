@@ -8,7 +8,7 @@ servers:
     description: Local Flask server
 
 paths:
-  /project:
+  /project/create:
     post:
       summary: Create a new project
       description: Create a project only if role is 'manager' or 'director'.
@@ -291,3 +291,51 @@ paths:
           description: Unauthorized - only owner can update
         '404':
           description: Project not found
+  /project/change-owner:
+    post:
+      summary: Change ownership of a project
+      description: |
+        Change the ownerUid of a project only if status is 'unassigned'.
+        - Director can delegate ownership only to a manager.
+        - Manager can delegate ownership to anyone except manager or director.
+        Checks roles from /users in the database.
+      requestBody:
+        description: JSON with userid (current owner), changeuserid (new owner), and uid (project id)
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userid
+                - changeuserid
+                - uid
+              properties:
+                userid:
+                  type: string
+                  example: "owner123"
+                changeuserid:
+                  type: string
+                  example: "newowner456"
+                uid:
+                  type: string
+                  example: "-Mabcd1234xyz"
+      responses:
+        '200':
+          description: Ownership changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Project ownership changed"
+                  project:
+                    type: object
+        '400':
+          description: Bad request or invalid state (e.g., status not 'unassigned')
+        '403':
+          description: Unauthorized - delegation rules violated or not current owner
+        '404':
+          description: Project or user roles not found

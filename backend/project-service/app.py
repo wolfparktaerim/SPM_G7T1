@@ -162,5 +162,67 @@ def add_collaborator():
     updated_project = project_ref.get()
     return jsonify({"message": "Collaborator added", "project": updated_project}), 200
 
+
+@app.route("/project/change-owner", methods=["POST"])
+def change_owner():
+    data = request.get_json()
+    if not data:
+        return jsonify(error="Missing JSON body"), 400
+
+    userid = data.get("userid")          # Current owner making the change
+    changeuserid = data.get("changeuserid")  # New owner to assign
+    uid = data.get("uid")
+    if not userid or not changeuserid or not uid:
+        return jsonify(error="userid, changeuserid, and uid required"), 400
+
+    project_ref = db.reference(f"project/{uid}")
+    project = project_ref.get()
+    if not project:
+        return jsonify(error="Project not found"), 404
+
+    # Check current owner matches userid
+    if project.get("ownerUid") != userid:
+        return jsonify(error="Unauthorized: only current owner can change owner"), 403
+
+    # Only change owner if status == "unassigned"
+    if project.get("status") != "unassigned":
+        return jsonify(error="Owner can only be changed if project status is 'unassigned'"), 400
+
+    # Get roles of both users from /users node
+    users_ref = db.reference("users")
+    users = users_ref.get() or {}
+
+    current_owner_role = users.get(userid, {}).get("role")
+    new_owner_role = users.get(changeuserid, {}).get("role")
+
+    if not current_owner_role or not new_owner_role:
+        return jsonify(error="User roles not found in /users database"), 404
+
+    # Validate delegation rules:
+    # director can delegate only to manager
+    # manager can delegate to users who are NOT manager or director
+    if current_owner_role == "director":
+        if new_owner_role != "manager":
+            return jsonify(error="Director can only delegate ownership to a manager"), 403
+    elif current_owner_role == "manager":
+        if new_owner_role in ("manager", "director"):
+            return jsonify(error="Manager cannot delegate ownership to manager or director"), 403
+    else:
+        return jsonify(error="Only director or manager can delegate ownership"), 403
+
+    # Perform ownership change and add new owner as collaborator if not already present
+    collaborators = set(project.get("collaborators", []))
+    collaborators.add(changeuserid)
+
+    project_ref.update({
+        "ownerUid": changeuserid,
+        "collaborators": list(collaborators)
+    })
+
+    updated_project = project_ref.get()
+    return jsonify({"message": "Project ownership changed", "project": updated_project}), 200
+
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=6001, debug=True)
