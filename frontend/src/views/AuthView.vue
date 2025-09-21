@@ -132,14 +132,15 @@
             </div>
 
             <div>
-              <label for="signup-title" class="block text-sm font-semibold text-gray-700 mb-2">
-                Job Title
+              <label for="signup-email" class="block text-sm font-semibold text-gray-700 mb-2">
+                Email Address
               </label>
               <div class="relative">
-                <Briefcase class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-400" />
-                <input id="signup-title" v-model="title" type="text" required :disabled="authStore.loading"
+                <Mail class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-400" />
+                <input id="signup-email" v-model="email" type="email" autocomplete="email" required
+                  :disabled="authStore.loading"
                   class="w-full pl-10 pr-4 py-3 border-2 border-blue-200 rounded-xl shadow-sm placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-blue-50 disabled:cursor-not-allowed transition-all duration-200"
-                  placeholder="e.g. Software Engineer" />
+                  placeholder="Enter your company email" />
               </div>
             </div>
 
@@ -149,9 +150,11 @@
               </label>
               <div class="relative">
                 <Building2 class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-400" />
-                <input id="signup-department" v-model="department" type="text" required :disabled="authStore.loading"
-                  class="w-full pl-10 pr-4 py-3 border-2 border-blue-200 rounded-xl shadow-sm placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-blue-50 disabled:cursor-not-allowed transition-all duration-200"
-                  placeholder="e.g. Engineering, HR, Sales" />
+                <select id="signup-department" v-model="department" required :disabled="authStore.loading"
+                  class="w-full pl-10 pr-4 py-3 border-2 border-blue-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-blue-50 disabled:cursor-not-allowed transition-all duration-200">
+                  <option value="">Select your department</option>
+                  <option v-for="dept in Object.values(departmentOptions)" :key="dept" :value="dept">{{ dept }}</option>
+                </select>
               </div>
             </div>
 
@@ -169,20 +172,6 @@
                   <option value="director">Director</option>
                 </select>
               </div>
-            </div>
-          </div>
-
-          <!-- Email and Password -->
-          <div>
-            <label for="signup-email" class="block text-sm font-semibold text-gray-700 mb-2">
-              Email Address
-            </label>
-            <div class="relative">
-              <Mail class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-blue-400" />
-              <input id="signup-email" v-model="email" type="email" autocomplete="email" required
-                :disabled="authStore.loading"
-                class="w-full pl-10 pr-4 py-3 border-2 border-blue-200 rounded-xl shadow-sm placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-blue-50 disabled:cursor-not-allowed transition-all duration-200"
-                placeholder="Enter your company email" />
             </div>
           </div>
 
@@ -349,6 +338,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { usersService } from '@/services/users.js'
+import { DEPARTMENTS } from '@/models/user.js'
 import {
   Building,
   Building2,
@@ -375,7 +365,6 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const name = ref('')
-const title = ref('')
 const department = ref('')
 const role = ref('')
 const rememberMe = ref(false)
@@ -391,6 +380,9 @@ const forgotPasswordError = ref('')
 
 // Current year for footer
 const currentYear = new Date().getFullYear()
+
+// Make DEPARTMENTS available in template
+const departmentOptions = DEPARTMENTS
 
 // Generic error message for security
 const displayError = computed(() => {
@@ -430,7 +422,6 @@ const isSignUpFormValid = computed(() => {
     password.value &&
     confirmPassword.value &&
     name.value &&
-    title.value &&
     department.value &&
     role.value &&
     password.value === confirmPassword.value &&
@@ -461,7 +452,6 @@ const setMode = (newMode) => {
   password.value = ''
   confirmPassword.value = ''
   name.value = ''
-  title.value = ''
   department.value = ''
   role.value = ''
   showPassword.value = false
@@ -560,7 +550,6 @@ const handleSignUp = async () => {
         uid: firebaseUser.uid,
         email: firebaseUser.email,
         name: name.value,
-        title: title.value,
         department: department.value,
         role: role.value,
         displayName: name.value,

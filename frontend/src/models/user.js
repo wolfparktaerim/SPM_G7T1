@@ -15,6 +15,24 @@ export const USER_ROLES = {
 export const VALID_ROLES = Object.values(USER_ROLES)
 
 /**
+ * Department constants
+ */
+export const DEPARTMENTS = {
+  SALES: 'Sales',
+  CONSULTANCY: 'Consultancy',
+  SYSTEM_SOLUTIONING: 'System Solutioning',
+  ENGINEERING_OPERATION: 'Engineering Operation',
+  HR_AND_ADMIN: 'HR and Admin',
+  FINANCE: 'Finance',
+  IT: 'IT',
+}
+
+/**
+ * Valid departments array for validation
+ */
+export const VALID_DEPARTMENTS = Object.values(DEPARTMENTS)
+
+/**
  * User class definition
  */
 export class User {
