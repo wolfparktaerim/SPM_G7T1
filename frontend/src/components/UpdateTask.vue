@@ -1,16 +1,19 @@
 <template>
   <div class="max-w-xl mx-auto p-6 bg-white rounded-lg shadow-md">
     <h3 class="text-2xl font-semibold mb-6 text-gray-800">Update Task</h3>
-    
+
     <div class="mb-6 flex gap-2">
-      <input v-model="loadUid" placeholder="Enter Task ID to load" class="flex-grow px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" />
-      <button @click="loadTask" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">Load Task</button>
+      <input v-model="loadUid" placeholder="Enter Task ID to load"
+        class="flex-grow px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" />
+      <button @click="loadTask"
+        class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">Load Task</button>
     </div>
-    
+
     <form v-if="taskLoaded" @submit.prevent="submitUpdate" class="space-y-5">
       <div>
         <label class="block mb-1 font-medium text-gray-700">User ID (auto from cookie):</label>
-        <input v-model="userid" readonly class="w-full px-4 py-2 border rounded-md bg-gray-100 cursor-not-allowed" type="text" />
+        <input v-model="userid" readonly class="w-full px-4 py-2 border rounded-md bg-gray-100 cursor-not-allowed"
+          type="text" />
       </div>
 
       <div>
@@ -25,22 +28,26 @@
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Task ID (uid):</label>
-        <input v-model="uid" readonly class="w-full px-4 py-2 border rounded-md bg-gray-100 cursor-not-allowed" type="text" />
+        <input v-model="uid" readonly class="w-full px-4 py-2 border rounded-md bg-gray-100 cursor-not-allowed"
+          type="text" />
       </div>
 
       <div>
-         <label class="block mb-1 font-medium text-gray-700">Title:</label>
-         <input v-model="title" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" type="text" />
+        <label class="block mb-1 font-medium text-gray-700">Title:</label>
+        <input v-model="title" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none"
+          type="text" />
       </div>
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Deadline:</label>
-        <input type="date" v-model="deadline" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" />
+        <input type="date" v-model="deadline"
+          class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" />
       </div>
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Status:</label>
-        <select v-model="status" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none bg-white" required>
+        <select v-model="status"
+          class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none bg-white" required>
           <option value="Unassigned">Unassigned</option>
           <option value="Ongoing">Ongoing</option>
           <option value="Under Review">Under Review</option>
@@ -50,34 +57,38 @@
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Notes:</label>
-        <textarea v-model="notes" rows="3" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none resize-none"></textarea>
+        <textarea v-model="notes" rows="3"
+          class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none resize-none"></textarea>
       </div>
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Attachments (comma-separated URLs):</label>
-        <input v-model="attachments" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" type="text" placeholder="URL1, URL2" />
+        <input v-model="attachments" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none"
+          type="text" placeholder="URL1, URL2" />
       </div>
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Owner UID:</label>
-        <input v-model="ownerUid" 
-               :readonly="ownerUidReadonly" 
-               :class="ownerUidReadonly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white cursor-auto'" 
-               class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" 
-               type="text" />
+        <input v-model="ownerUid" :readonly="ownerUidReadonly"
+          :class="ownerUidReadonly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white cursor-auto'"
+          class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" type="text" />
       </div>
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Collaborators (comma-separated UIDs):</label>
-        <input v-model="collaborators" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" type="text" placeholder="User1, User2" />
+        <input v-model="collaborators"
+          class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" type="text"
+          placeholder="User1, User2" />
       </div>
 
       <div>
         <label class="block mb-1 font-medium text-gray-700">Project:</label>
-        <input v-model="project" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none" type="text" />
+        <input v-model="project" class="w-full px-4 py-2 border rounded-md focus:ring-indigo-500 focus:outline-none"
+          type="text" />
       </div>
 
-      <button type="submit" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 transition">
+      <button type="submit"
+        class="w-full py-3 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 transition">
         Update Task
       </button>
     </form>
@@ -133,7 +144,7 @@ export default {
     return { authStore }
   },
   mounted() {
-    if(this.authStore.user){
+    if (this.authStore.user) {
       this.userid = this.authStore.user.uid
       this.role = this.authStore.user.role || ''
       console.log('User ID:', this.userid, 'Role:', this.role)
@@ -152,9 +163,9 @@ export default {
         const response = await axios.get(`http://localhost:8000/task/${this.loadUid}`)
         console.log('Load Task response:', response)
         if (response.status !== 200) throw new Error(response.data.error || 'Failed to fetch task')
-        
+
         const task = response.data.task
-        if(!task) throw new Error('No task data found')
+        if (!task) throw new Error('No task data found')
 
         this.uid = task.uid
         this.title = task.title || ''

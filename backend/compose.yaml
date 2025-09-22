@@ -41,7 +41,7 @@ services:
     ports:
       - "6001:6001"
     volumes:
-      - ./firebase-cred.json:/app/firebase.json
+      - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
       DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
@@ -52,8 +52,7 @@ services:
     ports:
       - "6002:6002"
     volumes:
-      - ./firebase-cred.json:/app/firebase.json
+      - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
       DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
-
