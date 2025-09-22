@@ -3,8 +3,7 @@
   <div>
     This is the task view
   </div>
-    <div>
-    This is the projects view
+  <div>
     <UpdateTask />
   </div>
 </template>
