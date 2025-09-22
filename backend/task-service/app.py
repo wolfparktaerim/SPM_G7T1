@@ -203,7 +203,7 @@ def create_subtask():
 
     return jsonify(message="Subtask created", subtask=subtask_data), 201
 
-@app.route("/task/<projectid>", methods=["GET"])
+@app.route("/task/project/<projectid>", methods=["GET"])
 def get_tasks_by_project(projectid):
     tasks_ref = db.reference("tasks")
     all_tasks = tasks_ref.get() or {}
@@ -216,7 +216,7 @@ def get_tasks_by_project(projectid):
     return jsonify({"tasks": filtered_tasks}), 200
 
 
-@app.route("/subtask/<taskid>", methods=["GET"])
+@app.route("/subtask/task/<taskid>", methods=["GET"])
 def get_subtasks_by_task(taskid):
     subtasks_ref = db.reference("subtask")
     all_subtasks = subtasks_ref.get() or {}
@@ -227,6 +227,9 @@ def get_subtasks_by_task(taskid):
     ]
 
     return jsonify({"subtasks": filtered_subtasks}), 200
+
+
+
 @app.route("/task/update", methods=["POST"])
 def update_task():
     data = request.get_json()
@@ -243,7 +246,6 @@ def update_task():
     allowed_fields = {"title", "deadline", "status", "notes", "attachments", "ownerUid", "collaborators", "project"}
 
     update_data = {k: v for k, v in data.items() if k in allowed_fields}
-
     if not update_data:
         return jsonify(error=f"At least one updatable field required: {', '.join(allowed_fields)}"), 400
 
@@ -255,7 +257,6 @@ def update_task():
 
     task_ref = db.reference(f"tasks/{uid}")
     task = task_ref.get()
-
     if not task:
         return jsonify(error="Task not found"), 404
 
@@ -263,9 +264,20 @@ def update_task():
     if task.get("ownerUid") != userid:
         return jsonify(error="Unauthorized: only owner can update task"), 403
 
-    # Owner field update validation: only managers/directors allowed
+    # Owner field update validation: delegation restriction
     if "ownerUid" in update_data:
-        if role not in ("manager", "director"):
+        new_owner_id = update_data["ownerUid"]
+        new_owner = db.reference(f"users/{new_owner_id}").get()
+        if not new_owner or not new_owner.get("role"):
+            return jsonify(error="New owner user not found or missing role"), 400
+        new_owner_role = new_owner.get("role")
+        if role == "manager":
+            if new_owner_role != "staff":
+                return jsonify(error="Manager can only assign owner to staff"), 403
+        elif role == "director":
+            if new_owner_role not in ("manager", "staff"):
+                return jsonify(error="Director can only assign owner to manager or staff"), 403
+        else:
             return jsonify(error="Only managers/directors can change task owner"), 403
 
     # Update task data
@@ -294,7 +306,6 @@ def update_subtask():
     allowed_fields = {"title", "deadline", "status", "notes", "attachments", "owner", "collaborators"}
 
     update_data = {k: v for k, v in data.items() if k in allowed_fields}
-
     if not update_data:
         return jsonify(error=f"At least one updatable field required: {', '.join(allowed_fields)}"), 400
 
@@ -313,9 +324,20 @@ def update_subtask():
     if subtask.get("owner") != userid:
         return jsonify(error="Unauthorized: only owner can update subtask"), 403
 
-    # Owner field update validation: only managers/directors allowed
+    # Owner field update validation: delegation restriction
     if "owner" in update_data:
-        if role not in ("manager", "director"):
+        new_owner_id = update_data["owner"]
+        new_owner = db.reference(f"users/{new_owner_id}").get()
+        if not new_owner or not new_owner.get("role"):
+            return jsonify(error="New owner user not found or missing role"), 400
+        new_owner_role = new_owner.get("role")
+        if role == "manager":
+            if new_owner_role != "staff":
+                return jsonify(error="Manager can only assign owner to staff"), 403
+        elif role == "director":
+            if new_owner_role not in ("manager", "staff"):
+                return jsonify(error="Director can only assign owner to manager or staff"), 403
+        else:
             return jsonify(error="Only managers/directors can change subtask owner"), 403
 
     # Update subtask data
@@ -326,6 +348,7 @@ def update_subtask():
 
     updated_subtask = subtask_ref.get()
     return jsonify(message="Subtask updated", subtask=updated_subtask), 200
+
 
 
 
@@ -460,6 +483,28 @@ def add_subtask_collaborator():
 
     updated_subtask = subtask_ref.get()
     return jsonify(message="Collaborator added", subtask=updated_subtask), 200
+
+@app.route("/task/<taskid>", methods=["GET"])
+def get_task_by_id(taskid):
+    tasks_ref = db.reference("tasks")
+    task = tasks_ref.child(taskid).get()
+
+    if task is None:
+        return jsonify({"error": "Task not found"}), 404
+
+    return jsonify({"task": task}), 200
+
+
+@app.route("/subtask/<subtaskid>", methods=["GET"])
+def get_subtask_by_id(subtaskid):
+    subtasks_ref = db.reference("subtask")
+    subtask = subtasks_ref.child(subtaskid).get()
+
+    if subtask is None:
+        return jsonify({"error": "Subtask not found"}), 404
+
+    return jsonify({"subtask": subtask}), 200
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=6002, debug=True)

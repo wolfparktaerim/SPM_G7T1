@@ -290,7 +290,7 @@ paths:
                   error:
                     type: string
                     example: 'Failed to create subtask: <error_details>'
-  /task/{projectid}:
+  /task/project/{projectid}:
     get:
       summary: Get all tasks by project ID
       description: Retrieve all tasks filtered by matching project ID
@@ -355,7 +355,7 @@ paths:
                           type: object
                           example: {}
 
-  /subtask/{taskid}:
+  /subtask/task/{taskid}:
     get:
       summary: Get all subtasks by task ID
       description: Retrieve all subtasks filtered by matching task ID
@@ -970,3 +970,66 @@ paths:
                 properties:
                   error:
                     type: string
+  /task/{taskid}:
+    get:
+      summary: Get a task by task ID
+      parameters:
+        - name: taskid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ID of the task to retrieve
+      responses:
+        '200':
+          description: Task found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task:
+                    type: object
+                    description: The task data
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Task not found
+
+  /subtask/{subtaskid}:
+    get:
+      summary: Get a subtask by subtask ID
+      parameters:
+        - name: subtaskid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ID of the subtask to retrieve
+      responses:
+        '200':
+          description: Subtask found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subtask:
+                    type: object
+                    description: The subtask data
+        '404':
+          description: Subtask not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Subtask not found
