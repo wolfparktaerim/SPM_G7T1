@@ -10,7 +10,7 @@
 *.userosscache
 *.sln.docstates
 *.env
-# backend/firebase-cred.json
+backend/firebase-cred.json
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
