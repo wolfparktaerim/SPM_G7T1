@@ -106,54 +106,129 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import NavigationBar from '@/components/NavigationBar.vue';
-import { useProjects } from '@/fakebackend';
 
-const currentUser = "me@example.com";
+const API_BASE = "http://localhost:8000/project"; // Kong gateway
+
+const currentUser = "me@example.com"; // example user
+const currentRole = "manager"; // example role (needed for create)
+
 const showCreateForm = ref(false);
-
-// composable instance
-const {
-  projects,
-  message,
-  error,
-  createProject,
-  updateProject,
-  deleteProject,
-  filteredProjects
-} = useProjects(currentUser);
+const projects = ref([]);
+const message = ref('');
+const error = ref(false);
 
 const newProject = ref({ title: '', deadline: '', description: '' });
 const editingProject = ref(null);
 const searchQuery = ref('');
 const filterOption = ref('');
 
-const projectsToShow = filteredProjects(searchQuery, filterOption);
-
-function handleCreate() {
-  const success = createProject(newProject.value);
-  if (success) {
-    newProject.value = { title: '', deadline: '', description: '' };
+// Load projects from backend
+async function fetchProjects() {
+  try {
+    const res = await fetch(`${API_BASE}/${currentUser}`);
+    if (!res.ok) throw new Error("Failed to fetch projects");
+    const data = await res.json();
+    projects.value = data.projects || [];
+  } catch (err) {
+    error.value = true;
+    message.value = err.message;
   }
 }
+
+onMounted(fetchProjects);
+
+// Create Project
+async function handleCreate() {
+  try {
+    const res = await fetch(`${API_BASE}/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userid: currentUser,
+        role: currentRole,
+        title: newProject.value.title,
+        deadline: newProject.value.deadline,
+        description: newProject.value.description
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to create project");
+
+    message.value = data.message;
+    error.value = false;
+    projects.value.push(data.project);
+    newProject.value = { title: '', deadline: '', description: '' };
+    showCreateForm.value = false;
+  } catch (err) {
+    error.value = true;
+    message.value = err.message;
+  }
+}
+
+// Update Project
+async function handleUpdate() {
+  try {
+    const res = await fetch(`${API_BASE}/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userid: currentUser,
+        uid: editingProject.value.uid,
+        title: editingProject.value.title,
+        deadline: editingProject.value.deadline,
+        description: editingProject.value.description
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to update project");
+
+    message.value = data.message;
+    error.value = false;
+
+    // Update locally
+    const idx = projects.value.findIndex(p => p.uid === editingProject.value.uid);
+    if (idx !== -1) projects.value[idx] = data.project;
+
+    editingProject.value = null;
+  } catch (err) {
+    error.value = true;
+    message.value = err.message;
+  }
+}
+
+// Delete Project (disabled in backend, but kept for UI)
+async function handleDelete(project) {
+  alert("Delete is disabled: Projects cannot be deleted.");
+}
+
+// Search & Filter
+const projectsToShow = computed(() => {
+  let filtered = projects.value;
+
+  if (searchQuery.value) {
+    filtered = filtered.filter(p =>
+      p.title.toLowerCase().includes(searchQuery.value.toLowerCase())
+    );
+  }
+
+  if (filterOption.value === "deadline") {
+    filtered = [...filtered].sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+  } else if (filterOption.value === "createdAt") {
+    filtered = [...filtered].sort((a, b) => new Date(a.creationDate) - new Date(b.creationDate));
+  } else if (filterOption.value === "owner") {
+    filtered = filtered.filter(p => p.ownerUid === currentUser);
+  }
+
+  return filtered;
+});
 
 function editProject(project) {
   editingProject.value = { ...project };
 }
 
-function handleUpdate() {
-  updateProject(editingProject.value);
-  editingProject.value = null;
-}
-
-function handleDelete(project) {
-  if (confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-    deleteProject(project);
-  }
-}
-
 function selectProject(project) {
-  alert(`Viewing project: ${project.title}\nOwner: ${project.owner}`);
+  alert(`Viewing project: ${project.title}\nOwner: ${project.ownerUid}`);
 }
 </script>
