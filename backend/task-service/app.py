@@ -27,7 +27,7 @@ def current_timestamp():
 
 def validate_status(status):
     """Validate status is one of the allowed values"""
-    allowed_statuses = ["ongoing", "unassigned", "under_review", "completed"]
+    allowed_statuses = ["Ongoing", "Unassigned", "Under Review", "Completed"]
     return status.lower() in allowed_statuses
 
 def validate_epoch_timestamp(timestamp):
@@ -59,8 +59,8 @@ def create_task():
 
     # Validate status if provided
     status = data.get("status", "ongoing").lower()
-    if not validate_status(status):
-        return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
+    # if not validate_status(status):
+    #     return jsonify(error="Status must be one of: Ongoing, Unassigned, Under Review, Completed"), 400
 
     # Extract and validate data
     title = data.get("title").strip()
@@ -174,8 +174,8 @@ def update_task_by_id(task_id):
         # Validate and update status if provided
         if "status" in data:
             status = data["status"].lower()
-            if not validate_status(status):
-                return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
+            # if not validate_status(status):
+            #     return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
             update_data["status"] = status
 
         # Update other optional fields if provided

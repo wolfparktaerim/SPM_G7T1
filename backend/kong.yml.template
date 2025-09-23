@@ -16,7 +16,7 @@ services:
         paths: [/task]
         strip_path: false
   - name: subtask-service
-    url: http://subtask-service:6003
+    url: ${SUBTASK_SERVICE_URL}
     routes:
       - name: subtask-route
         paths: [/subtask]

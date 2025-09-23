@@ -455,7 +455,7 @@
                   <div class="meta-item">
                     <span class="meta-label">👤 Owner:</span>
                     <span class="meta-value">{{ subtask.ownerId === authStore.user.uid ? 'You' : subtask.ownerId
-                      }}</span>
+                    }}</span>
                   </div>
                   <div v-if="subtask.collaborators?.length" class="meta-item">
                     <span class="meta-label">👥 Team:</span>
@@ -494,86 +494,9 @@
       </div>
 
       <!-- Edit Modal -->
-      <div v-if="editModal.show" class="modal-overlay" @click="closeEditModal">
-        <div class="modal" @click.stop>
-          <div class="modal-header">
-            <h3>
-              {{ editModal.type === 'task' ? '✏️ Edit Task' : '✏️ Edit SubTask' }}
-            </h3>
-            <button @click="closeEditModal" class="modal-close">×</button>
-          </div>
+      <TaskEdit :show="editModal.show && editModal.type === 'task'" :taskData="editModal.data" @close="closeEditModal"
+        @save="saveEdit" />
 
-          <form @submit.prevent="saveEdit" class="modal-form">
-            <div class="form-group">
-              <label class="form-label required">Title</label>
-              <input v-model="editModal.data.title" placeholder="Title" required class="form-input" maxlength="100" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label required">Deadline</label>
-              <input v-model="editModal.deadlineDate" type="datetime-local" required class="form-input"
-                :min="minDateTime" />
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Status</label>
-              <select v-model="editModal.data.status" class="form-input">
-                <option value="unassigned">📋 Unassigned</option>
-                <option value="ongoing">🔄 Ongoing</option>
-                <option value="under_review">👀 Under Review</option>
-                <option value="completed">✅ Completed</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Notes</label>
-              <textarea v-model="editModal.data.notes" placeholder="Notes" class="form-textarea" rows="4"
-                maxlength="500"></textarea>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Attachments</label>
-              <div class="file-upload-area">
-                <input type="file" multiple @change="handleEditFileUpload"
-                  accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xlsx" class="file-input" ref="editFileInput" />
-                <div class="file-upload-content" @click="$refs.editFileInput.click()">
-                  <div class="upload-icon">📎</div>
-                  <div class="upload-text">
-                    <span class="upload-title">Add more attachments</span>
-                    <span class="upload-subtitle">PNG, JPG, PDF, DOC, TXT (max 2MB each)</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Edit File List -->
-              <div v-if="editAttachments.length > 0" class="file-list">
-                <div v-for="(file, index) in editAttachments" :key="index" class="file-item">
-                  <div class="file-info">
-                    <span class="file-icon">{{ getFileIcon(file.type) }}</span>
-                    <div class="file-details">
-                      <span class="file-name">{{ file.name }}</span>
-                      <span class="file-size">{{ formatFileSize(file.size) }}</span>
-                    </div>
-                  </div>
-                  <button type="button" @click="removeEditAttachment(index)" class="file-remove">
-                    ×
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="modal-actions">
-              <button type="button" @click="closeEditModal" class="btn btn-outline">
-                Cancel
-              </button>
-              <button type="submit" :disabled="loading" class="btn btn-primary">
-                <span v-if="loading" class="spinner"></span>
-                {{ loading ? 'Saving...' : '💾 Save Changes' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
 
       <!-- API Response Logger -->
       <div v-if="lastResponse" class="response-logger">
@@ -598,8 +521,11 @@
 </template>
 
 <script setup>
+import TaskEdit from "@/components/UpdateTask/ChangeTaskDetails.vue";
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+
+
 
 // Environment variables - Fix the API endpoints
 const taskAPI = import.meta.env.VITE_BACKEND_API
@@ -1069,47 +995,50 @@ const getTaskSubtasks = async (taskId) => {
 }
 
 // Edit modal functions
-const saveEdit = async () => {
-  const { type, id, data, deadlineDate } = editModal.value
-  const endpoint = type === 'task' ? `${taskAPI}tasks/${id}` : `${subtaskAPI}subtasks/${id}`
-
-  const updateData = {
-    ...data,
-    deadline: dateTimeToEpoch(deadlineDate)
-  }
-
-  // Add new attachments if any were uploaded
-  if (editAttachments.value.length > 0) {
-    const existingAttachments = data.attachments || []
-    const newAttachments = editAttachments.value.map(file => file.base64)
-    updateData.attachments = [...existingAttachments, ...newAttachments]
-  }
-
-  await makeRequest(endpoint, {
-    method: 'PUT',
-    body: JSON.stringify(updateData)
-  })
-
-  showNotification('success', `${type === 'task' ? 'Task' : 'SubTask'} updated successfully!`)
-  closeEditModal()
-
-  if (type === 'task') {
-    await getAllTasks()
-  } else {
-    await getAllSubtasks()
+async function saveEdit(updatedTask) {
+  try {
+    // Determine if it's a task or subtask update
+    const isTask = editModal.value.type === 'task';
+    const apiUrl = isTask 
+      ? `${taskAPI}tasks/${editModal.value.id}`
+      : `${subtaskAPI}subtasks/${editModal.value.id}`;
+    
+    // Use the data as-is since the component already converted datetime to epoch
+    const updateData = {
+      ...updatedTask
+      // ✅ No need to convert deadline - component already did this
+    };
+    
+    // Make the API call
+    await makeRequest(apiUrl, {
+      method: 'PUT',
+      body: JSON.stringify(updateData)
+    });
+    
+    // Show success message
+    showNotification('success', `${isTask ? 'Task' : 'SubTask'} updated successfully!`);
+    
+    // Refresh data and close modal
+    if (isTask) {
+      await getAllTasks();
+    } else {
+      await getAllSubtasks();
+    }
+    
+    closeEditModal();
+  } catch (error) {
+    console.error('Error updating:', error);
+    showNotification('error', 'Failed to update. Please try again.');
   }
 }
 
-const closeEditModal = () => {
-  editModal.value = {
-    show: false,
-    type: '',
-    data: {},
-    id: '',
-    deadlineDate: ''
-  }
-  editAttachments.value = []
+
+function closeEditModal() {
+  editModal.value.show = false;
 }
+
+
+
 
 // Tab switching
 const switchTab = async (tab) => {
