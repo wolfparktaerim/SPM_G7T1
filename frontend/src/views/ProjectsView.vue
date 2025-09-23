@@ -51,32 +51,48 @@
 
     <!-- Project List -->
     <div v-if="projectsToShow.length">
-      <div
-        v-for="project in projectsToShow"
-        :key="project.id"
-        class="mb-3 border rounded p-3 shadow"
-      >
-        <h3 class="text-lg font-semibold">{{ project.title }}</h3>
-        <p>Deadline: {{ project.deadline }}</p>
-        <p>Owner: {{ project.owner }}</p>
-        <p v-if="project.description">Description: {{ project.description }}</p>
-        <p>Collaborators: {{ project.collaborators.join(', ') }}</p>
+     <div
+  v-for="project in projectsToShow"
+  :key="project.uid"
+  class="mb-3 border rounded p-3 shadow"
+>
+  <h3 class="text-lg font-semibold">{{ project.title }}</h3>
+  <p>Deadline: {{ project.deadline }}</p>
+  <p>Owner: {{ project.ownerUid }}</p>
+  <p v-if="project.description">Description: {{ project.description }}</p>
+  <p>Collaborators: {{ project.collaborators.join(', ') }}</p>
 
-        <!-- Actions -->
-        <div class="mt-2 flex gap-2">
-          <button @click="selectProject(project)" class="bg-gray-600 text-white px-2 py-1 rounded">View</button>
-          <button
-            v-if="project.owner === currentUser"
-            @click="editProject(project)"
-            class="bg-yellow-500 text-white px-2 py-1 rounded"
-          >Edit</button>
-          <button
-            v-if="project.owner === currentUser"
-            @click="handleDelete(project)"
-            class="bg-red-600 text-white px-2 py-1 rounded"
-          >Delete</button>
-        </div>
-      </div>
+  <!-- Actions -->
+  <div class="mt-2 flex gap-2">
+    <button @click="selectProject(project)" class="bg-gray-600 text-white px-2 py-1 rounded">View</button>
+    <button
+      v-if="project.ownerUid === currentUser"
+      @click="editProject(project)"
+      class="bg-yellow-500 text-white px-2 py-1 rounded"
+    >Edit</button>
+    <button
+      v-if="project.ownerUid === currentUser"
+      @click="handleDelete(project)"
+      class="bg-red-600 text-white px-2 py-1 rounded"
+    >Delete</button>
+  </div>
+
+  <!-- Add Collaborator (only for owner) -->
+  <div v-if="project.ownerUid === currentUser" class="mt-3">
+    <input
+      v-model="collabInputs[project.uid]"
+      placeholder="Add collaborator userId"
+      class="border p-1 rounded mr-2"
+    />
+    <button
+      @click="handleAddCollaborator(project)"
+      class="bg-green-600 text-white px-2 py-1 rounded"
+    >
+      Add Collaborator
+    </button>
+  </div>
+</div>
+
     </div>
     <p v-else>No projects found.</p>
 
@@ -231,4 +247,38 @@ function editProject(project) {
 function selectProject(project) {
   alert(`Viewing project: ${project.title}\nOwner: ${project.ownerUid}`);
 }
+const collabInputs = ref({}); // store input per project
+
+async function handleAddCollaborator(project) {
+  const newUserId = collabInputs.value[project.uid];
+  if (!newUserId) return alert("Enter a userId");
+
+  try {
+    const res = await fetch(`${API_BASE}/add-collaborator`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userid: currentUser,     // owner
+        adduserid: [newUserId],  // array of userIds
+        uid: project.uid
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to add collaborator");
+
+    message.value = data.message;
+    error.value = false;
+
+    // update local project list
+    const idx = projects.value.findIndex(p => p.uid === project.uid);
+    if (idx !== -1) projects.value[idx] = data.project;
+
+    // clear input
+    collabInputs.value[project.uid] = '';
+  } catch (err) {
+    error.value = true;
+    message.value = err.message;
+  }
+}
+
 </script>
