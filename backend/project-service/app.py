@@ -99,6 +99,21 @@ def read_projects(userid):
     project_ref.delete()
     return jsonify({"message": "Project deleted"}), 200
 
+@app.route("/project/all-users", methods=["GET"])
+def get_all_users():
+    users_ref = db.reference("users")
+    all_users = users_ref.get() or {}
+
+    users_list = []
+    for uid, info in all_users.items():
+        users_list.append({
+            "uid": uid,
+            "name": info.get("name"),
+            "email": info.get("email")
+        })
+
+    return jsonify({"users": users_list}), 200
+
 
 @app.route("/project/update", methods=["POST"])
 def update_project():

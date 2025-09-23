@@ -57,9 +57,13 @@
   >
     <h3 class="text-lg font-semibold">{{ project.title }}</h3>
     <p>Deadline: {{ project.deadline }}</p>
-    <p>Owner: {{ project.ownerUid }}</p>
     <p v-if="project.description">Description: {{ project.description }}</p>
-    <p>Collaborators: {{ project.collaborators.join(', ') }}</p>
+    <p>Owner: {{ usersMap[project.ownerUid]?.name || project.ownerUid }}</p>
+<p>
+  Collaborators: 
+  {{ project.collaborators.map(uid => usersMap[uid]?.name || uid).join(', ') }}
+</p>
+
 
     <!-- Actions -->
     <div class="mt-2 flex gap-2">
@@ -132,13 +136,27 @@ onMounted(() => {
     if (user) {
       currentUser.value = user.uid;
       fetchProjects();          // fetch projects after currentUser is known
-      // fetchAllAvailableUsers(); // optional: preload available users
+      fetchAllUsers(); // optional: preload available users
     } else {
       alert("Please login to access projects");
     }
   });
 });
 
+const usersMap = ref({}); // uid → user object { name, email }
+
+async function fetchAllUsers() {
+  try {
+    const res = await fetch(`${API_BASE}/all-users`); // you can make an endpoint to return all users
+    const data = await res.json();
+    // Convert array to map for easy lookup
+    data.users.forEach(user => {
+      usersMap.value[user.uid] = user;
+    });
+  } catch (err) {
+    console.error("Failed to fetch users:", err);
+  }
+}
 
 // Fetch projects
 async function fetchProjects() {
