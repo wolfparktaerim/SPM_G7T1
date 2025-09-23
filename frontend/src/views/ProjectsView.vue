@@ -4,39 +4,38 @@
     <h1 class="text-2xl font-bold mb-4">Projects</h1>
 
     <!-- Create Project Section -->
-<div class="mb-6 border rounded-lg p-4 shadow">
-  <div class="flex justify-between items-center">
-    <h2 class="font-semibold">Projects</h2>
-    <button 
-      @click="showCreateForm = !showCreateForm"
-      class="bg-green-600 text-white px-3 py-1 rounded"
-    >
-      {{ showCreateForm ? 'Cancel' : 'New Project' }}
-    </button>
-  </div>
+    <div class="mb-6 border rounded-lg p-4 shadow">
+      <div class="flex justify-between items-center">
+        <h2 class="font-semibold">Projects</h2>
+        <button 
+          @click="showCreateForm = !showCreateForm"
+          class="bg-green-600 text-white px-3 py-1 rounded"
+        >
+          {{ showCreateForm ? 'Cancel' : 'New Project' }}
+        </button>
+      </div>
 
-  <!-- Create Project Form (only visible if toggled) -->
-  <form v-if="showCreateForm" @submit.prevent="handleCreate" class="mt-4">
-    <div class="mb-2">
-      <label class="block text-sm">Title *</label>
-      <input v-model="newProject.title" class="border p-1 rounded w-full" required />
-    </div>
-    <div class="mb-2">
-      <label class="block text-sm">Deadline *</label>
-      <input type="date" v-model="newProject.deadline" class="border p-1 rounded w-full" required />
-    </div>
-    <div class="mb-2">
-      <label class="block text-sm">Description (optional)</label>
-      <textarea v-model="newProject.description" class="border p-1 rounded w-full"></textarea>
-    </div>
-    <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded">Create Project</button>
-  </form>
+      <!-- Create Project Form -->
+      <form v-if="showCreateForm" @submit.prevent="handleCreate" class="mt-4">
+        <div class="mb-2">
+          <label class="block text-sm">Title *</label>
+          <input v-model="newProject.title" class="border p-1 rounded w-full" required />
+        </div>
+        <div class="mb-2">
+          <label class="block text-sm">Deadline *</label>
+          <input type="date" v-model="newProject.deadline" class="border p-1 rounded w-full" required />
+        </div>
+        <div class="mb-2">
+          <label class="block text-sm">Description (optional)</label>
+          <textarea v-model="newProject.description" class="border p-1 rounded w-full"></textarea>
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded">Create Project</button>
+      </form>
 
-  <p v-if="message" class="mt-2 text-sm" :class="error ? 'text-red-600' : 'text-green-600'">
-    {{ message }}
-  </p>
-</div>
-
+      <p v-if="message" class="mt-2 text-sm" :class="error ? 'text-red-600' : 'text-green-600'">
+        {{ message }}
+      </p>
+    </div>
 
     <!-- Search & Filter -->
     <div class="flex gap-4 mb-4">
@@ -49,121 +48,138 @@
       </select>
     </div>
 
-    <!-- Project List -->
-    <div v-if="projectsToShow.length">
-     <div
-  v-for="project in projectsToShow"
-  :key="project.uid"
-  class="mb-3 border rounded p-3 shadow"
->
-  <h3 class="text-lg font-semibold">{{ project.title }}</h3>
-  <p>Deadline: {{ project.deadline }}</p>
-  <p>Owner: {{ project.ownerUid }}</p>
-  <p v-if="project.description">Description: {{ project.description }}</p>
-  <p>Collaborators: {{ project.collaborators.join(', ') }}</p>
+   <!-- Project List -->
+<div v-if="projectsToShow.length">
+  <div
+    v-for="project in projectsToShow"
+    :key="project.uid"
+    class="mb-3 border rounded p-3 shadow"
+  >
+    <h3 class="text-lg font-semibold">{{ project.title }}</h3>
+    <p>Deadline: {{ project.deadline }}</p>
+    <p>Owner: {{ project.ownerUid }}</p>
+    <p v-if="project.description">Description: {{ project.description }}</p>
+    <p>Collaborators: {{ project.collaborators.join(', ') }}</p>
 
-  <!-- Actions -->
-  <div class="mt-2 flex gap-2">
-    <button @click="selectProject(project)" class="bg-gray-600 text-white px-2 py-1 rounded">View</button>
-    <button
-      v-if="project.ownerUid === currentUser"
-      @click="editProject(project)"
-      class="bg-yellow-500 text-white px-2 py-1 rounded"
-    >Edit</button>
-    <button
-      v-if="project.ownerUid === currentUser"
-      @click="handleDelete(project)"
-      class="bg-red-600 text-white px-2 py-1 rounded"
-    >Delete</button>
-  </div>
+    <!-- Actions -->
+    <div class="mt-2 flex gap-2">
+      <button @click="selectProject(project)" class="bg-gray-600 text-white px-2 py-1 rounded">View</button>
+      <button
+        v-if="project.ownerUid === currentUser.value"
+        @click="editProject(project)"
+        class="bg-yellow-500 text-white px-2 py-1 rounded"
+      >Edit</button>
+      <button
+        v-if="project.ownerUid === currentUser.value"
+        @click="handleDelete(project)"
+        class="bg-red-600 text-white px-2 py-1 rounded"
+      >Delete</button>
+    </div>
 
-  <!-- Add Collaborator (only for owner) -->
-  <div v-if="project.ownerUid === currentUser" class="mt-3">
-    <input
-      v-model="collabInputs[project.uid]"
-      placeholder="Add collaborator userId"
-      class="border p-1 rounded mr-2"
-    />
-    <button
-      @click="handleAddCollaborator(project)"
-      class="bg-green-600 text-white px-2 py-1 rounded"
-    >
-      Add Collaborator
-    </button>
+    <!-- Add Collaborator (for owner) -->
+    <!-- <div v-if="project.ownerUid === currentUser.value" class="mt-3 flex items-center gap-2"> --> 
+      <!-- there is a bug where it can't check if the current user is the owner in the condition -->
+    <div  class="mt-3 flex items-center gap-2">
+      <select v-model="collabInputs[project.uid]" class="border p-1 rounded flex-1">
+        <option value="">Select user</option>
+        <option
+          v-for="user in availableUsers[project.uid] || []"
+          :key="user.uid"
+          :value="user.uid"
+        >
+          {{ user.name }} ({{ user.email }})
+        </option>
+      </select>
+      <button
+        @click="handleAddCollaborator(project)"
+        class="bg-green-600 text-white px-2 py-1 rounded"
+      >
+        Add Collaborator
+      </button>
+    </div>
   </div>
 </div>
+<p v-else>No projects found.</p>
 
-    </div>
-    <p v-else>No projects found.</p>
-
-    <!-- Edit Modal -->
-    <div v-if="editingProject" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-      <div class="bg-white p-6 rounded-lg w-1/2 shadow-lg">
-        <h2 class="text-xl font-bold mb-4">Edit Project</h2>
-        <form @submit.prevent="handleUpdate">
-          <div class="mb-2">
-            <label class="block text-sm">Title *</label>
-            <input v-model="editingProject.title" class="border p-1 rounded w-full" required />
-          </div>
-          <div class="mb-2">
-            <label class="block text-sm">Deadline *</label>
-            <input type="date" v-model="editingProject.deadline" class="border p-1 rounded w-full" required />
-          </div>
-          <div class="mb-2">
-            <label class="block text-sm">Description</label>
-            <textarea v-model="editingProject.description" class="border p-1 rounded w-full"></textarea>
-          </div>
-          <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded">Save Changes</button>
-          <button type="button" @click="editingProject = null" class="ml-2 bg-gray-400 text-white px-3 py-1 rounded">Cancel</button>
-        </form>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
 import NavigationBar from '@/components/NavigationBar.vue';
+import { ref, computed, onMounted } from 'vue';
+import { auth } from '@/firebase/firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
 
-const API_BASE = "http://localhost:8000/project"; // Kong gateway
+const API_BASE = "http://localhost:8000/project";
 
-const currentUser = "me@example.com"; // example user
-const currentRole = "manager"; // example role (needed for create)
+const currentUser = ref(null);       // Firebase UID
+const currentRole = ref("manager");  // optional role
 
 const showCreateForm = ref(false);
 const projects = ref([]);
 const message = ref('');
 const error = ref(false);
-
 const newProject = ref({ title: '', deadline: '', description: '' });
 const editingProject = ref(null);
 const searchQuery = ref('');
 const filterOption = ref('');
+const collabInputs = ref({});
+const availableUsers = ref({}); // per project
 
-// Load projects from backend
+// Firebase Auth + fetch projects after login
+onMounted(() => {
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      currentUser.value = user.uid;
+      fetchProjects();          // fetch projects after currentUser is known
+      // fetchAllAvailableUsers(); // optional: preload available users
+    } else {
+      alert("Please login to access projects");
+    }
+  });
+});
+
+
+// Fetch projects
 async function fetchProjects() {
+  if (!currentUser.value) return;
   try {
-    const res = await fetch(`${API_BASE}/${currentUser}`);
+    const res = await fetch(`${API_BASE}/${currentUser.value}`);
     if (!res.ok) throw new Error("Failed to fetch projects");
     const data = await res.json();
     projects.value = data.projects || [];
+
+    // fetch available users for each project
+    projects.value.forEach(project => fetchAvailableUsers(project));
   } catch (err) {
     error.value = true;
     message.value = err.message;
   }
 }
 
-onMounted(fetchProjects);
+// Fetch available users for collaboration (exclude owner & existing collaborators)
+async function fetchAvailableUsers(project) {
+  try {
+    const res = await fetch(`${API_BASE}/users/available-for-collaboration/${project.uid}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to fetch users");
+    availableUsers.value[project.uid] = data.availableUsers || [];
+  } catch (err) {
+    console.error(err.message);
+    availableUsers.value[project.uid] = [];
+  }
+}
 
-// Create Project
+// Create project
 async function handleCreate() {
+  if (!currentUser.value) return;
   try {
     const res = await fetch(`${API_BASE}/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userid: currentUser,
-        role: currentRole,
+        userid: currentUser.value,
+        role: currentRole.value,
         title: newProject.value.title,
         deadline: newProject.value.deadline,
         description: newProject.value.description
@@ -177,20 +193,23 @@ async function handleCreate() {
     projects.value.push(data.project);
     newProject.value = { title: '', deadline: '', description: '' };
     showCreateForm.value = false;
+
+    fetchAvailableUsers(data.project);
   } catch (err) {
     error.value = true;
     message.value = err.message;
   }
 }
 
-// Update Project
+// Update project
 async function handleUpdate() {
+  if (!currentUser.value) return;
   try {
     const res = await fetch(`${API_BASE}/update`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userid: currentUser,
+        userid: currentUser.value,
         uid: editingProject.value.uid,
         title: editingProject.value.title,
         deadline: editingProject.value.deadline,
@@ -203,10 +222,8 @@ async function handleUpdate() {
     message.value = data.message;
     error.value = false;
 
-    // Update locally
     const idx = projects.value.findIndex(p => p.uid === editingProject.value.uid);
     if (idx !== -1) projects.value[idx] = data.project;
-
     editingProject.value = null;
   } catch (err) {
     error.value = true;
@@ -214,7 +231,40 @@ async function handleUpdate() {
   }
 }
 
-// Delete Project (disabled in backend, but kept for UI)
+// Add collaborator
+async function handleAddCollaborator(project) {
+  const newUserId = collabInputs.value[project.uid];
+  if (!newUserId) return alert("Select a user");
+  if (!currentUser.value) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/add-collaborator`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userid: currentUser.value,
+        adduserid: [newUserId],
+        uid: project.uid
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to add collaborator");
+
+    message.value = data.message;
+    error.value = false;
+
+    const idx = projects.value.findIndex(p => p.uid === project.uid);
+    if (idx !== -1) projects.value[idx] = data.project;
+
+    collabInputs.value[project.uid] = '';
+    fetchAvailableUsers(project); // refresh dropdown
+  } catch (err) {
+    error.value = true;
+    message.value = err.message;
+  }
+}
+
+// Delete (UI only)
 async function handleDelete(project) {
   alert("Delete is disabled: Projects cannot be deleted.");
 }
@@ -234,7 +284,7 @@ const projectsToShow = computed(() => {
   } else if (filterOption.value === "createdAt") {
     filtered = [...filtered].sort((a, b) => new Date(a.creationDate) - new Date(b.creationDate));
   } else if (filterOption.value === "owner") {
-    filtered = filtered.filter(p => p.ownerUid === currentUser);
+    filtered = filtered.filter(p => p.ownerUid === currentUser.value);
   }
 
   return filtered;
@@ -247,38 +297,4 @@ function editProject(project) {
 function selectProject(project) {
   alert(`Viewing project: ${project.title}\nOwner: ${project.ownerUid}`);
 }
-const collabInputs = ref({}); // store input per project
-
-async function handleAddCollaborator(project) {
-  const newUserId = collabInputs.value[project.uid];
-  if (!newUserId) return alert("Enter a userId");
-
-  try {
-    const res = await fetch(`${API_BASE}/add-collaborator`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userid: currentUser,     // owner
-        adduserid: [newUserId],  // array of userIds
-        uid: project.uid
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to add collaborator");
-
-    message.value = data.message;
-    error.value = false;
-
-    // update local project list
-    const idx = projects.value.findIndex(p => p.uid === project.uid);
-    if (idx !== -1) projects.value[idx] = data.project;
-
-    // clear input
-    collabInputs.value[project.uid] = '';
-  } catch (err) {
-    error.value = true;
-    message.value = err.message;
-  }
-}
-
 </script>

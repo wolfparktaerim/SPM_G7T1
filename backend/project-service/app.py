@@ -134,6 +134,38 @@ def update_project():
     updated_project = project_ref.get()
     return jsonify({"message": "Project updated", "project": updated_project}), 200
 
+@app.route("/project/users/available-for-collaboration/<uid>", methods=["GET"])
+def get_available_users(uid):
+    """
+    Returns a list of users who can be added as collaborators for a project:
+    Excludes the owner and existing collaborators.
+    Each user returned includes: uid, name, email
+    """
+    # Get project
+    project_ref = db.reference(f"project/{uid}")
+    project = project_ref.get()
+    if not project:
+        return jsonify(error="Project not found"), 404
+
+    # Get all users
+    users_ref = db.reference("users")
+    all_users = users_ref.get() or {}
+
+    # Exclude owner and current collaborators
+    owner_uid = project.get("ownerUid")
+    current_collaborators = set(project.get("collaborators", []))
+
+    available_users = []
+    for user_uid, user_info in all_users.items():
+        if user_uid != owner_uid and user_uid not in current_collaborators:
+            available_users.append({
+                "uid": user_uid,
+                "name": user_info.get("name"),
+                "email": user_info.get("email")
+            })
+
+    return jsonify({"availableUsers": available_users}), 200
+
 @app.route("/project/add-collaborator", methods=["POST"])
 def add_collaborator():
     data = request.get_json()
