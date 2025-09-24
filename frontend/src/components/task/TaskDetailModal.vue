@@ -77,7 +77,7 @@
                 Project
               </label>
               <div class="info-value">
-                {{ taskData.projectId }}
+                {{ projectName }}
               </div>
             </div>
 
@@ -211,7 +211,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import axios from 'axios'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import {
@@ -293,7 +294,21 @@ function formatStatus(status) {
   }
   return statusMap[status] || status
 }
+const projectName = ref('')
 
+watch(() => props.taskData?.projectId, async (newProjectId) => {
+  if (newProjectId) {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/indiv/${newProjectId}`)
+      projectName.value = response.data.project?.title || 'Unknown Project'
+    } catch (error) {
+      console.error('Error fetching project name:', error)
+      projectName.value = 'Unknown Project'
+    }
+  } else {
+    projectName.value = ''
+  }
+})
 function getStatusClass(status) {
   const classMap = {
     'unassigned': 'status-unassigned',

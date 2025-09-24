@@ -10,7 +10,7 @@
         <div class="task-title-section">
           <h4 class="task-title" :title="task.title">{{ task.title }}</h4>
           <div class="task-meta">
-            <span v-if="task.projectId" class="project-badge">{{ task.projectId }}</span>
+            <span v-if="task.projectId" class="project-badge">{{ projectName }}</span>
           </div>
         </div>
 
@@ -115,7 +115,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import axios from 'axios'
+import { ref, computed, watch } from 'vue'
 import {
   Calendar,
   User,
@@ -183,8 +184,24 @@ const deadlineClass = computed(() => {
   if (isDueSoon.value) return 'due-soon'
   return ''
 })
+const projectName = ref('')
+
+watch(() => props.task.projectId, async (newProjectId) => {
+  if (newProjectId) {
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/indiv/${newProjectId}`)
+      projectName.value = response.data.project?.title || 'Unknown Project'
+    } catch (error) {
+      console.error('Error fetching project name:', error)
+      projectName.value = 'Unknown Project'
+    }
+  } else {
+    projectName.value = ''
+  }
+}, { immediate: true }) // triggers watcher immediately on setup
 
 // Methods
+
 function toggleSubtasks() {
   showSubtasks.value = !showSubtasks.value
 }
