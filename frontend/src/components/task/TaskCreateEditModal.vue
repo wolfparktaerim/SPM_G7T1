@@ -32,11 +32,25 @@
           <span v-if="errors.deadline" class="error-message">{{ errors.deadline }}</span>
         </div>
 
-        <!-- Project ID Field (Tasks only) -->
+        <!-- Project Field (Tasks only) -->
         <div v-if="!isSubtask" class="form-group">
           <label class="form-label">Project</label>
-          <input v-model="formData.projectId" type="text" placeholder="Optional project name..." class="form-input" />
-          <p class="form-hint">Link this task to a specific project (optional)</p>
+          <select v-model="formData.projectId" class="form-input" :disabled="loadingProjects">
+            <option value="">
+              {{ loadingProjects ? 'Loading projects...' : 'Select a project (optional)' }}
+            </option>
+            <option v-for="project in availableProjects" :key="project.uid" :value="project.uid">
+              {{ project.title }}
+              <template v-if="project.ownerUid === currentUser?.uid"> (Owner)</template>
+              <template v-else> (Collaborator)</template>
+            </option>
+          </select>
+          <p class="form-hint">
+            Link this task to a specific project (optional)
+            <span v-if="availableProjects.length === 0 && !loadingProjects" class="text-amber-600">
+              - No projects available
+            </span>
+          </p>
         </div>
 
         <!-- Status Field -->
@@ -178,6 +192,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { usersService } from '@/services/users'
 import { useToast } from 'vue-toastification'
+import axios from 'axios'
 import {
   X,
   Upload,
@@ -223,6 +238,8 @@ const toast = useToast()
 // Reactive data
 const loading = ref(false)
 const allUsers = ref([])
+const projects = ref([])
+const loadingProjects = ref(false)
 const selectedCollaborator = ref('')
 const deadlineInput = ref('')
 const newAttachments = ref([])
@@ -269,6 +286,13 @@ const availableCollaborators = computed(() => {
   )
 })
 
+const availableProjects = computed(() => {
+  return projects.value.filter(project => 
+    project.ownerUid === currentUser.value?.uid || 
+    project.collaborators?.includes(currentUser.value?.uid)
+  )
+})
+
 const minDateTime = computed(() => {
   const now = new Date()
   return now.toISOString().slice(0, 16)
@@ -281,6 +305,28 @@ const isFormValid = computed(() => {
 })
 
 // Methods
+async function fetchProjects() {
+  if (!currentUser.value?.uid) return
+  
+  loadingProjects.value = true
+  try {
+    console.log('Fetching projects for user:', currentUser.value.uid)
+    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUser.value.uid}`)
+    projects.value = response.data.projects || []
+    console.log(`Loaded ${projects.value.length} projects`)
+  } catch (error) {
+    console.error('Error fetching projects:', error)
+    if (error.response?.status === 404) {
+      // No projects found is acceptable
+      projects.value = []
+    } else {
+      toast.error('Failed to load projects')
+    }
+  } finally {
+    loadingProjects.value = false
+  }
+}
+
 function getModalTitle() {
   if (props.isEditing) {
     return `Edit ${props.isSubtask ? 'Subtask' : 'Task'}`
@@ -555,8 +601,9 @@ watch(deadlineInput, (newVal) => {
   formData.value.deadline = dateTimeToEpoch(newVal)
 })
 
-// Initialize users if not passed as prop
+// Initialize users and projects
 onMounted(async () => {
+  // Load users if not passed as prop
   if (props.allUsers.length === 0) {
     try {
       const users = await usersService.getAllUsers()
@@ -568,6 +615,9 @@ onMounted(async () => {
   } else {
     allUsers.value = props.allUsers
   }
+  
+  // Load projects
+  await fetchProjects()
 })
 </script>
 
@@ -681,6 +731,12 @@ onMounted(async () => {
   border-color: #ef4444;
 }
 
+.form-input:disabled {
+  background-color: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
 .error-message {
   font-size: 0.875rem;
   color: #dc2626;
@@ -691,6 +747,10 @@ onMounted(async () => {
   font-size: 0.75rem;
   color: #6b7280;
   margin-top: 0.25rem;
+}
+
+.text-amber-600 {
+  color: #d97706;
 }
 
 .char-counter {
