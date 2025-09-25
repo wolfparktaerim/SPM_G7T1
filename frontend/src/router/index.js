@@ -101,7 +101,8 @@ router.beforeEach(async (to, from, next) => {
 
   // Redirect user to dashboard if they try to go /auth or home page
   if ((to.name == 'authentication' || to.name == 'home') && authStore.isAuthenticated) {
-    next('/dashboard')
+    // Preserve query parameters when redirecting to dashboard
+    next({ path: '/dashboard', query: to.query })
     return
   }
   next()

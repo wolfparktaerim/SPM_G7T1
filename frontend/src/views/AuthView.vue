@@ -566,13 +566,9 @@ const handleSignUp = async () => {
       // Save user profile to database
       await usersService.createUser(userData)
 
-      // Show success message
-      authStore.success = 'Account created successfully! Welcome to G7T1 Management System.'
-
-      // Redirect to dashboard after short delay
-      setTimeout(() => {
-        router.push('/dashboard')
-      }, 1500)
+      // Redirect to dashboard with success indication
+      console.log('Redirecting to dashboard with newUser=true')
+      router.push({ path: '/dashboard', query: { newUser: 'true' } })
     }
   } catch (error) {
     console.error('Registration error:', error)
