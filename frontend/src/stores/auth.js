@@ -20,6 +20,7 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref(null)
   const success = ref(null)
   const initialized = ref(false)
+  const sessionStartTime = ref(null)
 
   const isAuthenticated = computed(() => !!user.value)
 
@@ -71,6 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
               }
             }
             console.log('User data loaded:', user.value)
+            sessionStartTime.value = Date.now()
           } catch (error) {
             console.error('Error fetching user data from Realtime Database:', error)
             // Fallback to basic Firebase Auth data
@@ -93,6 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
           }
         } else {
           user.value = null
+          sessionStartTime.value = null
         }
 
         loading.value = false
@@ -181,6 +184,7 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null
       success.value = null
       await signOut(auth)
+      sessionStartTime.value = null
     } catch (err) {
       error.value = getFirebaseErrorMessage(err.code) || 'Sign out failed'
       throw err
@@ -247,6 +251,7 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     success,
     initialized,
+    sessionStartTime,
     isAuthenticated,
     initializeAuth,
     signInWithEmail,
