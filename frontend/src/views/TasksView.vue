@@ -624,6 +624,14 @@ async function handleTaskMoved(taskId, newStatus, oldStatus) {
   //     return
   //   }
   // }
+  //Check that subtask status are completed before task can be completed
+  if (task.subtasks?.length > 0 && newStatus === 'completed') {
+  const incompleteSubtasks = task.subtasks.filter(st => st.status !== 'completed')
+  if (incompleteSubtasks.length > 0) {
+    toast.error(`Cannot complete task. ${incompleteSubtasks.length} subtask(s) are not completed.`)
+    return
+  }
+}
 
   // Show confirmation modal
   confirmModal.value = {
