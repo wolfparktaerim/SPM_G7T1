@@ -27,7 +27,7 @@
         <!-- Deadline Field -->
         <div class="form-group">
           <label class="form-label required">Deadline</label>
-          <input v-model="deadlineInput" type="datetime-local" required :min="minDateTime" class="form-input"
+          <input v-model="deadlineInput" type="datetime-local" required class="form-input"
             :class="{ 'error': errors.deadline }" />
           <span v-if="errors.deadline" class="error-message">{{ errors.deadline }}</span>
         </div>
@@ -70,7 +70,7 @@
         <!-- Owner Assignment (Managers/Directors only) -->
         <div v-if="canAssignOwner" class="form-group">
           <label class="form-label">Assign Owner</label>
-          <select v-model="formData.ownerId" class="form-input">
+          <select v-model="formData.ownerId" @change="handleOwnerChange" class="form-input">
             <option value="">Select owner...</option>
             <option v-for="user in subordinateUsers" :key="user.uid" :value="user.uid">
               {{ getUserDisplayName(user) }} ({{ formatRole(user.role) }})
@@ -81,8 +81,8 @@
           </p>
         </div>
 
-        <!-- Collaborators Field -->
-        <div class="form-group">
+        <!-- Collaborators Field (Only for owners) -->
+        <div v-if="canManageCollaborators" class="form-group">
           <label class="form-label">Collaborators</label>
           <div class="collaborators-input">
             <select v-model="selectedCollaborator" @change="addCollaborator" class="form-input">
@@ -109,6 +109,26 @@
               </button>
             </div>
           </div>
+        </div>
+
+        <!-- Collaborators View Only (For non-owners) -->
+        <div v-else-if="formData.collaborators.length > 0" class="form-group">
+          <label class="form-label">Collaborators (View Only)</label>
+          <div class="collaborators-list">
+            <div v-for="collaboratorId in formData.collaborators" :key="collaboratorId"
+              class="collaborator-tag readonly">
+              <div class="collaborator-avatar">
+                {{ getInitials(collaboratorId) }}
+              </div>
+              <div class="collaborator-info">
+                <span class="collaborator-name">{{ getUserDisplayName(collaboratorId) }}</span>
+                <span class="collaborator-role">{{ getUserRole(collaboratorId) }}</span>
+              </div>
+            </div>
+          </div>
+          <p class="form-hint">
+            Only the task owner can modify collaborators
+          </p>
         </div>
 
         <!-- Notes Field -->
@@ -265,6 +285,16 @@ const canAssignOwner = computed(() => {
   return userRole === 'manager' || userRole === 'director'
 })
 
+// NEW: Check if current user can manage collaborators (only owners can)
+const canManageCollaborators = computed(() => {
+  if (!props.isEditing) {
+    // During creation, creator can manage collaborators
+    return true
+  }
+  // During editing, only owner can manage collaborators
+  return props.taskData?.ownerId === currentUser.value?.uid
+})
+
 const subordinateUsers = computed(() => {
   const currentUserRole = currentUser.value?.role
   if (!currentUserRole) return []
@@ -287,15 +317,10 @@ const availableCollaborators = computed(() => {
 })
 
 const availableProjects = computed(() => {
-  return projects.value.filter(project => 
-    project.ownerUid === currentUser.value?.uid || 
+  return projects.value.filter(project =>
+    project.ownerUid === currentUser.value?.uid ||
     project.collaborators?.includes(currentUser.value?.uid)
   )
-})
-
-const minDateTime = computed(() => {
-  const now = new Date()
-  return now.toISOString().slice(0, 16)
 })
 
 const isFormValid = computed(() => {
@@ -307,7 +332,7 @@ const isFormValid = computed(() => {
 // Methods
 async function fetchProjects() {
   if (!currentUser.value?.uid) return
-  
+
   loadingProjects.value = true
   try {
     console.log('Fetching projects for user:', currentUser.value.uid)
@@ -324,6 +349,18 @@ async function fetchProjects() {
     }
   } finally {
     loadingProjects.value = false
+  }
+}
+
+// Handle owner change
+function handleOwnerChange() {
+  // Auto-manage status based on owner assignment
+  if (formData.value.ownerId) {
+    // Someone is assigned as owner - set status to ongoing
+    formData.value.status = 'ongoing'
+  } else {
+    // No owner assigned - set status to unassigned
+    formData.value.status = 'unassigned'
   }
 }
 
@@ -498,8 +535,6 @@ function validateForm() {
 
   if (!formData.value.deadline) {
     errors.value.deadline = 'Deadline is required'
-  } else if (formData.value.deadline * 1000 < Date.now()) {
-    errors.value.deadline = 'Deadline cannot be in the past'
   }
 
   return Object.keys(errors.value).length === 0
@@ -615,7 +650,7 @@ onMounted(async () => {
   } else {
     allUsers.value = props.allUsers
   }
-  
+
   // Load projects
   await fetchProjects()
 })
@@ -778,6 +813,11 @@ onMounted(async () => {
   border: 1px solid #e2e8f0;
   padding: 0.75rem;
   border-radius: 0.5rem;
+}
+
+.collaborator-tag.readonly {
+  background-color: #f9fafb;
+  border-color: #e5e7eb;
 }
 
 .collaborator-avatar {

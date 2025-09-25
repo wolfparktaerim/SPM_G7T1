@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
     <NavigationBar />
     <!-- Header Section -->
-    <div class="bg-white/70 backdrop-blur-sm border-b border-gray-200/50 top-0 z-40">
+    <div class="bg-white/70 backdrop-blur-sm border-b border-gray-200/50 top-0">
       <div class="max-w-full px-4 sm:px-6 lg:px-8 py-4">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -50,7 +50,7 @@
 
         <!-- Filter Section -->
         <transition name="slide-down">
-          <div v-if="showFilters" class="mt-4 p-4 bg-gray-50 rounded-lg border">
+          <div v-if="showFilters" class="mt-4 p-4 bg-gray-50 rounded-lg border relative">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Search</label>
@@ -63,13 +63,13 @@
                 <select v-model="filters.project" :disabled="loadingProjects"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option value="">All Projects</option>
+                  <option value="no-project">📁 No Project</option>
                   <option v-for="project in projects" :key="project.uid" :value="project.uid">
                     {{ project.name || project.title || project.uid }}
                   </option>
                 </select>
                 <div v-if="loadingProjects" class="text-xs text-gray-500 mt-1">Loading projects...</div>
               </div>
-
 
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
@@ -78,7 +78,6 @@
                   <option value="createdAt">Creation Date</option>
                   <option value="deadline">Deadline</option>
                   <option value="title">Title</option>
-                  <option value="status">Status</option>
                 </select>
               </div>
             </div>
@@ -203,10 +202,15 @@ const filteredTasks = computed(() => {
     )
   }
 
-  // Project filter - exact match when dropdown is used
-  console.log(filters.value)
+  // NEW: Project filter - handle special case for no project
   if (filters.value.project) {
-    filtered = filtered.filter(task => task.projectId === filters.value.project)
+    if (filters.value.project === 'no-project') {
+      // Filter tasks without projects (empty string or null projectId)
+      filtered = filtered.filter(task => !task.projectId || task.projectId.trim() === '')
+    } else {
+      // Filter by specific project ID
+      filtered = filtered.filter(task => task.projectId === filters.value.project)
+    }
   }
 
   // Sort
@@ -261,10 +265,11 @@ async function fetchTasks() {
     throw error
   }
 }
+
 // Add detailed logging to fetchProjects
 async function fetchProjects() {
   if (!authStore.user?.uid) {
-    console.log('❌ No user ID available for fetchProjects')
+    console.log('⚠️ No user ID available for fetchProjects')
     return
   }
 
@@ -272,16 +277,16 @@ async function fetchProjects() {
   try {
     console.log('Fetching projects for user:', authStore.user.uid)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
-    
+
     // Add detailed response logging
     console.log('📡 Full API response:', response)
     console.log('📊 Response data:', response.data)
     console.log('📋 Projects array:', response.data.projects)
-    
+
     projects.value = response.data.projects || []
     console.log(`✅ Loaded ${projects.value.length} projects:`, projects.value)
   } catch (error) {
-    console.error('❌ Error fetching projects:', error)
+    console.error('⚠️ Error fetching projects:', error)
     if (error.response?.status === 404) {
       projects.value = []
     } else {
@@ -291,7 +296,6 @@ async function fetchProjects() {
     loadingProjects.value = false
   }
 }
-
 
 async function fetchSubtasks() {
   try {
@@ -611,27 +615,14 @@ async function handleTaskMoved(taskId, newStatus, oldStatus) {
   const oldIndex = statusOrder.indexOf(oldStatus)
   const newIndex = statusOrder.indexOf(newStatus)
 
-  // if (newIndex < oldIndex && newStatus !== 'unassigned') {
-  //   toast.error('Tasks can only move forward in the workflow, or back to Unassigned.')
-  //   return
-  // }
-
-  // Check if all subtasks are completed before allowing forward movement
-  // if (task.subtasks?.length > 0 && newStatus !== 'unassigned') {
-  //   const incompleteSubtasks = task.subtasks.filter(st => st.status !== 'completed')
-  //   if (incompleteSubtasks.length > 0) {
-  //     toast.error(`Cannot move task. ${incompleteSubtasks.length} subtask(s) are not completed.`)
-  //     return
-  //   }
-  // }
-  //Check that subtask status are completed before task can be completed
+  // Check that subtask status are completed before task can be completed
   if (task.subtasks?.length > 0 && newStatus === 'completed') {
-  const incompleteSubtasks = task.subtasks.filter(st => st.status !== 'completed')
-  if (incompleteSubtasks.length > 0) {
-    toast.error(`Cannot complete task. ${incompleteSubtasks.length} subtask(s) are not completed.`)
-    return
+    const incompleteSubtasks = task.subtasks.filter(st => st.status !== 'completed')
+    if (incompleteSubtasks.length > 0) {
+      toast.error(`Cannot complete task. ${incompleteSubtasks.length} subtask(s) are not completed.`)
+      return
+    }
   }
-}
 
   // Show confirmation modal
   confirmModal.value = {
@@ -767,7 +758,7 @@ onMounted(async () => {
     // Show initial load success only
     toast.success('Task board loaded successfully')
   } catch (error) {
-    console.error('❌ Failed to load initial data:', error)
+    console.error('⚠️ Failed to load initial data:', error)
     toast.error('Failed to load initial data')
   } finally {
     loading.value = false

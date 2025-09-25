@@ -11,6 +11,13 @@
                 <div class="status-dot"></div>
                 {{ formatStatus(taskData?.status) }}
               </div>
+              <!-- NEW: Show ownership indicator -->
+              <div v-if="isOwner" class="ownership-badge">
+                👑 Owner
+              </div>
+              <div v-else-if="isCollaborator" class="collaborator-badge">
+                🤝 Collaborator
+              </div>
             </div>
           </div>
 
@@ -35,6 +42,18 @@
 
       <!-- Modal Content -->
       <div class="modal-content">
+        <!-- Access Notice (for non-owners viewing collaborator management info) -->
+        <div v-if="!isOwner && taskData" class="access-notice">
+          <div class="access-icon">ℹ️</div>
+          <div class="access-content">
+            <div class="access-title">View Only Access</div>
+            <div class="access-text">
+              You are {{ isCollaborator ? 'a collaborator on' : 'viewing' }} this {{ isSubtask ? 'subtask' : 'task' }}.
+              Only the owner ({{ formatOwner(taskData.ownerId) }}) can make changes.
+            </div>
+          </div>
+        </div>
+
         <!-- Basic Information -->
         <div class="section">
           <h3 class="section-title">Basic Information</h3>
@@ -108,6 +127,10 @@
           <h3 class="section-title">
             <Users class="w-5 h-5" />
             Collaborators ({{ taskData.collaborators.length }})
+            <!-- NEW: Show management hint for owners -->
+            <span v-if="isOwner" class="management-hint" title="You can manage collaborators in the edit modal">
+              ⚙️
+            </span>
           </h3>
           <div class="collaborators-list">
             <div v-for="collaboratorId in taskData.collaborators" :key="collaboratorId" class="collaborator-item">
@@ -117,6 +140,10 @@
               <div class="collaborator-info">
                 <span class="collaborator-name">{{ formatOwner(collaboratorId) }}</span>
                 <span class="collaborator-role">{{ getUserRole(collaboratorId) }}</span>
+              </div>
+              <!-- NEW: Show if this collaborator is the current user -->
+              <div v-if="collaboratorId === currentUserId" class="you-indicator">
+                You
               </div>
             </div>
           </div>
@@ -184,6 +211,13 @@
                     <User class="w-3 h-3" />
                     {{ formatOwner(subtask.ownerId) }}
                   </span>
+                  <!-- NEW: Show ownership indicator for subtasks -->
+                  <span v-if="subtask.ownerId === currentUserId" class="subtask-ownership">
+                    👑 You own this
+                  </span>
+                  <span v-else-if="subtask.collaborators?.includes(currentUserId)" class="subtask-collaboration">
+                    🤝 You collaborate
+                  </span>
                 </div>
               </div>
               <ChevronRight class="w-5 h-5 text-gray-400" />
@@ -202,6 +236,18 @@
 
       <!-- Modal Footer -->
       <div class="modal-footer">
+        <div class="footer-info">
+          <!-- NEW: Show permissions info -->
+          <span v-if="isOwner" class="permission-text">
+            🔑 You have full access to this {{ isSubtask ? 'subtask' : 'task' }}
+          </span>
+          <span v-else-if="isCollaborator" class="permission-text">
+            👀 You have view access as a collaborator
+          </span>
+          <span v-else class="permission-text">
+            👁️ You have view access only
+          </span>
+        </div>
         <button @click="$emit('close')" class="footer-btn">
           Close
         </button>
@@ -261,12 +307,21 @@ const toast = useToast()
 // Computed properties
 const currentUserId = computed(() => authStore.user?.uid)
 
-const canEdit = computed(() => {
+// NEW: Enhanced permission checks
+const isOwner = computed(() => {
   return props.taskData?.ownerId === currentUserId.value
 })
 
+const isCollaborator = computed(() => {
+  return props.taskData?.collaborators?.includes(currentUserId.value) || false
+})
+
+const canEdit = computed(() => {
+  return isOwner.value
+})
+
 const canDelete = computed(() => {
-  return props.taskData?.ownerId === currentUserId.value
+  return isOwner.value
 })
 
 const isOverdue = computed(() => {
@@ -294,6 +349,7 @@ function formatStatus(status) {
   }
   return statusMap[status] || status
 }
+
 const projectName = ref('')
 
 watch(() => props.taskData?.projectId, async (newProjectId) => {
@@ -309,6 +365,7 @@ watch(() => props.taskData?.projectId, async (newProjectId) => {
     projectName.value = ''
   }
 })
+
 function getStatusClass(status) {
   const classMap = {
     'unassigned': 'status-unassigned',
@@ -570,6 +627,31 @@ function viewSubtask(subtask) {
   background-color: #10b981;
 }
 
+/* NEW: Ownership and collaborator badges */
+.ownership-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: #fef3c7;
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.collaborator-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: #e0e7ff;
+  color: #5b21b6;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -632,6 +714,38 @@ function viewSubtask(subtask) {
   gap: 1.5rem;
 }
 
+/* NEW: Access notice styles */
+.access-notice {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.access-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.access-content {
+  flex: 1;
+}
+
+.access-title {
+  font-weight: 600;
+  color: #0369a1;
+  margin-bottom: 4px;
+}
+
+.access-text {
+  font-size: 0.875rem;
+  color: #075985;
+  line-height: 1.4;
+}
+
 .section {
   background-color: #f9fafb;
   border-radius: 0.75rem;
@@ -646,6 +760,13 @@ function viewSubtask(subtask) {
   font-weight: 600;
   color: #111827;
   margin-bottom: 1rem;
+}
+
+/* NEW: Management hint for owners */
+.management-hint {
+  color: #6b7280;
+  font-size: 0.875rem;
+  cursor: help;
 }
 
 .info-grid {
@@ -678,6 +799,10 @@ function viewSubtask(subtask) {
 .info-value {
   color: #111827;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .deadline-overdue {
@@ -728,6 +853,7 @@ function viewSubtask(subtask) {
   background-color: white;
   border-radius: 0.5rem;
   border: 1px solid #e5e7eb;
+  position: relative;
 }
 
 .collaborator-avatar {
@@ -764,6 +890,16 @@ function viewSubtask(subtask) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* NEW: You indicator for current user */
+.you-indicator {
+  font-size: 0.75rem;
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-weight: 600;
 }
 
 .notes-content {
@@ -903,6 +1039,7 @@ function viewSubtask(subtask) {
   gap: 1rem;
   font-size: 0.875rem;
   color: #6b7280;
+  flex-wrap: wrap;
 }
 
 .subtask-deadline,
@@ -910,6 +1047,28 @@ function viewSubtask(subtask) {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+/* NEW: Subtask ownership indicators */
+.subtask-ownership,
+.subtask-collaboration {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 8px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.subtask-ownership {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.subtask-collaboration {
+  background-color: #e0e7ff;
+  color: #5b21b6;
 }
 
 .empty-state {
@@ -932,6 +1091,22 @@ function viewSubtask(subtask) {
 .modal-footer {
   border-top: 1px solid #e5e7eb;
   padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* NEW: Footer info section */
+.footer-info {
+  flex: 1;
+}
+
+.permission-text {
+  font-size: 0.875rem;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .footer-btn {
@@ -965,6 +1140,16 @@ function viewSubtask(subtask) {
 
   .info-grid {
     grid-template-columns: 1fr;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .footer-info {
+    text-align: center;
   }
 }
 </style>

@@ -1,7 +1,9 @@
 <template>
   <div class="task-card" :class="[
     deadlineClass,
-    { 'dragging': isDragging }
+    { 'dragging': isDragging },
+    { 'owned-by-you': isOwnedByYou },
+    { 'collaborated-by-you': isCollaboratedByYou }
   ]" draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
     <!-- Main Task Content -->
     <div class="task-content">
@@ -11,6 +13,14 @@
           <h4 class="task-title" :title="task.title">{{ task.title }}</h4>
           <div class="task-meta">
             <span v-if="task.projectId" class="project-badge">{{ projectName }}</span>
+            <span v-else class="project-badge">{{ "No Project" }}</span>
+            <!-- NEW: Ownership indicator -->
+            <span v-if="isOwnedByYou" class="ownership-indicator" title="You are the owner">
+              👑 Owner
+            </span>
+            <span v-else-if="isCollaboratedByYou" class="collaborator-indicator" title="You are a collaborator">
+              🤝 Collaborator
+            </span>
           </div>
         </div>
 
@@ -24,7 +34,7 @@
 
       <!-- Deadline -->
       <div class="deadline-section">
-        <Calendar class="w-4 h-4" />
+        <Calendar class="w-4 h-4" /><span class="deadline-text">Deadline:</span>
         <span class="deadline-text">{{ formatDeadline(task.deadline) }}</span>
         <span v-if="isOverdue" class="overdue-badge">Overdue</span>
         <span v-else-if="isDueSoon" class="due-soon-badge">Due Soon</span>
@@ -32,7 +42,7 @@
 
       <!-- Owner -->
       <div class="owner-section">
-        <User class="w-4 h-4" />
+        <User class="w-4 h-4" /><span class="owner-text">Owned by: </span>
         <span class="owner-text">{{ formatOwner(task.ownerId) }}</span>
       </div>
 
@@ -54,7 +64,8 @@
           <Edit3 class="w-4 h-4" />
         </button>
 
-        <button @click="$emit('create-subtask', task.taskId)" class="action-btn add-btn" title="Add Subtask">
+        <button v-if="canEdit" @click="$emit('create-subtask', task.taskId)" class="action-btn add-btn"
+          title="Add Subtask">
           <Plus class="w-4 h-4" />
         </button>
 
@@ -72,8 +83,10 @@
         </div>
 
         <div class="subtasks-list">
-          <div v-for="subtask in task.subtasks" :key="subtask.subTaskId" class="subtask-item"
-            :class="getSubtaskStatusClass(subtask.status)" @click="$emit('view-subtask', subtask)">
+          <div v-for="subtask in task.subtasks" :key="subtask.subTaskId" class="subtask-item" :class="[getSubtaskStatusClass(subtask.status), {
+            'subtask-owned': subtask.ownerId === currentUserId,
+            'subtask-collaborated': subtask.collaborators?.includes(currentUserId)
+          }]" @click="$emit('view-subtask', subtask)">
             <div class="subtask-content">
               <div class="subtask-header">
                 <span class="subtask-title">{{ subtask.title }}</span>
@@ -91,6 +104,13 @@
                 <div class="subtask-owner">
                   <User class="w-3 h-3" />
                   <span>{{ formatOwner(subtask.ownerId) }}</span>
+                </div>
+                <!-- NEW: Subtask ownership indicators -->
+                <div v-if="subtask.ownerId === currentUserId" class="subtask-ownership-badge">
+                  👑 You own
+                </div>
+                <div v-else-if="subtask.collaborators?.includes(currentUserId)" class="subtask-collaboration-badge">
+                  🤝 You collaborate
                 </div>
               </div>
             </div>
@@ -117,6 +137,7 @@
 <script setup>
 import axios from 'axios'
 import { ref, computed, watch } from 'vue'
+import { useToast } from 'vue-toastification'
 import {
   Calendar,
   User,
@@ -155,11 +176,23 @@ const emit = defineEmits([
   'drag-end'
 ])
 
+// Composables
+const toast = useToast()
+
 // Reactive state
 const showSubtasks = ref(false)
 const isDragging = ref(false)
 
-// Computed properties
+// NEW: Enhanced computed properties for ownership and collaboration
+const isOwnedByYou = computed(() => {
+  return props.task.ownerId === props.currentUserId
+})
+
+const isCollaboratedByYou = computed(() => {
+  return props.task.collaborators?.includes(props.currentUserId) || false
+})
+
+// Existing computed properties
 const canEdit = computed(() => {
   return props.task.ownerId === props.currentUserId
 })
@@ -184,6 +217,7 @@ const deadlineClass = computed(() => {
   if (isDueSoon.value) return 'due-soon'
   return ''
 })
+
 const projectName = ref('')
 
 watch(() => props.task.projectId, async (newProjectId) => {
@@ -198,10 +232,9 @@ watch(() => props.task.projectId, async (newProjectId) => {
   } else {
     projectName.value = ''
   }
-}, { immediate: true }) // triggers watcher immediately on setup
+}, { immediate: true })
 
 // Methods
-
 function toggleSubtasks() {
   showSubtasks.value = !showSubtasks.value
 }
@@ -269,6 +302,13 @@ function getSubtaskStatusClass(status) {
 }
 
 function handleDragStart(event) {
+  // Check if user owns the task
+  if (!isOwnedByYou.value) {
+    event.preventDefault()
+    toast.error('You can only move tasks that you own')
+    return false
+  }
+
   isDragging.value = true
   emit('drag-start', props.task)
   event.dataTransfer.effectAllowed = 'move'
@@ -289,19 +329,68 @@ function handleDragEnd() {
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: move;
-  /* More visible cursor */
   position: relative;
-  /* Prevent the card from jumping by using margin instead of transform */
   margin-bottom: 0.75rem;
 }
 
+/* NEW: Enhanced styling for ownership states and deadline-based colors */
+.task-card {
+  background-color: white;
+}
+
+.task-card.overdue {
+  background-color: #fee2e2;
+  border-color: #dc2626;
+}
+
+.task-card.overdue:hover {
+  background-color: #fecaca;
+  border-color: #b91c1c;
+  box-shadow: 0 4px 12px 0 rgba(185, 28, 28, 0.2);
+}
+
+.task-card.due-soon {
+  background-color: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.task-card.due-soon:hover {
+  background-color: #fde68a;
+  border-color: #d97706;
+  box-shadow: 0 4px 12px 0 rgba(217, 119, 6, 0.2);
+}
+
 .task-card:hover {
+  cursor: grab;
+}
+
+.task-card:not(.overdue):not(.due-soon):hover {
+  background-color: #f8fafc;
   border-color: #3b82f6;
   box-shadow: 0 4px 12px 0 rgba(59, 130, 246, 0.15);
-  /* Use box-shadow instead of transform to prevent jumping */
-  background-color: #fafbff;
-  cursor: grab;
-  /* Even more visible grab cursor */
+}
+
+.task-card.owned-by-you:not(.overdue):not(.due-soon) {
+  border-color: #f59e0b;
+  border-width: 2px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+}
+
+.task-card.owned-by-you:not(.overdue):not(.due-soon):hover {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #d97706;
+  box-shadow: 0 4px 12px 0 rgba(217, 119, 6, 0.2);
+}
+
+.task-card.collaborated-by-you:not(.owned-by-you):not(.overdue):not(.due-soon) {
+  border-color: #8b5cf6;
+  background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
+}
+
+.task-card.collaborated-by-you:not(.owned-by-you):not(.overdue):not(.due-soon):hover {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  border-color: #7c3aed;
+  box-shadow: 0 4px 12px 0 rgba(124, 58, 237, 0.2);
 }
 
 .task-card:active {
@@ -314,16 +403,6 @@ function handleDragEnd() {
   cursor: grabbing;
   z-index: 1000;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-}
-
-.task-card.overdue {
-  border-color: #fca5a5;
-  background-color: rgba(254, 242, 242, 0.5);
-}
-
-.task-card.due-soon {
-  border-color: #fcd34d;
-  background-color: rgba(255, 251, 235, 0.5);
 }
 
 .task-content {
@@ -370,6 +449,31 @@ function handleDragEnd() {
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+/* NEW: Ownership and collaboration indicators */
+.ownership-indicator {
+  background-color: #fef3c7;
+  color: #92400e;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.collaborator-indicator {
+  background-color: #ede9fe;
+  color: #6b21a8;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .expand-button {
@@ -523,9 +627,28 @@ function handleDragEnd() {
   border: 1px solid #e2e8f0;
 }
 
+/* NEW: Enhanced subtask ownership styling */
+.subtask-item.subtask-owned {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #f59e0b;
+}
+
+.subtask-item.subtask-collaborated:not(.subtask-owned) {
+  background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%);
+  border-color: #8b5cf6;
+}
+
 .subtask-item:hover {
   background-color: #f1f5f9;
   border-color: #cbd5e1;
+}
+
+.subtask-item.subtask-owned:hover {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+}
+
+.subtask-item.subtask-collaborated:hover {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
 }
 
 .subtask-content {
@@ -574,6 +697,7 @@ function handleDragEnd() {
   gap: 1.25rem;
   font-size: 0.75rem;
   color: #6b7280;
+  flex-wrap: wrap;
 }
 
 .subtask-deadline,
@@ -581,6 +705,28 @@ function handleDragEnd() {
   display: flex;
   align-items: center;
   gap: 0.375rem;
+}
+
+/* NEW: Subtask ownership badges */
+.subtask-ownership-badge,
+.subtask-collaboration-badge {
+  font-size: 0.65rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 8px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.subtask-ownership-badge {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.subtask-collaboration-badge {
+  background-color: #ede9fe;
+  color: #6b21a8;
 }
 
 .subtask-actions {

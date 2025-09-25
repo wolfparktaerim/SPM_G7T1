@@ -52,7 +52,7 @@
         </div>
 
         <!-- User Menu and Mobile Button -->
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-4 z-50">
           <!-- Enhanced User Menu - Hidden on mobile -->
           <div class="relative hidden sm:block" v-if="authStore.isAuthenticated">
             <button @click="showUserMenu = !showUserMenu"
