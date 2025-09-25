@@ -191,6 +191,11 @@
                 <Eye v-else class="h-5 w-5" />
               </button>
             </div>
+            <!-- Password length error -->
+            <div v-if="password && password.length <= 7" class="mt-2 flex items-center text-red-600">
+              <AlertCircle class="h-4 w-4 mr-1" />
+              <span class="text-xs font-medium">Password must be at least 8 characters long</span>
+            </div>
             <!-- Password strength indicator -->
             <div v-if="password" class="mt-3">
               <div class="flex space-x-1">
