@@ -48,63 +48,64 @@
       </select>
     </div>
 
-   <!-- Project List -->
-<div v-if="projectsToShow.length">
-  <div
-    v-for="project in projectsToShow"
-    :key="project.uid"
-    class="mb-3 border rounded p-3 shadow"
-  >
-    <h3 class="text-lg font-semibold">{{ project.title }}</h3>
-    <p>Deadline: {{ project.deadline }}</p>
-    <p v-if="project.description">Description: {{ project.description }}</p>
-    <p>Owner: {{ usersMap[project.ownerUid]?.name || project.ownerUid }}</p>
-<p>
-  Collaborators: 
-  {{ project.collaborators.map(uid => usersMap[uid]?.name || uid).join(', ') }}
-</p>
-
-
-    <!-- Actions -->
-    <div class="mt-2 flex gap-2">
-      <button @click="selectProject(project)" class="bg-gray-600 text-white px-2 py-1 rounded">View</button>
-      <button
-        v-if="project.ownerUid === currentUser.value"
-        @click="editProject(project)"
-        class="bg-yellow-500 text-white px-2 py-1 rounded"
-      >Edit</button>
-      <button
-        v-if="project.ownerUid === currentUser.value"
-        @click="handleDelete(project)"
-        class="bg-red-600 text-white px-2 py-1 rounded"
-      >Delete</button>
-    </div>
-
-    <!-- Add Collaborator (for owner) -->
-    <!-- <div v-if="project.ownerUid === currentUser.value" class="mt-3 flex items-center gap-2"> --> 
-      <!-- there is a bug where it can't check if the current user is the owner in the condition -->
-    <div  class="mt-3 flex items-center gap-2">
-      <select v-model="collabInputs[project.uid]" class="border p-1 rounded flex-1">
-        <option value="">Select user</option>
-        <option
-          v-for="user in availableUsers[project.uid] || []"
-          :key="user.uid"
-          :value="user.uid"
-        >
-          {{ user.name }} ({{ user.email }})
-        </option>
-      </select>
-      <button
-        @click="handleAddCollaborator(project)"
-        class="bg-green-600 text-white px-2 py-1 rounded"
+    <!-- Project List -->
+    <div v-if="projectsToShow.length">
+      <div
+        v-for="project in projectsToShow"
+        :key="project.projectId"
+        class="mb-3 border rounded p-3 shadow"
       >
-        Add Collaborator
-      </button>
-    </div>
-  </div>
-</div>
-<p v-else>No projects found.</p>
+        <h3 class="text-lg font-semibold">{{ project.title }}</h3>
+        <p>Deadline: {{ project.deadline }}</p>
+        <p v-if="project.description">Description: {{ project.description }}</p>
+        <p>Owner: {{ usersMap[project.ownerId]?.name || project.ownerId }}</p>
+        <p>
+          Collaborators: 
+          {{ project.collaborators.map(uid => usersMap[uid]?.name || uid).join(', ') }}
+        </p>
+                <!-- <p>Debug: ownerId={{ project.ownerId }} currentUser={{ currentUser.value }}</p> -->
+        <!-- Actions -->
+        <div class="mt-2 flex gap-2">
+          <button @click="selectProject(project)" class="bg-gray-600 text-white px-2 py-1 rounded">View</button>
+          <button
+            v-if="project.ownerId === currentUser.value"
+            @click="editProject(project)"
+            class="bg-yellow-500 text-white px-2 py-1 rounded"
+          >Edit</button>
+          <button
+            v-if="project.ownerId === currentUser.value"
+            @click="handleDelete(project)"
+            class="bg-red-600 text-white px-2 py-1 rounded"
+          >Delete</button>
+        </div>
 
+        <!-- Add Collaborator (only for owner) -->
+        <!-- <div v-if="project.ownerId === currentUser.value" class="mt-3 flex items-center gap-2"> -->
+ 
+              <div v-if="isOwner(project)" class="mt-3 flex items-center gap-2">
+
+      
+
+          <select v-model="collabInputs[project.projectId]" class="border p-1 rounded flex-1">
+            <option value="">Select user</option>
+            <option
+              v-for="user in availableUsers[project.projectId] || []"
+              :key="user.uid"
+              :value="user.uid"
+            >
+              {{ user.name }} ({{ user.email }})
+            </option>
+          </select>
+          <button
+            @click="handleAddCollaborator(project)"
+            class="bg-green-600 text-white px-2 py-1 rounded"
+          >
+            Add Collaborator
+          </button>
+        </div>
+      </div>
+    </div>
+    <p v-else>No projects found.</p>
   </div>
 </template>
 
@@ -114,10 +115,13 @@ import { ref, computed, onMounted } from 'vue';
 import { auth } from '@/firebase/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 
-const API_BASE = "http://localhost:8000/project";
+const API_BASE = `${import.meta.env.VITE_BACKEND_API}/project`;
+const isOwner = (project) => {
+  return project.ownerId && currentUser.value && project.ownerId === currentUser.value;
+};
 
-const currentUser = ref(null);       // Firebase UID
-const currentRole = ref("manager");  // optional role
+const currentUser = ref(null);
+const currentRole = ref("manager");
 
 const showCreateForm = ref(false);
 const projects = ref([]);
@@ -128,28 +132,26 @@ const editingProject = ref(null);
 const searchQuery = ref('');
 const filterOption = ref('');
 const collabInputs = ref({});
-const availableUsers = ref({}); // per project
+const availableUsers = ref({});
+const usersMap = ref({});
 
 // Firebase Auth + fetch projects after login
 onMounted(() => {
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      currentUser.value = user.uid;
-      fetchProjects();          // fetch projects after currentUser is known
-      fetchAllUsers(); // optional: preload available users
+      currentUser.value = user.uid; // ✅ use uid from Firebase
+      fetchProjects();
+      fetchAllUsers();
     } else {
       alert("Please login to access projects");
     }
   });
 });
 
-const usersMap = ref({}); // uid → user object { name, email }
-
 async function fetchAllUsers() {
   try {
-    const res = await fetch(`${API_BASE}/all-users`); // you can make an endpoint to return all users
+    const res = await fetch(`${API_BASE}/all-users`);
     const data = await res.json();
-    // Convert array to map for easy lookup
     data.users.forEach(user => {
       usersMap.value[user.uid] = user;
     });
@@ -158,7 +160,6 @@ async function fetchAllUsers() {
   }
 }
 
-// Fetch projects
 async function fetchProjects() {
   if (!currentUser.value) return;
   try {
@@ -166,8 +167,6 @@ async function fetchProjects() {
     if (!res.ok) throw new Error("Failed to fetch projects");
     const data = await res.json();
     projects.value = data.projects || [];
-
-    // fetch available users for each project
     projects.value.forEach(project => fetchAvailableUsers(project));
   } catch (err) {
     error.value = true;
@@ -175,20 +174,18 @@ async function fetchProjects() {
   }
 }
 
-// Fetch available users for collaboration (exclude owner & existing collaborators)
 async function fetchAvailableUsers(project) {
   try {
-    const res = await fetch(`${API_BASE}/users/available-for-collaboration/${project.uid}`);
+    const res = await fetch(`${API_BASE}/users/available-for-collaboration/${project.projectId}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to fetch users");
-    availableUsers.value[project.uid] = data.availableUsers || [];
+    availableUsers.value[project.projectId] = data.availableUsers || [];
   } catch (err) {
     console.error(err.message);
-    availableUsers.value[project.uid] = [];
+    availableUsers.value[project.projectId] = [];
   }
 }
 
-// Create project
 async function handleCreate() {
   if (!currentUser.value) return;
   try {
@@ -219,7 +216,6 @@ async function handleCreate() {
   }
 }
 
-// Update project
 async function handleUpdate() {
   if (!currentUser.value) return;
   try {
@@ -228,7 +224,7 @@ async function handleUpdate() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         userid: currentUser.value,
-        uid: editingProject.value.uid,
+        projectId: editingProject.value.projectId,
         title: editingProject.value.title,
         deadline: editingProject.value.deadline,
         description: editingProject.value.description
@@ -240,7 +236,7 @@ async function handleUpdate() {
     message.value = data.message;
     error.value = false;
 
-    const idx = projects.value.findIndex(p => p.uid === editingProject.value.uid);
+    const idx = projects.value.findIndex(p => p.projectId === editingProject.value.projectId);
     if (idx !== -1) projects.value[idx] = data.project;
     editingProject.value = null;
   } catch (err) {
@@ -249,9 +245,8 @@ async function handleUpdate() {
   }
 }
 
-// Add collaborator
 async function handleAddCollaborator(project) {
-  const newUserId = collabInputs.value[project.uid];
+  const newUserId = collabInputs.value[project.projectId];
   if (!newUserId) return alert("Select a user");
   if (!currentUser.value) return;
 
@@ -262,7 +257,7 @@ async function handleAddCollaborator(project) {
       body: JSON.stringify({
         userid: currentUser.value,
         adduserid: [newUserId],
-        uid: project.uid
+        projectId: project.projectId
       })
     });
     const data = await res.json();
@@ -271,23 +266,21 @@ async function handleAddCollaborator(project) {
     message.value = data.message;
     error.value = false;
 
-    const idx = projects.value.findIndex(p => p.uid === project.uid);
+    const idx = projects.value.findIndex(p => p.projectId === project.projectId);
     if (idx !== -1) projects.value[idx] = data.project;
 
-    collabInputs.value[project.uid] = '';
-    fetchAvailableUsers(project); // refresh dropdown
+    collabInputs.value[project.projectId] = '';
+    fetchAvailableUsers(project);
   } catch (err) {
     error.value = true;
     message.value = err.message;
   }
 }
 
-// Delete (UI only)
 async function handleDelete(project) {
   alert("Delete is disabled: Projects cannot be deleted.");
 }
 
-// Search & Filter
 const projectsToShow = computed(() => {
   let filtered = projects.value;
 
@@ -302,7 +295,7 @@ const projectsToShow = computed(() => {
   } else if (filterOption.value === "createdAt") {
     filtered = [...filtered].sort((a, b) => new Date(a.creationDate) - new Date(b.creationDate));
   } else if (filterOption.value === "owner") {
-    filtered = filtered.filter(p => p.ownerUid === currentUser.value);
+    filtered = filtered.filter(p => p.ownerId === currentUser.value);
   }
 
   return filtered;
@@ -313,6 +306,6 @@ function editProject(project) {
 }
 
 function selectProject(project) {
-  alert(`Viewing project: ${project.title}\nOwner: ${project.ownerUid}`);
+  alert(`Viewing project: ${project.title}\nOwner: ${project.ownerId}`);
 }
 </script>

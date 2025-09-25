@@ -22,7 +22,7 @@ firebase_admin.initialize_app(cred, {
 
 # Helper to get current timestamp string
 def current_timestamp():
-    return datetime.now(timezone.utc).isoformat()
+    return int(datetime.now(timezone.utc).timestamp())
 
 @app.route("/project/create", methods=["POST"])
 def create_project():
@@ -47,9 +47,9 @@ def create_project():
 
     # Create project data
     project_data = {
-        "uid": uid,
+        "projectId": uid,
         "title": data.get("title", ""),
-        "ownerUid": userid,
+        "ownerId": userid,
         "collaborators": data.get("collaborators", [])+[userid],
         "description": data.get("description", ""),
         "deadline": data.get("deadline", ""),
@@ -76,17 +76,21 @@ def create_project():
 
 #     return jsonify({"projects": collaborator_projects}), 200
 
-@app.route("/project/indiv/<projectid>", methods=["GET"])
-def read_project(projectid):
-    # Retrieve specific project by projectid
-    project_ref = db.reference(f"project/{projectid}")
-    project_data = project_ref.get()
-    
-    # Check if project exists and if projectid matches the uid in the project
-    if project_data and project_data.get("uid") == projectid:
-        return jsonify({"project": project_data}), 200
-    else:
-        return jsonify({"error": "Project not found or access denied"}), 404
+@app.route("/project/<userid>", methods=["GET"])
+def read_projects(userid):
+    """
+    Returns all projects where the user is a collaborator.
+    """
+    project_ref = db.reference("project")
+    all_projects = project_ref.get() or {}
+
+    # Only include projects where user is a collaborator
+    user_projects = [
+        proj for proj in all_projects.values()
+        if userid in proj.get("collaborators", [])
+    ]
+    return jsonify({"projects": user_projects}), 200
+
 # Current Requirement: Project cannot be deleted even when the tasks are completed.
 # @app.route("/project/delete", methods=["POST"])
 # def delete_project():
@@ -104,7 +108,7 @@ def read_project(projectid):
 #     if not project:
 #         return jsonify(error="Project not found"), 404
 
-#     if project.get("ownerUid") != userid:
+#     if project.get("ownerId") != userid:
 #         return jsonify(error="Unauthorized: only owner can delete"), 403
 
     project_ref.delete()
@@ -151,7 +155,7 @@ def update_project():
     if not project:
         return jsonify(error="Project not found"), 404
 
-    if project.get("ownerUid") != userid:
+    if project.get("ownerId") != userid:
         return jsonify(error="Unauthorized: only owner can update"), 403
 
     # Update project data with allowed fields
@@ -178,7 +182,7 @@ def get_available_users(uid):
     all_users = users_ref.get() or {}
 
     # Exclude owner and current collaborators
-    owner_uid = project.get("ownerUid")
+    owner_uid = project.get("ownerId")
     current_collaborators = set(project.get("collaborators", []))
 
     available_users = []
@@ -211,7 +215,7 @@ def add_collaborator():
         return jsonify(error="Project not found"), 404
 
     # Only owner can add collaborators
-    if project.get("ownerUid") != userid:
+    if project.get("ownerId") != userid:
         return jsonify(error="Unauthorized: only owner can add collaborators"), 403
 
     collaborators = set(project.get("collaborators", []))
@@ -242,7 +246,7 @@ def change_owner():
         return jsonify(error="Project not found"), 404
 
     # Check current owner matches userid
-    if project.get("ownerUid") != userid:
+    if project.get("ownerId") != userid:
         return jsonify(error="Unauthorized: only current owner can change owner"), 403
 
     # Get roles of both users from /users node
@@ -272,7 +276,7 @@ def change_owner():
     collaborators.add(changeuserid)
 
     project_ref.update({
-        "ownerUid": changeuserid,
+        "ownerId": changeuserid,
         "collaborators": list(collaborators)
     })
 
