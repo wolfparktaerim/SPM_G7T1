@@ -88,6 +88,9 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
+  // Set router instance in auth store for navigation
+  authStore.setRouter(router)
+
   // Wait for auth initialization if not already done
   if (!authStore.initialized) {
     await authStore.initializeAuth()
