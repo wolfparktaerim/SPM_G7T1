@@ -22,7 +22,7 @@
             <router-link to="/dashboard"
               class="flex items-center space-x-3 text-2xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent hover:from-blue-700 hover:via-purple-700 hover:to-blue-700 transition-all duration-500 bg-size-200 hover:bg-pos-100 transform hover:scale-105">
               <CheckSquare class="w-8 h-8 text-blue-500 group-hover:text-blue-600 transition-colors duration-300" />
-              <span>G7T1</span>
+              <span>STMS</span>
             </router-link>
           </div>
 

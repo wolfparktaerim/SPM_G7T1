@@ -11,10 +11,10 @@
           <Building class="h-8 w-8 text-blue-600" />
         </div>
         <h2 class="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          G7T1 Management
+          Smart Task Management System
         </h2>
         <p class="mt-2 text-sm text-gray-600">
-          Company Management System
+          Productivity reimagined... Experience it for yourself today!
         </p>
       </div>
 
@@ -251,7 +251,7 @@
     <!-- Footer -->
     <footer class="mt-12 text-center text-gray-500 text-sm">
       <div class="max-w-md mx-auto space-y-2">
-        <p>© {{ currentYear }} G7T1 Management System. All rights reserved.</p>
+        <p>© {{ currentYear }} Smart Task Management System. All rights reserved.</p>
         <div class="flex justify-center space-x-4 text-xs">
           <a href="mailto:support@g7t1.com" class="hover:text-blue-600 transition-colors">
             Support

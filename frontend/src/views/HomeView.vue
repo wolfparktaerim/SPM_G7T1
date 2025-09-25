@@ -116,7 +116,7 @@
 
           <h1 class="text-5xl md:text-6xl font-extrabold mb-6">
             <span class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-              G7T1 Management
+              Smart Task Management System
             </span>
           </h1>
 
@@ -147,7 +147,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="text-center mb-16">
             <h2 class="text-4xl font-bold text-gray-900 mb-4">
-              Why Choose G7T1?
+              Why Choose Smart Task Management System?
             </h2>
             <p class="text-xl text-gray-600 max-w-3xl mx-auto">
               Built for modern teams who value efficiency, collaboration, and results.
@@ -206,7 +206,7 @@
                 Built for Modern Companies
               </h2>
               <p class="text-lg text-gray-600 mb-6">
-                G7T1 Management System is designed to streamline your company's workflow
+                Smart Task Management System is designed to streamline your company's workflow
                 and enhance productivity. With secure authentication, comprehensive project
                 tracking, and intuitive user interfaces, we make company management simple.
               </p>
