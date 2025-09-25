@@ -34,9 +34,7 @@ const {
 let removeActivityListeners = null
 
 onMounted(() => {
-  // Temporarily disable activity listeners for testing
-  // removeActivityListeners = setupActivityListeners()
-  console.log('Activity listeners disabled for testing')
+  removeActivityListeners = setupActivityListeners()
 })
 
 // Watch authentication state and manage session timeout
