@@ -69,7 +69,7 @@ def read_project(projectid):
     project_data = project_ref.get()
     
     # Check if project exists and if projectid matches the uid in the project
-    if project_data and project_data.get("uid") == projectid:
+    if project_data and project_data.get("projectId") == projectid:
         return jsonify({"project": project_data}), 200
     else:
         return jsonify({"error": "Project not found or access denied"}), 404

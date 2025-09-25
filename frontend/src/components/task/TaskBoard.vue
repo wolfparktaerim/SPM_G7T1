@@ -38,7 +38,7 @@
             @edit="$emit('edit-task', task)" @delete="$emit('delete-task', task)"
             @create-subtask="$emit('create-subtask', task.taskId)" @view-subtask="$emit('view-subtask', $event)"
             @edit-subtask="$emit('edit-subtask', $event)" @delete-subtask="$emit('delete-subtask', $event)"
-            @drag-start="handleDragStart" @drag-end="handleDragEnd" />
+            @drag-start="handleDragStart" @drag-end="handleDragEnd" @subtask-expanded="handleSubtaskExpanded" />
         </div>
       </div>
     </div>
@@ -79,7 +79,8 @@ const emit = defineEmits([
   'create-subtask',
   'view-subtask',
   'edit-subtask',
-  'delete-subtask'
+  'delete-subtask',
+  'subtask-expanded' // NEW: Forward subtask expansion event
 ])
 
 const authStore = useAuthStore()
@@ -136,6 +137,11 @@ const statusColumns = [
 // Computed properties
 function getTasksByStatus(status) {
   return props.tasks.filter(task => task.status === status)
+}
+
+// NEW: Handle subtask expansion state from TaskCard
+function handleSubtaskExpanded(expanded) {
+  emit('subtask-expanded', expanded)
 }
 
 // Drag and drop handlers

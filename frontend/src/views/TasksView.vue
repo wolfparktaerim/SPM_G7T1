@@ -64,8 +64,8 @@
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option value="">All Projects</option>
                   <option value="no-project">📁 No Project</option>
-                  <option v-for="project in projects" :key="project.uid" :value="project.uid">
-                    {{ project.name || project.title || project.uid }}
+                  <option v-for="project in projects" :key="project.projectId" :value="project.projectId">
+                    {{ project.title }}
                   </option>
                 </select>
                 <div v-if="loadingProjects" class="text-xs text-gray-500 mt-1">Loading projects...</div>
@@ -100,7 +100,7 @@
       <TaskBoard :tasks="filteredTasks" :loading="loading" :all-users="allUsers" @task-moved="handleTaskMoved"
         @view-task="handleViewTask" @edit-task="handleEditTask" @delete-task="handleDeleteTask"
         @create-subtask="handleCreateSubtask" @view-subtask="handleViewSubtask" @edit-subtask="handleEditSubtask"
-        @delete-subtask="handleDeleteSubtask" />
+        @delete-subtask="handleDeleteSubtask" @subtask-expanded="handleSubtaskExpanded" />
     </div>
 
     <!-- Modals -->
@@ -109,7 +109,8 @@
       @save="handleSaveTask" />
 
     <TaskDetailModal :show="showDetailModal" :task-data="selectedTask" :is-subtask="isSubtask" :all-users="allUsers"
-      @close="closeDetailModal" @edit="handleEditFromDetail" @delete="handleDeleteFromDetail" />
+      @close="closeDetailModal" @edit="handleEditFromDetail" @delete="handleDeleteFromDetail"
+      @view-subtask="handleViewSubtask" />
 
     <!-- Confirmation Modal -->
     <ConfirmationModal :show="showConfirmModal" :title="confirmModal.title" :description="confirmModal.description"
@@ -165,6 +166,8 @@ const autoRefreshCountdownInterval = ref(null)
 const autoRefreshPaused = ref(false)
 const lastRefreshTime = ref(Date.now())
 const isManualRefresh = ref(false)
+const subtasksExpanded = ref(false) // NEW: Track subtask expansion state
+
 //project loading
 const projects = ref([])
 const loadingProjects = ref(false)
@@ -186,7 +189,7 @@ const hasActiveFilters = computed(() => {
 })
 
 const anyModalOpen = computed(() => {
-  return showCreateEditModal.value || showDetailModal.value || showConfirmModal.value || showFilters.value
+  return showCreateEditModal.value || showDetailModal.value || showConfirmModal.value || showFilters.value || subtasksExpanded.value // NEW: Include subtask expansion
 })
 
 const filteredTasks = computed(() => {
@@ -202,14 +205,23 @@ const filteredTasks = computed(() => {
     )
   }
 
-  // NEW: Project filter - handle special case for no project
+  // FIXED: Project filter - handle special case and exact matches correctly
   if (filters.value.project) {
     if (filters.value.project === 'no-project') {
-      // Filter tasks without projects (empty string or null projectId)
-      filtered = filtered.filter(task => !task.projectId || task.projectId.trim() === '')
+      // Filter tasks without projects (empty string, null, or undefined projectId)
+      filtered = filtered.filter(task =>
+        !task.projectId ||
+        task.projectId.trim() === '' ||
+        task.projectId === null ||
+        task.projectId === undefined
+      )
     } else {
-      // Filter by specific project ID
-      filtered = filtered.filter(task => task.projectId === filters.value.project)
+      // Filter by specific project ID - EXACT match only, exclude no-project tasks
+      filtered = filtered.filter(task =>
+        task.projectId &&
+        task.projectId.trim() !== '' &&
+        task.projectId === filters.value.project
+      )
     }
   }
 
@@ -237,13 +249,13 @@ async function fetchTasks() {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
     const data = response.data
 
-    // Filter tasks relevant to current user (owner or collaborator)
+    // UPDATED: Filter tasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
-    tasks.value = data.tasks?.filter(task =>
-      task.ownerId === currentUserId ||
-      task.collaborators?.includes(currentUserId) ||
-      task.creatorId === currentUserId
-    ) || []
+    tasks.value = data.tasks?.filter(task => {
+      return task.ownerId === currentUserId ||
+        task.collaborators?.includes(currentUserId) ||
+        task.creatorId === currentUserId
+    }) || []
 
     console.log(`Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
 
@@ -303,13 +315,13 @@ async function fetchSubtasks() {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
     const data = response.data
 
-    // Filter subtasks relevant to current user
+    // UPDATED: Filter subtasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
-    subtasks.value = data.subtasks?.filter(subtask =>
-      subtask.ownerId === currentUserId ||
-      subtask.collaborators?.includes(currentUserId) ||
-      subtask.creatorId === currentUserId
-    ) || []
+    subtasks.value = data.subtasks?.filter(subtask => {
+      return subtask.ownerId === currentUserId ||
+        subtask.collaborators?.includes(currentUserId) ||
+        subtask.creatorId === currentUserId
+    }) || []
 
     console.log(`Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
 
@@ -377,6 +389,11 @@ async function refreshTasks() {
 async function manualRefresh() {
   isManualRefresh.value = true
   await refreshTasks()
+}
+
+// NEW: Handle subtask expansion state
+function handleSubtaskExpanded(expanded) {
+  subtasksExpanded.value = expanded
 }
 
 // Modal handlers

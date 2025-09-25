@@ -11,12 +11,15 @@
                 <div class="status-dot"></div>
                 {{ formatStatus(taskData?.status) }}
               </div>
-              <!-- NEW: Show ownership indicator -->
+              <!-- Enhanced ownership indicators -->
               <div v-if="isOwner" class="ownership-badge">
                 👑 Owner
               </div>
               <div v-else-if="isCollaborator" class="collaborator-badge">
                 🤝 Collaborator
+              </div>
+              <div v-else-if="isCreator" class="creator-badge">
+                ✨ Creator
               </div>
             </div>
           </div>
@@ -42,13 +45,13 @@
 
       <!-- Modal Content -->
       <div class="modal-content">
-        <!-- Access Notice (for non-owners viewing collaborator management info) -->
+        <!-- Access Notice (for non-owners viewing task details) -->
         <div v-if="!isOwner && taskData" class="access-notice">
           <div class="access-icon">ℹ️</div>
           <div class="access-content">
             <div class="access-title">View Only Access</div>
             <div class="access-text">
-              You are {{ isCollaborator ? 'a collaborator on' : 'viewing' }} this {{ isSubtask ? 'subtask' : 'task' }}.
+              You are {{ getAccessType() }} this {{ isSubtask ? 'subtask' : 'task' }}.
               Only the owner ({{ formatOwner(taskData.ownerId) }}) can make changes.
             </div>
           </div>
@@ -77,6 +80,7 @@
               </label>
               <div class="info-value">
                 {{ formatOwner(taskData?.ownerId) }}
+                <span v-if="taskData?.ownerId === currentUserId" class="you-tag">You</span>
               </div>
             </div>
 
@@ -87,6 +91,7 @@
               </label>
               <div class="info-value">
                 {{ formatOwner(taskData?.creatorId) }}
+                <span v-if="taskData?.creatorId === currentUserId" class="you-tag">You</span>
               </div>
             </div>
 
@@ -127,7 +132,7 @@
           <h3 class="section-title">
             <Users class="w-5 h-5" />
             Collaborators ({{ taskData.collaborators.length }})
-            <!-- NEW: Show management hint for owners -->
+            <!-- Show management hint for owners -->
             <span v-if="isOwner" class="management-hint" title="You can manage collaborators in the edit modal">
               ⚙️
             </span>
@@ -140,10 +145,20 @@
               <div class="collaborator-info">
                 <span class="collaborator-name">{{ formatOwner(collaboratorId) }}</span>
                 <span class="collaborator-role">{{ getUserRole(collaboratorId) }}</span>
+                <!-- Enhanced collaborator indicators -->
+                <span class="collaborator-dept">{{ getUserDepartment(collaboratorId) }}</span>
               </div>
-              <!-- NEW: Show if this collaborator is the current user -->
-              <div v-if="collaboratorId === currentUserId" class="you-indicator">
-                You
+              <!-- Show relationship indicators -->
+              <div class="collaborator-indicators">
+                <div v-if="collaboratorId === taskData.ownerId" class="owner-indicator" title="Task Owner">
+                  👑
+                </div>
+                <div v-if="collaboratorId === taskData.creatorId" class="creator-indicator" title="Task Creator">
+                  ✨
+                </div>
+                <div v-if="collaboratorId === currentUserId" class="you-indicator">
+                  You
+                </div>
               </div>
             </div>
           </div>
@@ -211,12 +226,15 @@
                     <User class="w-3 h-3" />
                     {{ formatOwner(subtask.ownerId) }}
                   </span>
-                  <!-- NEW: Show ownership indicator for subtasks -->
+                  <!-- Enhanced subtask ownership indicators -->
                   <span v-if="subtask.ownerId === currentUserId" class="subtask-ownership">
                     👑 You own this
                   </span>
                   <span v-else-if="subtask.collaborators?.includes(currentUserId)" class="subtask-collaboration">
                     🤝 You collaborate
+                  </span>
+                  <span v-else-if="subtask.creatorId === currentUserId" class="subtask-creation">
+                    ✨ You created this
                   </span>
                 </div>
               </div>
@@ -237,15 +255,22 @@
       <!-- Modal Footer -->
       <div class="modal-footer">
         <div class="footer-info">
-          <!-- NEW: Show permissions info -->
+          <!-- Enhanced permissions info with department context -->
           <span v-if="isOwner" class="permission-text">
             🔑 You have full access to this {{ isSubtask ? 'subtask' : 'task' }}
+            <span class="dept-context">({{ currentUserDepartment }})</span>
           </span>
           <span v-else-if="isCollaborator" class="permission-text">
             👀 You have view access as a collaborator
+            <span class="dept-context">({{ currentUserDepartment }})</span>
+          </span>
+          <span v-else-if="isCreator" class="permission-text">
+            ✨ You have view access as the creator
+            <span class="dept-context">({{ currentUserDepartment }})</span>
           </span>
           <span v-else class="permission-text">
             👁️ You have view access only
+            <span class="dept-context">({{ currentUserDepartment }})</span>
           </span>
         </div>
         <button @click="$emit('close')" class="footer-btn">
@@ -298,7 +323,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'edit', 'delete'])
+const emit = defineEmits(['close', 'edit', 'delete', 'view-subtask'])
 
 // Composables
 const authStore = useAuthStore()
@@ -306,14 +331,20 @@ const toast = useToast()
 
 // Computed properties
 const currentUserId = computed(() => authStore.user?.uid)
+const currentUserDepartment = computed(() => authStore.user?.department || 'Unknown Dept')
 
-// NEW: Enhanced permission checks
+// Enhanced permission checks
 const isOwner = computed(() => {
   return props.taskData?.ownerId === currentUserId.value
 })
 
 const isCollaborator = computed(() => {
   return props.taskData?.collaborators?.includes(currentUserId.value) || false
+})
+
+// NEW: Check if current user is the creator
+const isCreator = computed(() => {
+  return props.taskData?.creatorId === currentUserId.value
 })
 
 const canEdit = computed(() => {
@@ -338,6 +369,13 @@ const isDueSoon = computed(() => {
 // Methods
 function handleBackdropClick() {
   emit('close')
+}
+
+// NEW: Get user's access type for display
+function getAccessType() {
+  if (isCollaborator.value) return 'a collaborator on'
+  if (isCreator.value) return 'the creator of'
+  return 'viewing'
 }
 
 function formatStatus(status) {
@@ -416,6 +454,13 @@ function getUserRole(userId) {
   if (!userId) return ''
   const user = props.allUsers.find(u => u.uid === userId)
   return user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : ''
+}
+
+// NEW: Get user department for enhanced display
+function getUserDepartment(userId) {
+  if (!userId) return ''
+  const user = props.allUsers.find(u => u.uid === userId)
+  return user?.department || 'Unknown Dept'
 }
 
 function getInitials(userId) {
@@ -514,9 +559,9 @@ function downloadAttachment(attachment, index) {
 }
 
 function viewSubtask(subtask) {
-  // This could emit an event to open the subtask in detail view
-  // For now, just show a toast
-  toast.info(`Opening subtask: ${subtask.title}`)
+  // Close current modal and emit event to open subtask detail
+  emit('close')
+  emit('view-subtask', subtask)
 }
 </script>
 
@@ -627,7 +672,7 @@ function viewSubtask(subtask) {
   background-color: #10b981;
 }
 
-/* NEW: Ownership and collaborator badges */
+/* Enhanced ownership and collaboration badges */
 .ownership-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 12px;
@@ -647,6 +692,18 @@ function viewSubtask(subtask) {
   font-weight: 600;
   background-color: #e0e7ff;
   color: #5b21b6;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.creator-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: #f0fdf4;
+  color: #15803d;
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -714,7 +771,7 @@ function viewSubtask(subtask) {
   gap: 1.5rem;
 }
 
-/* NEW: Access notice styles */
+/* Access notice styles */
 .access-notice {
   display: flex;
   gap: 12px;
@@ -762,7 +819,7 @@ function viewSubtask(subtask) {
   margin-bottom: 1rem;
 }
 
-/* NEW: Management hint for owners */
+/* Management hint for owners */
 .management-hint {
   color: #6b7280;
   font-size: 0.875rem;
@@ -803,6 +860,15 @@ function viewSubtask(subtask) {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.you-tag {
+  font-size: 0.75rem;
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  padding: 0.125rem 0.375rem;
+  border-radius: 8px;
+  font-weight: 600;
 }
 
 .deadline-overdue {
@@ -892,7 +958,27 @@ function viewSubtask(subtask) {
   white-space: nowrap;
 }
 
-/* NEW: You indicator for current user */
+.collaborator-dept {
+  display: block;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Enhanced collaborator indicators */
+.collaborator-indicators {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.owner-indicator,
+.creator-indicator {
+  font-size: 1rem;
+}
+
 .you-indicator {
   font-size: 0.75rem;
   background-color: #dbeafe;
@@ -1049,9 +1135,10 @@ function viewSubtask(subtask) {
   gap: 0.25rem;
 }
 
-/* NEW: Subtask ownership indicators */
+/* Enhanced subtask ownership indicators */
 .subtask-ownership,
-.subtask-collaboration {
+.subtask-collaboration,
+.subtask-creation {
   font-size: 0.75rem;
   padding: 0.125rem 0.375rem;
   border-radius: 8px;
@@ -1069,6 +1156,11 @@ function viewSubtask(subtask) {
 .subtask-collaboration {
   background-color: #e0e7ff;
   color: #5b21b6;
+}
+
+.subtask-creation {
+  background-color: #f0fdf4;
+  color: #15803d;
 }
 
 .empty-state {
@@ -1096,7 +1188,7 @@ function viewSubtask(subtask) {
   justify-content: space-between;
 }
 
-/* NEW: Footer info section */
+/* Enhanced footer info section */
 .footer-info {
   flex: 1;
 }
@@ -1107,6 +1199,12 @@ function viewSubtask(subtask) {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+.dept-context {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-style: italic;
 }
 
 .footer-btn {

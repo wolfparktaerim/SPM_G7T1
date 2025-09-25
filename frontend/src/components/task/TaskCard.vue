@@ -14,7 +14,7 @@
           <div class="task-meta">
             <span v-if="task.projectId" class="project-badge">{{ projectName }}</span>
             <span v-else class="project-badge">{{ "No Project" }}</span>
-            <!-- NEW: Ownership indicator -->
+            <!-- Ownership indicator -->
             <span v-if="isOwnedByYou" class="ownership-indicator" title="You are the owner">
               👑 Owner
             </span>
@@ -105,7 +105,7 @@
                   <User class="w-3 h-3" />
                   <span>{{ formatOwner(subtask.ownerId) }}</span>
                 </div>
-                <!-- NEW: Subtask ownership indicators -->
+                <!-- Subtask ownership indicators -->
                 <div v-if="subtask.ownerId === currentUserId" class="subtask-ownership-badge">
                   👑 You own
                 </div>
@@ -173,7 +173,8 @@ const emit = defineEmits([
   'edit-subtask',
   'delete-subtask',
   'drag-start',
-  'drag-end'
+  'drag-end',
+  'subtask-expanded' // NEW: Emit subtask expansion state
 ])
 
 // Composables
@@ -183,7 +184,7 @@ const toast = useToast()
 const showSubtasks = ref(false)
 const isDragging = ref(false)
 
-// NEW: Enhanced computed properties for ownership and collaboration
+// Enhanced computed properties for ownership and collaboration
 const isOwnedByYou = computed(() => {
   return props.task.ownerId === props.currentUserId
 })
@@ -233,6 +234,11 @@ watch(() => props.task.projectId, async (newProjectId) => {
     projectName.value = ''
   }
 }, { immediate: true })
+
+// UPDATED: Watch for subtask expansion and emit to parent
+watch(showSubtasks, (expanded) => {
+  emit('subtask-expanded', expanded)
+})
 
 // Methods
 function toggleSubtasks() {
@@ -333,7 +339,7 @@ function handleDragEnd() {
   margin-bottom: 0.75rem;
 }
 
-/* NEW: Enhanced styling for ownership states and deadline-based colors */
+/* Enhanced styling for ownership states and deadline-based colors */
 .task-card {
   background-color: white;
 }
@@ -451,7 +457,7 @@ function handleDragEnd() {
   font-weight: 500;
 }
 
-/* NEW: Ownership and collaboration indicators */
+/* Ownership and collaboration indicators */
 .ownership-indicator {
   background-color: #fef3c7;
   color: #92400e;
@@ -627,7 +633,7 @@ function handleDragEnd() {
   border: 1px solid #e2e8f0;
 }
 
-/* NEW: Enhanced subtask ownership styling */
+/* Enhanced subtask ownership styling */
 .subtask-item.subtask-owned {
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   border-color: #f59e0b;
@@ -707,7 +713,7 @@ function handleDragEnd() {
   gap: 0.375rem;
 }
 
-/* NEW: Subtask ownership badges */
+/* Subtask ownership badges */
 .subtask-ownership-badge,
 .subtask-collaboration-badge {
   font-size: 0.65rem;

@@ -455,7 +455,7 @@
                   <div class="meta-item">
                     <span class="meta-label">👤 Owner:</span>
                     <span class="meta-value">{{ subtask.ownerId === authStore.user.uid ? 'You' : subtask.ownerId
-                    }}</span>
+                      }}</span>
                   </div>
                   <div v-if="subtask.collaborators?.length" class="meta-item">
                     <span class="meta-label">👥 Team:</span>
@@ -521,7 +521,7 @@
 </template>
 
 <script setup>
-import TaskEdit from "@/components/UpdateTask/ChangeTaskDetails.vue";
+import TaskEdit from "@/components/task/ChangeTaskDetails.vue";
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -999,32 +999,32 @@ async function saveEdit(updatedTask) {
   try {
     // Determine if it's a task or subtask update
     const isTask = editModal.value.type === 'task';
-    const apiUrl = isTask 
+    const apiUrl = isTask
       ? `${taskAPI}tasks/${editModal.value.id}`
       : `${subtaskAPI}subtasks/${editModal.value.id}`;
-    
+
     // Use the data as-is since the component already converted datetime to epoch
     const updateData = {
       ...updatedTask
       // ✅ No need to convert deadline - component already did this
     };
-    
+
     // Make the API call
     await makeRequest(apiUrl, {
       method: 'PUT',
       body: JSON.stringify(updateData)
     });
-    
+
     // Show success message
     showNotification('success', `${isTask ? 'Task' : 'SubTask'} updated successfully!`);
-    
+
     // Refresh data and close modal
     if (isTask) {
       await getAllTasks();
     } else {
       await getAllSubtasks();
     }
-    
+
     closeEditModal();
   } catch (error) {
     console.error('Error updating:', error);
