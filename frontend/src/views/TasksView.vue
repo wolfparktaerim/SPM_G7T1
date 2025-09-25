@@ -611,19 +611,19 @@ async function handleTaskMoved(taskId, newStatus, oldStatus) {
   const oldIndex = statusOrder.indexOf(oldStatus)
   const newIndex = statusOrder.indexOf(newStatus)
 
-  if (newIndex < oldIndex && newStatus !== 'unassigned') {
-    toast.error('Tasks can only move forward in the workflow, or back to Unassigned.')
-    return
-  }
+  // if (newIndex < oldIndex && newStatus !== 'unassigned') {
+  //   toast.error('Tasks can only move forward in the workflow, or back to Unassigned.')
+  //   return
+  // }
 
   // Check if all subtasks are completed before allowing forward movement
-  if (task.subtasks?.length > 0 && newStatus !== 'unassigned') {
-    const incompleteSubtasks = task.subtasks.filter(st => st.status !== 'completed')
-    if (incompleteSubtasks.length > 0) {
-      toast.error(`Cannot move task. ${incompleteSubtasks.length} subtask(s) are not completed.`)
-      return
-    }
-  }
+  // if (task.subtasks?.length > 0 && newStatus !== 'unassigned') {
+  //   const incompleteSubtasks = task.subtasks.filter(st => st.status !== 'completed')
+  //   if (incompleteSubtasks.length > 0) {
+  //     toast.error(`Cannot move task. ${incompleteSubtasks.length} subtask(s) are not completed.`)
+  //     return
+  //   }
+  // }
 
   // Show confirmation modal
   confirmModal.value = {
