@@ -304,9 +304,9 @@ async function handleAddCollaborator(project) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userid: currentUser.value,
-        adduserid: [newUserId],
-        projectId: project.projectId
+        userid: currentUser.value,        // owner UID
+        adduserid: [newUserId],           // array of UIDs
+        uid: project.projectId             // project ID
       })
     });
     const data = await res.json();
@@ -315,6 +315,7 @@ async function handleAddCollaborator(project) {
     message.value = data.message;
     error.value = false;
 
+    // update local projects list
     const idx = projects.value.findIndex(p => p.projectId === project.projectId);
     if (idx !== -1) projects.value[idx] = data.project;
 
@@ -325,6 +326,7 @@ async function handleAddCollaborator(project) {
     message.value = err.message;
   }
 }
+
 
 async function handleDelete(project) {
   alert("Delete is disabled: Projects cannot be deleted.");
