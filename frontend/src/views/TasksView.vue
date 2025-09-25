@@ -60,9 +60,16 @@
 
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Project</label>
-                <input v-model="filters.project" type="text" placeholder="Filter by project..."
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                <select v-model="filters.project" :disabled="loadingProjects"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <option value="">All Projects</option>
+                  <option v-for="project in projects" :key="project.uid" :value="project.uid">
+                    {{ project.name || project.title || project.uid }}
+                  </option>
+                </select>
+                <div v-if="loadingProjects" class="text-xs text-gray-500 mt-1">Loading projects...</div>
               </div>
+
 
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
@@ -159,6 +166,9 @@ const autoRefreshCountdownInterval = ref(null)
 const autoRefreshPaused = ref(false)
 const lastRefreshTime = ref(Date.now())
 const isManualRefresh = ref(false)
+//project loading
+const projects = ref([])
+const loadingProjects = ref(false)
 
 // Confirmation modal state
 const confirmModal = ref({
@@ -193,11 +203,10 @@ const filteredTasks = computed(() => {
     )
   }
 
-  // Project filter
+  // Project filter - exact match when dropdown is used
+  console.log(filters.value)
   if (filters.value.project) {
-    filtered = filtered.filter(task =>
-      task.projectId?.toLowerCase().includes(filters.value.project.toLowerCase())
-    )
+    filtered = filtered.filter(task => task.projectId === filters.value.project)
   }
 
   // Sort
@@ -252,6 +261,37 @@ async function fetchTasks() {
     throw error
   }
 }
+// Add detailed logging to fetchProjects
+async function fetchProjects() {
+  if (!authStore.user?.uid) {
+    console.log('❌ No user ID available for fetchProjects')
+    return
+  }
+
+  loadingProjects.value = true
+  try {
+    console.log('Fetching projects for user:', authStore.user.uid)
+    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
+    
+    // Add detailed response logging
+    console.log('📡 Full API response:', response)
+    console.log('📊 Response data:', response.data)
+    console.log('📋 Projects array:', response.data.projects)
+    
+    projects.value = response.data.projects || []
+    console.log(`✅ Loaded ${projects.value.length} projects:`, projects.value)
+  } catch (error) {
+    console.error('❌ Error fetching projects:', error)
+    if (error.response?.status === 404) {
+      projects.value = []
+    } else {
+      toast.error('Failed to load projects')
+    }
+  } finally {
+    loadingProjects.value = false
+  }
+}
+
 
 async function fetchSubtasks() {
   try {
@@ -709,6 +749,7 @@ onMounted(async () => {
   try {
     console.log('📊 Loading initial data...')
     await fetchUsers() // Load users first
+    await fetchProjects() // Load projects
     await fetchTasks() // Then tasks
     await fetchSubtasks() // Then subtasks
     associateSubtasksWithTasks() // Finally associate them
