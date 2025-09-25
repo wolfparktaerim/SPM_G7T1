@@ -61,21 +61,32 @@ def create_project():
 
     return jsonify({"message": "Project created", "project": project_data}), 201
 
+# outdated read projects
+# @app.route("/project/<userid>", methods=["GET"])
+# def read_projects(userid):
+#     # Retrieve all projects under "project" node
+#     project_ref = db.reference("project")
+#     all_projects = project_ref.get() or {}
 
-@app.route("/project/<userid>", methods=["GET"])
-def read_projects(userid):
-    # Retrieve all projects under "project" node
-    project_ref = db.reference("project")
-    all_projects = project_ref.get() or {}
+#     # Filter projects where the user is in the collaborators list
+#     collaborator_projects = [
+#         proj for proj in all_projects.values()
+#         if userid in proj.get("collaborators", [])
+#     ]
 
-    # Filter projects where the user is in the collaborators list
-    collaborator_projects = [
-        proj for proj in all_projects.values()
-        if userid in proj.get("collaborators", [])
-    ]
+#     return jsonify({"projects": collaborator_projects}), 200
 
-    return jsonify({"projects": collaborator_projects}), 200
-
+@app.route("/project/indiv/<projectid>", methods=["GET"])
+def read_project(projectid):
+    # Retrieve specific project by projectid
+    project_ref = db.reference(f"project/{projectid}")
+    project_data = project_ref.get()
+    
+    # Check if project exists and if projectid matches the uid in the project
+    if project_data and project_data.get("uid") == projectid:
+        return jsonify({"project": project_data}), 200
+    else:
+        return jsonify({"error": "Project not found or access denied"}), 404
 # Current Requirement: Project cannot be deleted even when the tasks are completed.
 # @app.route("/project/delete", methods=["POST"])
 # def delete_project():
