@@ -29,6 +29,26 @@
           <label class="block text-sm">Description (optional)</label>
           <textarea v-model="newProject.description" class="border p-1 rounded w-full"></textarea>
         </div>
+        <div class="mb-2">
+          <label class="block text-sm">Add Collaborators (optional)</label>
+          <div class="flex gap-2">
+            <select v-model="selectedCollaborator" class="border p-1 rounded flex-1">
+              <option value="">Select user</option>
+              <option v-for="user in allUsers" :key="user.uid" :value="user.uid">
+                {{ user.name }} ({{ user.email }})
+              </option>
+            </select>
+            <button type="button" @click="addCollaborator" class="bg-green-600 text-white px-2 py-1 rounded">
+              Add Collaborator
+            </button>
+          </div>
+          <div v-if="collaborators && collaborators.length">
+            <p>Collaborators added:</p>
+            <ul>
+              <li v-for="uid in collaborators" :key="uid">{{ usersMap[uid]?.name || uid }}</li>
+            </ul>
+          </div>
+        </div>
         <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded">Create Project</button>
       </form>
 
@@ -114,6 +134,7 @@ import NavigationBar from '@/components/NavigationBar.vue';
 import { ref, computed, onMounted } from 'vue';
 import { auth } from '@/firebase/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
+import { usersService } from '@/services/users.js'; 
 
 const API_BASE = `${import.meta.env.VITE_BACKEND_API}/project`;
 const isOwner = (project) => {
@@ -127,13 +148,16 @@ const showCreateForm = ref(false);
 const projects = ref([]);
 const message = ref('');
 const error = ref(false);
-const newProject = ref({ title: '', deadline: '', description: '' });
+const newProject = ref({ title: '', deadline: '', description: '', collaborators: [] });
 const editingProject = ref(null);
 const searchQuery = ref('');
 const filterOption = ref('');
 const collabInputs = ref({});
 const availableUsers = ref({});
 const usersMap = ref({});
+const collaborators = ref([])
+const allUsers = ref([]);
+const selectedCollaborator = ref('');
 
 // Firebase Auth + fetch projects after login
 onMounted(() => {
@@ -159,6 +183,22 @@ async function fetchAllUsers() {
     console.error("Failed to fetch users:", err);
   }
 }
+
+// Get All Users from Firebase
+async function getAllUsersFromFireBase() {
+  try {
+    const users = await usersService.getAllUsers();
+    console.log('Fetched users:', users);
+    return users;
+  } catch (error) {
+    console.error('Failed to fetch all users:', error);
+    return [];
+  }
+}
+
+getAllUsersFromFireBase().then(users => {
+  allUsers.value = users;
+});
 
 async function fetchProjects() {
   if (!currentUser.value) return;
@@ -197,7 +237,8 @@ async function handleCreate() {
         role: currentRole.value,
         title: newProject.value.title,
         deadline: newProject.value.deadline,
-        description: newProject.value.description
+        description: newProject.value.description,
+        collaborators: collaborators.value || []
       })
     });
     const data = await res.json();
@@ -214,6 +255,14 @@ async function handleCreate() {
     error.value = true;
     message.value = err.message;
   }
+}
+
+function addCollaborator() {
+  if (!selectedCollaborator.value) return; // no user selected
+  if (!collaborators.value.includes(selectedCollaborator.value)) {
+    collaborators.value.push(selectedCollaborator.value);
+  }
+  selectedCollaborator.value = ""; // reset selection after add
 }
 
 async function handleUpdate() {

@@ -91,7 +91,6 @@ def read_projects(userid):
     ]
     return jsonify({"projects": user_projects}), 200
 
-# Current Requirement: Project cannot be deleted even when the tasks are completed.
 # @app.route("/project/delete", methods=["POST"])
 # def delete_project():
 #     data = request.get_json()
@@ -111,8 +110,8 @@ def read_projects(userid):
 #     if project.get("ownerId") != userid:
 #         return jsonify(error="Unauthorized: only owner can delete"), 403
 
-    project_ref.delete()
-    return jsonify({"message": "Project deleted"}), 200
+#     project_ref.delete()
+#     return jsonify({"message": "Project deleted"}), 200
 
 @app.route("/project/all-users", methods=["GET"])
 def get_all_users():
