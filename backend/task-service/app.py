@@ -12,54 +12,105 @@ import json
 app = Flask(__name__)
 CORS(app)
 
+print("🚀 Starting Task Service...")
+
+# Firebase configuration - Updated for Railway with FULL DEBUG
 def initialize_firebase():
-    if not firebase_admin._apps:
-        # Try to get credentials from environment variable first (Railway)
+    print("=== FIREBASE INITIALIZATION START ===")
+    
+    # Check if Firebase is already initialized
+    if firebase_admin._apps:
+        print(f"✅ Firebase already initialized. Apps: {list(firebase_admin._apps.keys())}")
+        return True
+    
+    print("🔄 No Firebase apps found, initializing...")
+    
+    try:
+        # Check environment variables
         firebase_creds = os.getenv("FIREBASE_CREDENTIALS")
+        database_url = os.getenv("DATABASE_URL")
+        
+        print(f"📊 Environment Variables Check:")
+        print(f"   DATABASE_URL exists: {database_url is not None}")
+        if database_url:
+            print(f"   DATABASE_URL: {database_url}")
+        else:
+            print("   ❌ DATABASE_URL is missing!")
+            
+        print(f"   FIREBASE_CREDENTIALS exists: {firebase_creds is not None}")
         
         if firebase_creds:
-            try:
-                # Parse JSON from environment variable
-                cred_dict = json.loads(firebase_creds)
-                cred = credentials.Certificate(cred_dict)
-                print("Using Firebase credentials from environment variable")
-            except json.JSONDecodeError as e:
-                print(f"Error parsing Firebase credentials: {e}")
-                raise
+            print(f"   FIREBASE_CREDENTIALS length: {len(firebase_creds)}")
+            print(f"   FIREBASE_CREDENTIALS starts with: {firebase_creds[:50]}...")
+            print(f"   FIREBASE_CREDENTIALS ends with: ...{firebase_creds[-50:]}")
         else:
-            # Alternative: Build credentials from individual environment variables
-            firebase_config = {
-                "type": os.getenv("FIREBASE_TYPE", "service_account"),
-                "project_id": os.getenv("FIREBASE_PROJECT_ID"),
-                "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
-                "private_key": os.getenv("FIREBASE_PRIVATE_KEY", "").replace('\\n', '\n'),
-                "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
-                "client_id": os.getenv("FIREBASE_CLIENT_ID"),
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_X509_CERT_URL")
-            }
-            
-            # Check if all required fields are present
-            required_fields = ["project_id", "private_key", "client_email"]
-            missing_fields = [field for field in required_fields if not firebase_config.get(field)]
-            
-            if missing_fields:
-                raise ValueError(f"Missing Firebase environment variables: {missing_fields}")
-            
-            cred = credentials.Certificate(firebase_config)
-            print("Using Firebase credentials from individual environment variables")
+            print("   ❌ FIREBASE_CREDENTIALS is missing!")
+            return False
         
-        DATABASE_URL = os.getenv("DATABASE_URL")
-        if not DATABASE_URL:
-            raise ValueError("DATABASE_URL environment variable is required")
+        if not database_url:
+            print("❌ DATABASE_URL environment variable is required")
+            return False
             
-        firebase_admin.initialize_app(cred, {
-            "databaseURL": DATABASE_URL
-        })
-        print("Firebase initialized successfully")
+        # Try to parse JSON
+        print("🔄 Parsing Firebase credentials JSON...")
+        try:
+            cred_dict = json.loads(firebase_creds)
+            print(f"✅ JSON parsed successfully!")
+            print(f"   Project ID: {cred_dict.get('project_id', 'N/A')}")
+            print(f"   Client Email: {cred_dict.get('client_email', 'N/A')}")
+            print(f"   Type: {cred_dict.get('type', 'N/A')}")
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON parsing failed: {e}")
+            print(f"   Problematic JSON (first 200 chars): {firebase_creds[:200]}")
+            return False
+        except Exception as e:
+            print(f"❌ Unexpected error parsing JSON: {e}")
+            return False
+        
+        # Try to create credentials
+        print("🔄 Creating Firebase credentials object...")
+        try:
+            cred = credentials.Certificate(cred_dict)
+            print("✅ Firebase credentials object created successfully")
+        except Exception as e:
+            print(f"❌ Failed to create credentials object: {e}")
+            return False
+        
+        # Try to initialize Firebase
+        print("🔄 Initializing Firebase app...")
+        try:
+            firebase_admin.initialize_app(cred, {
+                "databaseURL": database_url
+            })
+            print("✅ Firebase app initialized successfully!")
+        except Exception as e:
+            print(f"❌ Firebase app initialization failed: {e}")
+            return False
+        
+        # Verify initialization
+        if firebase_admin._apps:
+            print(f"✅ Verification: Firebase apps now available: {list(firebase_admin._apps.keys())}")
+            print("=== FIREBASE INITIALIZATION SUCCESS ===")
+            return True
+        else:
+            print("❌ Verification failed: No Firebase apps found after initialization")
+            return False
+            
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR during Firebase initialization: {e}")
+        import traceback
+        print(f"   Full traceback: {traceback.format_exc()}")
+        return False
 
+# Initialize Firebase and track success
+print("🔄 Calling initialize_firebase()...")
+firebase_init_success = initialize_firebase()
+print(f"🎯 Firebase initialization result: {firebase_init_success}")
+
+if not firebase_init_success:
+    print("🚨 WARNING: Firebase initialization failed! Service will start but database operations will fail.")
+
+    
 # Utility functions
 def current_timestamp():
     """Return current timestamp in epoch format"""
