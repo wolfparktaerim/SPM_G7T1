@@ -15,10 +15,31 @@ firebase_admin.initialize_app(cred, {
     "databaseURL": DATABASE_URL
 })
 
+# Firebase configuration - Updated for Railway
+def initialize_firebase():
+    if not firebase_admin._apps:
+        # Try to get credentials from environment variable first (Railway)
+        firebase_creds = os.getenv("FIREBASE_CREDENTIALS")
+        if firebase_creds:
+            # Parse JSON from environment variable
+            cred_dict = json.loads(firebase_creds)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            # Fallback to file path (local development)
+            JSON_PATH = os.getenv("JSON_PATH", "./firebase.json")
+            cred = credentials.Certificate(JSON_PATH)
+        
+        DATABASE_URL = os.getenv("DATABASE_URL")
+        firebase_admin.initialize_app(cred, {
+            "databaseURL": DATABASE_URL
+        })
+
+# Initialize Firebase
+initialize_firebase()
 
 # Helper to check role for creation
-# def can_create(role):
-#     return role in ("manager", "director")
+def can_create(role):
+    return role in ("manager", "director")
 
 # Helper to get current timestamp string
 def current_timestamp():
@@ -364,6 +385,6 @@ def change_owner():
     return jsonify({"message": "Project ownership changed", "project": updated_project}), 200
 
 
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=6001, debug=True)
+    port = int(os.environ.get('PORT', 6001))
+    app.run(host='0.0.0.0', port=port, debug=False)
