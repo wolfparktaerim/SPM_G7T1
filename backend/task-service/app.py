@@ -7,18 +7,67 @@ from firebase_admin import credentials, db
 from datetime import datetime, timezone
 import os
 import time
+import json 
 
 app = Flask(__name__)
 CORS(app)
 
-# Firebase configuration
-JSON_PATH = os.getenv("JSON_PATH")
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Firebase configuration - Updated for Railway
+def initialize_firebase():
+    if not firebase_admin._apps:
+        # Try to get credentials from environment variable first (Railway)
+        firebase_creds = os.getenv("FIREBASE_CREDENTIALS")
+        if firebase_creds:
+            try:
+                # Parse JSON from environment variable
+                cred_dict = json.loads(firebase_creds)
+                cred = credentials.Certificate(cred_dict)
+                print("Using Firebase credentials from environment variable")
+            except json.JSONDecodeError as e:
+                print(f"Error parsing Firebase credentials: {e}")
+                raise
+        else:
+            # Fallback to file path (local development)
+            JSON_PATH = os.getenv("JSON_PATH", "./firebase.json")
+            if os.path.exists(JSON_PATH):
+                cred = credentials.Certificate(JSON_PATH)
+                print(f"Using Firebase credentials from file: {JSON_PATH}")
+            else:
+                raise FileNotFoundError(f"Firebase credentials not found. Set FIREBASE_CREDENTIALS environment variable or ensure {JSON_PATH} exists.")
+        
+        DATABASE_URL = os.getenv("DATABASE_URL")
+        if not DATABASE_URL:
+            raise ValueError("DATABASE_URL environment variable is required")
+            
+        firebase_admin.initialize_app(cred, {
+            "databaseURL": DATABASE_URL
+        })
+        print("Firebase initialized successfully")
 
-cred = credentials.Certificate(JSON_PATH)
-firebase_admin.initialize_app(cred, {
-    "databaseURL": DATABASE_URL
-})
+# Initialize Firebase
+initialize_firebase()
+
+# Firebase configuration - Updated for Railway
+def initialize_firebase():
+    if not firebase_admin._apps:
+        # Try to get credentials from environment variable first (Railway)
+        firebase_creds = os.getenv("FIREBASE_CREDENTIALS")
+        if firebase_creds:
+            # Parse JSON from environment variable
+            cred_dict = json.loads(firebase_creds)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            # Fallback to file path (local development)
+            JSON_PATH = os.getenv("JSON_PATH", "./firebase.json")
+            cred = credentials.Certificate(JSON_PATH)
+        
+        DATABASE_URL = os.getenv("DATABASE_URL")
+        firebase_admin.initialize_app(cred, {
+            "databaseURL": DATABASE_URL
+        })
+
+# Initialize Firebase
+initialize_firebase()
 
 # Utility functions
 def current_timestamp():
@@ -258,5 +307,7 @@ def health_check():
     """Health check endpoint"""
     return jsonify(status="healthy", service="task-service"), 200
 
+# Update the main run block at the end
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=6002, debug=True)
+    port = int(os.environ.get('PORT', 6002))
+    app.run(host='0.0.0.0', port=port, debug=False)
