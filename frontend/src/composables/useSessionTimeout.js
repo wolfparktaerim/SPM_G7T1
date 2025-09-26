@@ -10,9 +10,9 @@ export function useSessionTimeout() {
   const toast = useToast()
 
   // Session configuration (2 minutes total, warning at 1 minute remaining)
-  const SESSION_DURATION = 2 * 60 * 1000 // 2 minutes total
+  const SESSION_DURATION = 2 * 60 * 1000 * 15 // 15 minutes total
   const WARNING_TIME = 1 * 60 * 1000 // Show popup after 1 minute (1 minute before expiry)
-  const COUNTDOWN_DURATION = 60 * 1000 // 1 minute countdown
+  const COUNTDOWN_DURATION = 60 * 1000 * 1 // 1  minute countdown
 
   // State
   const showWarning = ref(false)
@@ -153,12 +153,12 @@ export function useSessionTimeout() {
   const setupActivityListeners = () => {
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
 
-    events.forEach(event => {
+    events.forEach((event) => {
       document.addEventListener(event, handleUserActivity, { passive: true })
     })
 
     return () => {
-      events.forEach(event => {
+      events.forEach((event) => {
         document.removeEventListener(event, handleUserActivity)
       })
     }
@@ -187,6 +187,6 @@ export function useSessionTimeout() {
     extendSession,
     logoutNow,
     handleSessionExpiry,
-    setupActivityListeners
+    setupActivityListeners,
   }
 }
