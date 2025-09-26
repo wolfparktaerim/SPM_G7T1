@@ -344,6 +344,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { usersService } from '@/services/users.js'
 import { DEPARTMENTS } from '@/models/user.js'
+import { useToast } from 'vue-toastification'
 import {
   Building,
   Building2,
@@ -363,6 +364,7 @@ import {
 
 const router = useRouter()
 const authStore = useAuthStore()
+const toast = useToast()
 
 // Form state
 const mode = ref('signin')
@@ -528,6 +530,7 @@ const handleSignIn = async () => {
 
   try {
     await authStore.signInWithEmail(email.value, password.value)
+    toast.success('Signed in successfully!')
     // Redirect to dashboard after short delay
     setTimeout(() => {
       router.push('/dashboard')
