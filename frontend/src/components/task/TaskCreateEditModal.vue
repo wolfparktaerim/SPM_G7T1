@@ -42,6 +42,18 @@
             :class="{ 'error': errors.deadline }" />
           <span v-if="errors.deadline" class="error-message">{{ errors.deadline }}</span>
         </div>
+        <!-- Add this after the Deadline field and before the Project field -->
+        <div v-if="isSubtask && isEditing" class="form-group">
+          <label class="form-label required">Status</label>
+          <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
+            <option value="unassigned">Unassigned</option>
+            <option value="ongoing">Ongoing</option>
+            <option value="completed">Completed</option>
+            <option value="overdue">Overdue</option>
+          </select>
+          <span v-if="errors.status" class="error-message">{{ errors.status }}</span>
+          <p class="form-hint">Update the current status of this subtask</p>
+        </div>
 
         <!-- Project Field (Tasks only) -->
         <div v-if="!isSubtask" class="form-group">
