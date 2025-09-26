@@ -84,6 +84,13 @@
                class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
             Edit
             </button>
+            <button 
+  @click="openViewModal(project)"
+  class="bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 ml-2"
+>
+  View
+</button>
+
          </div>
       </div>
       <!-- Edit Modal -->
@@ -199,6 +206,66 @@
             </div>
          </div>
       </div>
+      <!-- View Modal -->
+<div v-if="viewingProject" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+    
+    <!-- Modal Header -->
+    <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+      <h2 class="text-xl font-semibold text-gray-800">Project Details</h2>
+      <button 
+        @click="closeViewModal"
+        class="text-gray-500 hover:text-gray-700 focus:outline-none"
+      >✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="px-6 py-4 space-y-4">
+      <div>
+        <p><strong>Title:</strong> {{ viewingProject.title }}</p>
+        <p><strong>Description:</strong> {{ viewingProject.description || 'No description provided' }}</p>
+        <p><strong>Deadline:</strong> {{ viewingProject.deadline }}</p>
+        <p><strong>Owner:</strong> {{ usersMap[viewingProject.ownerId]?.name || viewingProject.ownerId }}</p>
+      </div>
+
+      <div>
+        <p class="font-semibold">Collaborators:</p>
+        <ul class="list-disc list-inside">
+          <li 
+            v-for="uid in viewingProject.collaborators" 
+            :key="uid"
+          >
+            {{ usersMap[uid]?.name || uid }}
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <p class="font-semibold">Tasks:</p>
+        <div v-if="tasks.length">
+          <ul class="list-disc list-inside">
+            <li v-for="task in tasks" :key="task.id">
+              <strong>{{ task.title }}</strong> - {{ task.status }}
+              <p class="text-sm text-gray-500">{{ task.description }}</p>
+            </li>
+          </ul>
+        </div>
+        <p v-else>No tasks found for this project.</p>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="px-6 py-4 border-t border-gray-200 text-right">
+      <button 
+        @click="closeViewModal"
+        class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
    </div>
 </template>
 <script setup>
@@ -289,7 +356,44 @@
        message.value = err.message;
      }
    }
-   
+//placeholder for fetching tasks start
+
+const viewingProject = ref(null);
+const tasks = ref([]);
+
+// Placeholder: Simulate fetching tasks from API
+async function fetchProjectTasks(projectId) {
+  try {
+    // Replace with actual API call later
+    // const res = await fetch(`${API_BASE}/${projectId}/tasks`);
+    // const data = await res.json();
+    // tasks.value = data.tasks || [];
+
+    // Dummy data for now
+    tasks.value = [
+      { id: 1, title: 'Design Wireframe', description: 'Create initial design layout', status: 'In Progress' },
+      { id: 2, title: 'Setup Database', description: 'Initialize Firestore collections', status: 'Completed' },
+      { id: 3, title: 'API Integration', description: 'Connect frontend to backend', status: 'Pending' }
+    ];
+  } catch (err) {
+    console.error("Failed to fetch tasks:", err);
+    tasks.value = [];
+  }
+}
+
+// Open modal
+function openViewModal(project) {
+  viewingProject.value = project;
+  fetchProjectTasks(project.projectId);
+}
+
+// Close modal
+function closeViewModal() {
+  viewingProject.value = null;
+  tasks.value = [];
+}
+   //placeholder for fetching tasks end
+
    function fetchAssignableUsers(currentUserId) {
    try {
     const currentUserRole = usersMap[currentUserId]?.role;
