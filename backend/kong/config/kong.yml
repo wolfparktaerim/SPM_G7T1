@@ -15,10 +15,12 @@ services:
       - name: task-route
         paths: [/task]
         strip_path: false
-
-
-
-
+  - name: subtask-service
+    url: http://subtask-service:6003
+    routes:
+      - name: subtask-route
+        paths: [/subtask]
+        strip_path: false
 
 
 plugins:

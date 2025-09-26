@@ -1,4 +1,4 @@
-# task-service/app.py
+# subtask-service/app.py
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -6,7 +6,6 @@ import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timezone
 import os
-import time
 
 app = Flask(__name__)
 CORS(app)
@@ -27,7 +26,7 @@ def current_timestamp():
 
 def validate_status(status):
     """Validate status is one of the allowed values"""
-    allowed_statuses = ["Ongoing", "Unassigned", "Under Review", "Completed"]
+    allowed_statuses = ["ongoing", "unassigned", "under_review", "completed"]
     return status.lower() in allowed_statuses
 
 def validate_epoch_timestamp(timestamp):
@@ -39,15 +38,15 @@ def validate_epoch_timestamp(timestamp):
     except (ValueError, TypeError):
         return False
 
-@app.route("/tasks", methods=["POST"])
-def create_task():
-    """Create a new task"""
+@app.route("/subtasks", methods=["POST"])
+def create_subtask():
+    """Create a new subtask"""
     data = request.get_json()
     if not data:
         return jsonify(error="Missing JSON body"), 400
 
     # Required fields validation
-    required_fields = ["title", "creatorId", "deadline"]
+    required_fields = ["title", "creatorId", "deadline", "taskId"]
     for field in required_fields:
         if not data.get(field):
             return jsonify(error=f"Missing required field: {field}"), 400
@@ -59,8 +58,18 @@ def create_task():
 
     # Validate status if provided
     status = data.get("status", "ongoing").lower()
-    # if not validate_status(status):
-    #     return jsonify(error="Status must be one of: Ongoing, Unassigned, Under Review, Completed"), 400
+    if not validate_status(status):
+        return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
+
+    # Check if parent task exists
+    task_id = data.get("taskId")
+    try:
+        parent_task_ref = db.reference(f"tasks/{task_id}")
+        parent_task = parent_task_ref.get()
+        if not parent_task:
+            return jsonify(error="Parent task not found"), 404
+    except Exception as e:
+        return jsonify(error=f"Failed to validate parent task: {str(e)}"), 500
 
     # Extract and validate data
     title = data.get("title").strip()
@@ -72,7 +81,6 @@ def create_task():
     notes = data.get("notes", "")
     attachments = data.get("attachments", [])
     collaborators = data.get("collaborators", [])
-    project_id = data.get("projectId", "")
 
     # Validate attachments are strings (base64)
     if not isinstance(attachments, list) or not all(isinstance(att, str) for att in attachments):
@@ -82,15 +90,15 @@ def create_task():
     if not isinstance(collaborators, list) or not all(isinstance(collab, str) for collab in collaborators):
         return jsonify(error="Collaborators must be an array of user IDs"), 400
 
-    # Generate task reference and get auto-generated ID
-    tasks_ref = db.reference("tasks")
-    new_task_ref = tasks_ref.push()
-    task_id = new_task_ref.key
+    # Generate subtask reference and get auto-generated ID
+    subtasks_ref = db.reference("subtasks")
+    new_subtask_ref = subtasks_ref.push()
+    subtask_id = new_subtask_ref.key
 
-    # Prepare task data
+    # Prepare subtask data
     current_time = current_timestamp()
-    task_data = {
-        "taskId": task_id,
+    subtask_data = {
+        "subTaskId": subtask_id,
         "title": title,
         "creatorId": creator_id,
         "deadline": deadline,
@@ -98,7 +106,7 @@ def create_task():
         "notes": notes,
         "attachments": attachments,
         "collaborators": collaborators,
-        "projectId": project_id,
+        "taskId": task_id,
         "ownerId": owner_id,
         "createdAt": current_time,
         "updatedAt": current_time
@@ -106,53 +114,53 @@ def create_task():
 
     # Save to Firebase
     try:
-        new_task_ref.set(task_data)
-        return jsonify(message="Task created successfully", task=task_data), 201
+        new_subtask_ref.set(subtask_data)
+        return jsonify(message="Subtask created successfully", subtask=subtask_data), 201
     except Exception as e:
-        return jsonify(error=f"Failed to create task: {str(e)}"), 500
+        return jsonify(error=f"Failed to create subtask: {str(e)}"), 500
 
-@app.route("/tasks", methods=["GET"])
-def get_all_tasks():
-    """Get all tasks"""
+@app.route("/subtasks", methods=["GET"])
+def get_all_subtasks():
+    """Get all subtasks"""
     try:
-        tasks_ref = db.reference("tasks")
-        all_tasks = tasks_ref.get() or {}
+        subtasks_ref = db.reference("subtasks")
+        all_subtasks = subtasks_ref.get() or {}
         
         # Convert to list format
-        tasks_list = list(all_tasks.values()) if all_tasks else []
+        subtasks_list = list(all_subtasks.values()) if all_subtasks else []
         
-        return jsonify(tasks=tasks_list), 200
+        return jsonify(subtasks=subtasks_list), 200
     except Exception as e:
-        return jsonify(error=f"Failed to retrieve tasks: {str(e)}"), 500
+        return jsonify(error=f"Failed to retrieve subtasks: {str(e)}"), 500
 
-@app.route("/tasks/<task_id>", methods=["GET"])
-def get_task_by_id(task_id):
-    """Get a task by ID"""
+@app.route("/subtasks/<subtask_id>", methods=["GET"])
+def get_subtask_by_id(subtask_id):
+    """Get a subtask by ID"""
     try:
-        task_ref = db.reference(f"tasks/{task_id}")
-        task = task_ref.get()
+        subtask_ref = db.reference(f"subtasks/{subtask_id}")
+        subtask = subtask_ref.get()
         
-        if not task:
-            return jsonify(error="Task not found"), 404
+        if not subtask:
+            return jsonify(error="Subtask not found"), 404
             
-        return jsonify(task=task), 200
+        return jsonify(subtask=subtask), 200
     except Exception as e:
-        return jsonify(error=f"Failed to retrieve task: {str(e)}"), 500
+        return jsonify(error=f"Failed to retrieve subtask: {str(e)}"), 500
 
-@app.route("/tasks/<task_id>", methods=["PUT"])
-def update_task_by_id(task_id):
-    """Update a task by ID"""
+@app.route("/subtasks/<subtask_id>", methods=["PUT"])
+def update_subtask_by_id(subtask_id):
+    """Update a subtask by ID"""
     data = request.get_json()
     if not data:
         return jsonify(error="Missing JSON body"), 400
 
     try:
-        # Check if task exists
-        task_ref = db.reference(f"tasks/{task_id}")
-        existing_task = task_ref.get()
+        # Check if subtask exists
+        subtask_ref = db.reference(f"subtasks/{subtask_id}")
+        existing_subtask = subtask_ref.get()
         
-        if not existing_task:
-            return jsonify(error="Task not found"), 404
+        if not existing_subtask:
+            return jsonify(error="Subtask not found"), 404
 
         # Prepare update data (only include provided fields)
         update_data = {}
@@ -174,9 +182,18 @@ def update_task_by_id(task_id):
         # Validate and update status if provided
         if "status" in data:
             status = data["status"].lower()
-            # if not validate_status(status):
-            #     return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
+            if not validate_status(status):
+                return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
             update_data["status"] = status
+
+        # Validate taskId if provided (check if parent task exists)
+        if "taskId" in data:
+            task_id = data["taskId"]
+            parent_task_ref = db.reference(f"tasks/{task_id}")
+            parent_task = parent_task_ref.get()
+            if not parent_task:
+                return jsonify(error="Parent task not found"), 404
+            update_data["taskId"] = task_id
 
         # Update other optional fields if provided
         if "notes" in data:
@@ -194,9 +211,6 @@ def update_task_by_id(task_id):
                 return jsonify(error="Collaborators must be an array of user IDs"), 400
             update_data["collaborators"] = collaborators
             
-        if "projectId" in data:
-            update_data["projectId"] = data["projectId"]
-            
         if "ownerId" in data:
             update_data["ownerId"] = data["ownerId"]
 
@@ -207,56 +221,56 @@ def update_task_by_id(task_id):
             return jsonify(error="No valid fields provided for update"), 400
 
         # Perform update
-        task_ref.update(update_data)
+        subtask_ref.update(update_data)
         
-        # Get updated task
-        updated_task = task_ref.get()
-        return jsonify(message="Task updated successfully", task=updated_task), 200
-        
-    except Exception as e:
-        return jsonify(error=f"Failed to update task: {str(e)}"), 500
-
-@app.route("/tasks/<task_id>", methods=["DELETE"])
-def delete_task_by_id(task_id):
-    """Delete a task by ID"""
-    try:
-        # Check if task exists
-        task_ref = db.reference(f"tasks/{task_id}")
-        existing_task = task_ref.get()
-        
-        if not existing_task:
-            return jsonify(error="Task not found"), 404
-
-        # Delete the task
-        task_ref.delete()
-        
-        return jsonify(message="Task deleted successfully"), 200
+        # Get updated subtask
+        updated_subtask = subtask_ref.get()
+        return jsonify(message="Subtask updated successfully", subtask=updated_subtask), 200
         
     except Exception as e:
-        return jsonify(error=f"Failed to delete task: {str(e)}"), 500
+        return jsonify(error=f"Failed to update subtask: {str(e)}"), 500
 
-@app.route("/tasks/project/<project_id>", methods=["GET"])
-def get_tasks_by_project(project_id):
-    """Get all tasks by project ID"""
+@app.route("/subtasks/<subtask_id>", methods=["DELETE"])
+def delete_subtask_by_id(subtask_id):
+    """Delete a subtask by ID"""
     try:
-        tasks_ref = db.reference("tasks")
-        all_tasks = tasks_ref.get() or {}
+        # Check if subtask exists
+        subtask_ref = db.reference(f"subtasks/{subtask_id}")
+        existing_subtask = subtask_ref.get()
         
-        # Filter tasks by project ID
-        filtered_tasks = [
-            task for task in all_tasks.values() 
-            if task.get("projectId") == project_id
+        if not existing_subtask:
+            return jsonify(error="Subtask not found"), 404
+
+        # Delete the subtask
+        subtask_ref.delete()
+        
+        return jsonify(message="Subtask deleted successfully"), 200
+        
+    except Exception as e:
+        return jsonify(error=f"Failed to delete subtask: {str(e)}"), 500
+
+@app.route("/subtasks/task/<task_id>", methods=["GET"])
+def get_subtasks_by_task(task_id):
+    """Get all subtasks by task ID"""
+    try:
+        subtasks_ref = db.reference("subtasks")
+        all_subtasks = subtasks_ref.get() or {}
+        
+        # Filter subtasks by task ID
+        filtered_subtasks = [
+            subtask for subtask in all_subtasks.values() 
+            if subtask.get("taskId") == task_id
         ]
         
-        return jsonify(tasks=filtered_tasks), 200
+        return jsonify(subtasks=filtered_subtasks), 200
         
     except Exception as e:
-        return jsonify(error=f"Failed to retrieve tasks by project: {str(e)}"), 500
+        return jsonify(error=f"Failed to retrieve subtasks by task: {str(e)}"), 500
 
 @app.route("/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
-    return jsonify(status="healthy", service="task-service"), 200
+    return jsonify(status="healthy", service="subtask-service"), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=6002, debug=True)
+    app.run(host='0.0.0.0', port=6003, debug=True)

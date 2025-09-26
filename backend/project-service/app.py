@@ -62,6 +62,17 @@ def create_project():
 
     return jsonify({"message": "Project created", "project": project_data}), 201
 
+@app.route("/project/indiv/<projectid>", methods=["GET"])
+def read_project(projectid):
+    # Retrieve specific project by projectid
+    project_ref = db.reference(f"project/{projectid}")
+    project_data = project_ref.get()
+    
+    # Check if project exists and if projectid matches the uid in the project
+    if project_data and project_data.get("projectId") == projectid:
+        return jsonify({"project": project_data}), 200
+    else:
+        return jsonify({"error": "Project not found or access denied"}), 404
 
 @app.route("/project/<userid>", methods=["GET"])
 def read_projects(userid):
