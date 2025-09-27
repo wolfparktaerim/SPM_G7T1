@@ -904,13 +904,27 @@ function createTaskForProject(project) {
 }
 
 // Utility functions
-function formatDate(dateString) {
-  if (!dateString) return 'No deadline';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
+function formatDate(date) {
+  if (!date) return 'No date';
+
+  let parsed = date;
+
+  // If it's a number or a numeric string with 10 digits → seconds
+  if (typeof parsed === 'string' && /^\d+$/.test(parsed)) {
+    parsed = Number(parsed);
+  }
+
+  if (typeof parsed === 'number' && parsed.toString().length === 10) {
+    parsed = parsed * 1000; // convert seconds → milliseconds
+  }
+
+  const d = new Date(parsed);
+  if (isNaN(d.getTime())) return 'Invalid date';
+
+  return d.toLocaleDateString('en-US', {
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
+    year: 'numeric',
   });
 }
 
