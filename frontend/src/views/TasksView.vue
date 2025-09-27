@@ -205,14 +205,23 @@ const filteredTasks = computed(() => {
     )
   }
 
-  // Project filter - improved to handle project names
+  // FIXED: Project filter - handle special case and exact matches correctly
   if (filters.value.project) {
     if (filters.value.project === 'no-project') {
-      // Filter tasks without projects (empty string or null projectId)
-      filtered = filtered.filter(task => !task.projectId || task.projectId.trim() === '')
+      // Filter tasks without projects (empty string, null, or undefined projectId)
+      filtered = filtered.filter(task =>
+        !task.projectId ||
+        task.projectId.trim() === '' ||
+        task.projectId === null ||
+        task.projectId === undefined
+      )
     } else {
-      // Filter by specific project ID
-      filtered = filtered.filter(task => task.projectId === filters.value.project)
+      // Filter by specific project ID - EXACT match only, exclude no-project tasks
+      filtered = filtered.filter(task =>
+        task.projectId &&
+        task.projectId.trim() !== '' &&
+        task.projectId === filters.value.project
+      )
     }
   }
 
@@ -269,20 +278,37 @@ async function fetchTasks() {
   }
 }
 
+// Add detailed logging to fetchProjects
+async function fetchProjects() {
+  if (!authStore.user?.uid) {
+    console.log('⚠️ No user ID available for fetchProjects')
+    return
+  }
 
-function openCreateTaskModal() {
-  selectedTask.value = null
-  isEditing.value = false
-  isSubtask.value = false
-  parentTaskId.value = null
-  showCreateEditModal.value = true
+  loadingProjects.value = true
+  try {
+    console.log('Fetching projects for user:', authStore.user.uid)
+    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
 
-  // If we have a selected project from navigation, pre-fill it
-  if (window.selectedProjectForFilter) {
-    // You'll need to modify TaskCreateEditModal to accept initial project selection
-    // Pass the project ID as a prop or emit an event to set the initial project
+    // Add detailed response logging
+    console.log('📡 Full API response:', response)
+    console.log('📊 Response data:', response.data)
+    console.log('📋 Projects array:', response.data.projects)
+
+    projects.value = response.data.projects || []
+    console.log(`✅ Loaded ${projects.value.length} projects:`, projects.value)
+  } catch (error) {
+    console.error('⚠️ Error fetching projects:', error)
+    if (error.response?.status === 404) {
+      projects.value = []
+    } else {
+      toast.error('Failed to load projects')
+    }
+  } finally {
+    loadingProjects.value = false
   }
 }
+
 async function fetchSubtasks() {
   try {
     console.log('Fetching subtasks from:', `${import.meta.env.VITE_BACKEND_API}subtasks`)
@@ -370,6 +396,14 @@ function handleSubtaskExpanded(expanded) {
   subtasksExpanded.value = expanded
 }
 
+// Modal handlers
+function openCreateTaskModal() {
+  selectedTask.value = null
+  isEditing.value = false
+  isSubtask.value = false
+  parentTaskId.value = null
+  showCreateEditModal.value = true
+}
 
 function closeCreateEditModal() {
   showCreateEditModal.value = false
@@ -710,82 +744,13 @@ function stopAutoRefresh() {
   }
 }
 
-async function fetchProjects() {
-  if (!authStore.user?.uid) {
-    console.log('⚠️ No user ID available for fetchProjects')
-    return
+// Watch for modal states to pause auto refresh
+watch(anyModalOpen, (isOpen) => {
+  autoRefreshPaused.value = isOpen
+  if (isOpen) {
+    autoRefreshCountdown.value = 30 // Reset countdown when modal opens
   }
-
-  loadingProjects.value = true
-  try {
-    console.log('Fetching projects for user:', authStore.user.uid)
-    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
-
-    console.log('📡 Full API response:', response)
-    console.log('📊 Response data:', response.data)
-    console.log('📋 Projects array:', response.data.projects)
-
-    projects.value = response.data.projects || []
-
-    // Cache projects globally for TaskCard to use
-    if (!window.cachedProjects) {
-      window.cachedProjects = {}
-    }
-
-    projects.value.forEach(project => {
-      window.cachedProjects[project.projectId] = {
-        title: project.title,
-        ownerId: project.ownerId,
-        collaborators: project.collaborators
-      }
-    })
-
-    console.log(`✅ Loaded ${projects.value.length} projects:`, projects.value)
-  } catch (error) {
-    console.error('⚠️ Error fetching projects:', error)
-    if (error.response?.status === 404) {
-      projects.value = []
-    } else {
-      toast.error('Failed to load projects')
-    }
-  } finally {
-    loadingProjects.value = false
-  }
-}
-
-function handleProjectFilterFromNavigation() {
-  // Check if we came from project page with a filter
-  if (window.selectedProjectForFilter) {
-    const projectFilter = window.selectedProjectForFilter
-
-    // Set the project filter
-    filters.value.project = projectFilter.projectId
-
-    // Open create task modal if requested
-    if (window.createTaskForProject) {
-      setTimeout(() => {
-        openCreateTaskModal()
-        window.createTaskForProject = null // Clear flag
-      }, 500)
-    }
-
-    // Open task detail modal if specific task was selected
-    if (window.selectedTaskForView) {
-      const task = window.selectedTaskForView
-      setTimeout(() => {
-        handleViewTask(task)
-        window.selectedTaskForView = null // Clear flag
-      }, 500)
-    }
-
-    // Clear the global variable
-    window.selectedProjectForFilter = null
-
-    // Show success message
-    toast.info(`Filtered tasks for project: ${projectFilter.projectTitle}`)
-  }
-}
-
+})
 
 // Watch for filters changes
 watch(filters, () => {
@@ -804,10 +769,6 @@ onMounted(async () => {
     await fetchTasks() // Then tasks
     await fetchSubtasks() // Then subtasks
     associateSubtasksWithTasks() // Finally associate them
-
-    // Check for project filter from navigation
-    handleProjectFilterFromNavigation()
-
     startAutoRefresh()
     console.log('✅ Initial data loaded successfully')
 
@@ -823,16 +784,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopAutoRefresh()
-  // Clean up global variables
-  if (window.selectedProjectForFilter) {
-    window.selectedProjectForFilter = null
-  }
-  if (window.selectedTaskForView) {
-    window.selectedTaskForView = null
-  }
-  if (window.createTaskForProject) {
-    window.createTaskForProject = null
-  }
 })
 </script>
 

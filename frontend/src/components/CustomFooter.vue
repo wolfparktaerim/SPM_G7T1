@@ -8,10 +8,10 @@
           <div class="flex items-center space-x-3 mb-4">
             <div
               class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span class="text-white font-bold text-sm">T1</span>
+              <span class="text-white font-bold text-sm">G7</span>
             </div>
             <h3 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Smart Task Management System
+              G7T1 Management System
             </h3>
           </div>
           <p class="text-gray-300 mb-4 max-w-md">
@@ -101,7 +101,7 @@
       <div class="mt-8 pt-8 border-t border-gray-800">
         <div class="flex flex-col md:flex-row justify-between items-center">
           <div class="text-gray-400 text-sm">
-            © {{ currentYear }} Smart Task Management System. All rights reserved.
+            © {{ currentYear }} G7T1 Management System. All rights reserved.
           </div>
           <div class="flex space-x-6 mt-4 md:mt-0">
             <a href="#" class="text-gray-400 hover:text-white text-sm transition-colors duration-200">

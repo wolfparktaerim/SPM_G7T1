@@ -22,7 +22,7 @@
             <router-link to="/dashboard"
               class="flex items-center space-x-3 text-2xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent hover:from-blue-700 hover:via-purple-700 hover:to-blue-700 transition-all duration-500 bg-size-200 hover:bg-pos-100 transform hover:scale-105">
               <CheckSquare class="w-8 h-8 text-blue-500 group-hover:text-blue-600 transition-colors duration-300" />
-              <span>STMS</span>
+              <span>G7T1</span>
             </router-link>
           </div>
 
@@ -276,7 +276,6 @@ import {
 } from 'lucide-vue-next'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useToast } from 'vue-toastification'
 
 // Auth store
 const authStore = useAuthStore()
@@ -284,9 +283,6 @@ const authStore = useAuthStore()
 // Router composables
 const route = useRoute()
 const router = useRouter()
-
-// Toast composable
-const toast = useToast()
 
 // State
 const showUserMenu = ref(false)
@@ -379,20 +375,20 @@ const showLogoutModal = () => {
 const handleLogout = async () => {
   isLoggingOut.value = true
   try {
-    // Sign out from auth store
-    await authStore.signOutUser()
-
-    // Show success toast message
-    toast.success('Signed out successfully!')
+    // Ensure minimum 1 second loading time for better UX
+    await Promise.all([
+      authStore.signOutUser(),
+      new Promise(resolve => setTimeout(resolve, 1000))
+    ])
 
     // Close the modal
     showLogoutConfirmation.value = false
 
-    // Redirect to login page immediately
+    // Redirect to auth page
     router.push('/')
   } catch (error) {
     console.error('Logout failed:', error)
-    toast.error('Failed to sign out. Please try again.')
+    // The error will be stored in authStore.error and can be displayed in UI if needed
   } finally {
     isLoggingOut.value = false
   }

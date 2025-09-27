@@ -11,10 +11,10 @@
           <Building class="h-8 w-8 text-blue-600" />
         </div>
         <h2 class="text-3xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          Smart Task Management System
+          G7T1 Management
         </h2>
         <p class="mt-2 text-sm text-gray-600">
-          Productivity reimagined... Experience it for yourself today!
+          Company Management System
         </p>
       </div>
 
@@ -191,11 +191,6 @@
                 <Eye v-else class="h-5 w-5" />
               </button>
             </div>
-            <!-- Password length error -->
-            <div v-if="password && password.length <= 7" class="mt-2 flex items-center text-red-600">
-              <AlertCircle class="h-4 w-4 mr-1" />
-              <span class="text-xs font-medium">Password must be at least 8 characters long</span>
-            </div>
             <!-- Password strength indicator -->
             <div v-if="password" class="mt-3">
               <div class="flex space-x-1">
@@ -251,7 +246,7 @@
     <!-- Footer -->
     <footer class="mt-12 text-center text-gray-500 text-sm">
       <div class="max-w-md mx-auto space-y-2">
-        <p>© {{ currentYear }} Smart Task Management System. All rights reserved.</p>
+        <p>© {{ currentYear }} G7T1 Management System. All rights reserved.</p>
         <div class="flex justify-center space-x-4 text-xs">
           <a href="mailto:support@g7t1.com" class="hover:text-blue-600 transition-colors">
             Support
@@ -344,7 +339,6 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { usersService } from '@/services/users.js'
 import { DEPARTMENTS } from '@/models/user.js'
-import { useToast } from 'vue-toastification'
 import {
   Building,
   Building2,
@@ -364,7 +358,6 @@ import {
 
 const router = useRouter()
 const authStore = useAuthStore()
-const toast = useToast()
 
 // Form state
 const mode = ref('signin')
@@ -530,7 +523,6 @@ const handleSignIn = async () => {
 
   try {
     await authStore.signInWithEmail(email.value, password.value)
-    toast.success('Signed in successfully!')
     // Redirect to dashboard after short delay
     setTimeout(() => {
       router.push('/dashboard')
@@ -569,9 +561,13 @@ const handleSignUp = async () => {
       // Save user profile to database
       await usersService.createUser(userData)
 
-      // Redirect to dashboard with success indication
-      console.log('Redirecting to dashboard with newUser=true')
-      router.push({ path: '/dashboard', query: { newUser: 'true' } })
+      // Show success message
+      authStore.success = 'Account created successfully! Welcome to G7T1 Management System.'
+
+      // Redirect to dashboard after short delay
+      setTimeout(() => {
+        router.push('/dashboard')
+      }, 1500)
     }
   } catch (error) {
     console.error('Registration error:', error)

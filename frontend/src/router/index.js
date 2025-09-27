@@ -95,9 +95,6 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // Set router instance in auth store for navigation
-  authStore.setRouter(router)
-
   // Wait for auth initialization if not already done
   if (!authStore.initialized) {
     await authStore.initializeAuth()
@@ -111,8 +108,7 @@ router.beforeEach(async (to, from, next) => {
 
   // Redirect user to dashboard if they try to go /auth or home page
   if ((to.name == 'authentication' || to.name == 'home') && authStore.isAuthenticated) {
-    // Preserve query parameters when redirecting to dashboard
-    next({ path: '/dashboard', query: to.query })
+    next('/dashboard')
     return
   }
   next()
