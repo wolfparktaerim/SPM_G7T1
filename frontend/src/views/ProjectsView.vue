@@ -44,9 +44,14 @@
 
                 <div class="space-y-2">
                   <label class="block text-sm font-semibold text-gray-700">Deadline *</label>
-                  <input type="date" v-model="newProject.deadline"
-                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                    required />
+                  <input
+  type="date"
+  v-model="newProject.deadline"
+  :min="today"
+  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+  required
+/>
+
                 </div>
               </div>
 
@@ -599,6 +604,7 @@ const allUsers = ref([]);
 const selectedCollaborator = ref('');
 const assignableUsers = ref([]);
 const newlyAddedCollaborators = ref([]);
+const today = new Date().toISOString().split('T')[0] // gives "YYYY-MM-DD"
 
 // Helper functions
 const isOwner = (project) => {
