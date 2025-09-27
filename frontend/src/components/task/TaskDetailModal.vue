@@ -393,8 +393,13 @@ const projectName = ref('')
 watch(() => props.taskData?.projectId, async (newProjectId) => {
   if (newProjectId) {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/indiv/${newProjectId}`)
-      projectName.value = response.data.project?.title || 'Unknown Project'
+      const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUserId.value}`)
+      console.log(response.data)
+      for (const project of response.data.projects) {
+        if (project.projectId === newProjectId) {
+          projectName.value = project.title || 'Unknown Project'
+        }
+      }
     } catch (error) {
       console.error('Error fetching project name:', error)
       projectName.value = 'Unknown Project'
@@ -403,7 +408,6 @@ watch(() => props.taskData?.projectId, async (newProjectId) => {
     projectName.value = ''
   }
 })
-
 function getStatusClass(status) {
   const classMap = {
     'unassigned': 'status-unassigned',

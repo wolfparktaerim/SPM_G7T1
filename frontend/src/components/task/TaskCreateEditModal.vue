@@ -47,7 +47,7 @@
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
             <option value="unassigned">Unassigned</option>
             <option value="ongoing">Ongoing</option>
-            <option value="overdue">Under Review</option>
+            <option value="under_review ">Under Review</option>
             <option value="completed">Completed</option>
             
           </select>
