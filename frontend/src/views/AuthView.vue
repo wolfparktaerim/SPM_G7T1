@@ -409,6 +409,9 @@ const passwordStrength = computed(() => {
   const pwd = password.value
   if (!pwd) return 0
 
+  // If password is less than 8 characters, it's always weak (strength 1)
+  if (pwd.length < 8) return 1
+
   let strength = 0
   if (pwd.length >= 8) strength++
   if (/[A-Z]/.test(pwd)) strength++
@@ -427,12 +430,12 @@ const isSignInFormValid = computed(() => {
 const isSignUpFormValid = computed(() => {
   return email.value &&
     password.value &&
+    password.value.length >= 8 &&
     confirmPassword.value &&
     name.value &&
     department.value &&
     role.value &&
     password.value === confirmPassword.value &&
-    passwordStrength.value >= 2 &&
     !authStore.loading
 })
 

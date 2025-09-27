@@ -9,10 +9,10 @@ export function useSessionTimeout() {
   const router = useRouter()
   const toast = useToast()
 
-  // Session configuration (2 minutes total, warning at 1 minute remaining)
-  const SESSION_DURATION = 2 * 60 * 1000 * 15 // 15 minutes total
-  const WARNING_TIME = 1 * 60 * 1000 // Show popup after 1 minute (1 minute before expiry)
-  const COUNTDOWN_DURATION = 60 * 1000 * 1 // 1  minute countdown
+  // Session configuration (15 minutes total, warning at 1 minute remaining)
+  const SESSION_DURATION = 15 * 60 * 1000 // 15 minutes total
+  const WARNING_TIME = 14 * 60 * 1000 // Show popup after 14 minutes (1 minute before expiry)
+  const COUNTDOWN_DURATION = 60 * 1000 // 1 minute countdown
 
   // State
   const showWarning = ref(false)
@@ -28,15 +28,13 @@ export function useSessionTimeout() {
   const startSessionTimeout = () => {
     if (!authStore.isAuthenticated) return
 
-    console.log('Starting session timeout...', { WARNING_TIME, COUNTDOWN_DURATION })
     sessionStartTime.value = Date.now()
 
     // Clear any existing timers
     clearAllTimers()
 
-    // Set timer to show warning after 1 minute (1 minute before session expires)
+    // Set timer to show warning after 14 minutes (1 minute before session expires)
     warningTimer = setTimeout(() => {
-      console.log('Warning timer triggered, showing session warning...')
       showSessionWarning()
     }, WARNING_TIME)
   }
@@ -45,18 +43,15 @@ export function useSessionTimeout() {
   const showSessionWarning = () => {
     if (!authStore.isAuthenticated) return
 
-    console.log('Showing session warning popup...')
     showWarning.value = true
     timeLeft.value = COUNTDOWN_DURATION
 
     // Start countdown timer
     countdownTimer = setInterval(() => {
       timeLeft.value -= 1000
-      console.log('Countdown:', Math.ceil(timeLeft.value / 1000), 'seconds left')
 
       if (timeLeft.value <= 0) {
         // Time's up - auto logout
-        console.log('Session expired, logging out...')
         handleSessionExpiry()
       }
     }, 1000)
@@ -144,7 +139,6 @@ export function useSessionTimeout() {
   const handleUserActivity = () => {
     if (authStore.isAuthenticated && sessionStartTime.value && !showWarning.value) {
       // Only reset if not currently showing warning
-      console.log('User activity detected, resetting session timeout')
       resetSessionTimeout()
     }
   }
