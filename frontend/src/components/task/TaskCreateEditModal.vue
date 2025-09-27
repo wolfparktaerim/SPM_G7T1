@@ -47,8 +47,9 @@
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
             <option value="unassigned">Unassigned</option>
             <option value="ongoing">Ongoing</option>
+            <option value="overdue">Under Review</option>
             <option value="completed">Completed</option>
-            <option value="overdue">Overdue</option>
+            
           </select>
           <span v-if="errors.status" class="error-message">{{ errors.status }}</span>
           <p class="form-hint">Update the current status of this subtask</p>
@@ -510,13 +511,28 @@ function removeCollaborator(collaboratorId) {
 function epochToDateTime(epoch) {
   if (!epoch) return ''
   const date = new Date(epoch * 1000)
-  return date.toISOString().slice(0, 16)
+  
+  // Get the local timezone offset in minutes
+  const timezoneOffset = date.getTimezoneOffset()
+  
+  // Adjust for local timezone
+  const localDate = new Date(date.getTime() - (timezoneOffset * 60 * 1000))
+  
+  // Return in the format expected by datetime-local
+  return localDate.toISOString().slice(0, 16)
 }
 
 function dateTimeToEpoch(dateTimeLocal) {
   if (!dateTimeLocal) return 0
-  return Math.floor(new Date(dateTimeLocal).getTime() / 1000)
+  
+  // Create date object from the datetime-local string
+  // Replace dashes and T to ensure it's interpreted as local time
+  const localDateString = dateTimeLocal.replace(/-/g, '/').replace('T', ' ')
+  const date = new Date(localDateString)
+  
+  return Math.floor(date.getTime() / 1000)
 }
+
 
 async function handleFileUpload(event) {
   const files = Array.from(event.target.files)
