@@ -12,8 +12,7 @@
         <div class="task-title-section">
           <h4 class="task-title" :title="task.title">{{ task.title }}</h4>
           <div class="task-meta">
-            <span v-if="task.projectId" class="project-badge">{{ projectName }}</span>
-            <span v-else class="project-badge">{{ "No Project" }}</span>
+            <span class="project-badge">{{ projectDisplayName }}</span>
             <!-- Ownership indicator -->
             <span v-if="isOwnedByYou" class="ownership-indicator" title="You are the owner">
               👑 Owner
@@ -257,11 +256,32 @@ const deadlineClass = computed(() => {
 const projectName = ref('')
 
 
+const projectDisplayName = computed(() => {
+  if (!props.task.projectId) {
+    return 'No Project'
+  }
+  return projectName.value || 'Loading...'
+})
+
 watch(() => props.task.projectId, async (newProjectId) => {
   if (newProjectId) {
     try {
+      // First try to get project name from cached projects data
+      if (window.cachedProjects && window.cachedProjects[newProjectId]) {
+        projectName.value = window.cachedProjects[newProjectId].title
+        return
+      }
+
+      // Fallback to API call
       const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/indiv/${newProjectId}`)
       projectName.value = response.data.project?.title || 'Unknown Project'
+
+      // Cache the result
+      if (!window.cachedProjects) {
+        window.cachedProjects = {}
+      }
+      window.cachedProjects[newProjectId] = { title: projectName.value }
+
     } catch (error) {
       console.error('Error fetching project name:', error)
       projectName.value = 'Unknown Project'

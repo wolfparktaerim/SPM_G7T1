@@ -14,96 +14,6 @@
             Sign In / Register
           </router-link>
         </div>
-        <div class="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-6 mb-12 shadow-lg">
-          <div class="flex items-start space-x-4">
-            <div class="flex-shrink-0">
-              <div class="w-10 h-10 bg-yellow-400 rounded-xl flex items-center justify-center">
-                <Code class="w-5 h-5 text-yellow-800" />
-              </div>
-            </div>
-            <div class="flex-1 min-w-0">
-              <h2 class="text-xl font-bold text-yellow-800 mb-4">
-                🚀 Developer Notes - Frontend Updates (by TaiLin 🐺)
-              </h2>
-              <div class="text-yellow-700 text-sm space-y-4 leading-relaxed">
-                <p class="font-medium">
-                  So just a few updates on the frontend (well i think i finished my 6 hrs coding this week alr... but
-                  idm do up to 10hrs ofc) and it's pushed to github <span class="font-bold text-lg">develop</span>
-                  branch:
-                </p>
-
-                <ol class="list-decimal list-inside space-y-2 ml-4">
-                  <li>I made many empty view pages (for whoever responsible to fill in themselves) and integrated with
-                    the navigation bar (you need to log in the system first, the home page which is for guest is not
-                    integrated with navigation bar)</li>
-
-                  <li>A standard simple homepage allow you to login and register</li>
-
-                  <li>Auth routing: if you are logged in, the system will save your credentials and you are free to
-                    navigate to any page given ('Tasks', 'Projects' ... ) else you will be stopped and the system will
-                    bring you to the authenticate page (for you to login / register)</li>
-
-                  <li>There is a not-found page redirection happens when you key in some random url like /asdjaghfyag ,
-                    and there is a button for you to go back</li>
-
-                  <li>There is an unauthorized page currently not really useful but just included for future (in case
-                    they want stricter hierarchy). You can access it by key in /unauthorized</li>
-
-                  <li>
-                    <span class="text-red-700 font-bold text-md">Login & Registration functions</span> are used in the
-                    same
-                    page called <span class="font-bold">AuthView.vue</span>, the firebase functions are
-                    implemented correctly but there is one user story acceptance criteria missing which is
-                    <strong>"Users can only choose the roles and departments available in the system."</strong> becuz
-                    there are too many titles in the org chart and im lazy, i assume the responsible person for this
-                    feature is <span class="bg-yellow-200 px-2 py-1 rounded font-mono text-md font-bold">@Tengku
-                      Shamel</span> so i
-                    will leave it
-                    to you, the relevant files you may need to change are:
-                    <ul class="list-disc list-inside mt-2 ml-4 space-y-1">
-                      <li><code class="bg-yellow-200 px-1 py-0.5 rounded text-xs">frontend/src/models/users.js</code>
-                        (it defines a user's attributes)</li>
-                      <li><code class="bg-yellow-200 px-1 py-0.5 rounded text-xs">frontend/src/services/users.js</code>
-                        (it defines CRUD functions related to user entity)</li>
-                      <li><code class="bg-yellow-200 px-1 py-0.5 rounded text-xs">frontend/src/stores/auth.js</code>
-                        (for authentication) (optional becuz it should be very well implemented alr, but this is where
-                        you should visit if there are authentication issues)</li>
-                      <li><code class="bg-yellow-200 px-1 py-0.5 rounded text-xs">frontend/src/views/AuthView.vue</code>
-                        (the main auth view page, you can update UI UX and password strength threshold..)</li>
-                    </ul>
-                    <p class="mt-2">improve redirection (smoother) improve pop up message (use toast-notification)</p>
-                    <p class="mt-1">in future you will have to change it anyway, you need to include another attribute
-                      called "notifications" in the user attribute integrated with notification system (not doing
-                      anytime soon)
-                    </p>
-                  </li>
-
-                  <li>
-                    I have created 3 accts yall can try:
-                    <ul class="list-disc list-inside mt-1 ml-4">
-                      <li><code class="bg-blue-100 px-2 py-1 rounded text-xs">testmgr@g7t1.com</code></li>
-                      <li><code class="bg-blue-100 px-2 py-1 rounded text-xs">teststaff@g7t1.com</code></li>
-                      <li><code class="bg-blue-100 px-2 py-1 rounded text-xs">testdir@g7t1.com</code></li>
-                    </ul>
-                    <p class="mt-1">password is all the same: <code
-                        class="bg-red-100 px-2 py-1 rounded text-xs font-bold">@Aa123456</code></p>
-                  </li>
-
-                  <li><strong class="text-red-600">RMB TO PUT MY .ENV FILE THAT I PINNED INSIDE FRONTEND FOLDER
-                      OTHERWISE FIREBASE WONT WORK AND ALSO RESTART YOUR SERVER AFTER THAT</strong></li>
-
-                  <li>Let me know if there's any bug you found - you can create a hotfix branch to fix it yourself if
-                    needs be. The test cases not well tested yet, and bugs are unavoidable (fixing them is the most
-                    painful
-                    part...)</li>
-
-                  <li>I think I have done quite enough foundation for you guys to work and explore in so... <strong
-                      class="text-green-600">HAVE FUNNNNN CODINNNG</strong></li>
-                </ol>
-              </div>
-            </div>
-          </div>
-        </div>
       </section>
 
       <!-- Hero Section -->
@@ -116,7 +26,7 @@
 
           <h1 class="text-5xl md:text-6xl font-extrabold mb-6">
             <span class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-              G7T1 Management
+              Smart Task Management System
             </span>
           </h1>
 
@@ -147,7 +57,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div class="text-center mb-16">
             <h2 class="text-4xl font-bold text-gray-900 mb-4">
-              Why Choose G7T1?
+              Why Choose Smart Task Management System?
             </h2>
             <p class="text-xl text-gray-600 max-w-3xl mx-auto">
               Built for modern teams who value efficiency, collaboration, and results.
@@ -206,7 +116,7 @@
                 Built for Modern Companies
               </h2>
               <p class="text-lg text-gray-600 mb-6">
-                G7T1 Management System is designed to streamline your company's workflow
+                Smart Task Management System is designed to streamline your company's workflow
                 and enhance productivity. With secure authentication, comprehensive project
                 tracking, and intuitive user interfaces, we make company management simple.
               </p>

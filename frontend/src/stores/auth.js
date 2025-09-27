@@ -10,6 +10,8 @@ import {
   signOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  setPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth'
 import { ref as dbRef, get } from 'firebase/database'
 import { auth, database } from '@/firebase/firebaseConfig'
@@ -20,8 +22,15 @@ export const useAuthStore = defineStore('auth', () => {
   const error = ref(null)
   const success = ref(null)
   const initialized = ref(false)
+  const sessionStartTime = ref(null)
+  let router = null
 
   const isAuthenticated = computed(() => !!user.value)
+
+  // Set router instance for navigation
+  const setRouter = (routerInstance) => {
+    router = routerInstance
+  }
 
   // Initialize auth state listener
   const initializeAuth = () => {
@@ -71,6 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
               }
             }
             console.log('User data loaded:', user.value)
+            sessionStartTime.value = Date.now()
           } catch (error) {
             console.error('Error fetching user data from Realtime Database:', error)
             // Fallback to basic Firebase Auth data
@@ -92,7 +102,16 @@ export const useAuthStore = defineStore('auth', () => {
             }
           }
         } else {
+          // User is not authenticated
+          const wasAuthenticated = user.value !== null
           user.value = null
+          sessionStartTime.value = null
+
+          // If the store was already initialized and user was previously authenticated,
+          // redirect to home page (this handles session expiry after tab close/reopen)
+          if (initialized.value && wasAuthenticated && router) {
+            router.push('/')
+          }
         }
 
         loading.value = false
@@ -112,6 +131,9 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null
       success.value = null
       loading.value = true
+
+      // Set persistence to SESSION - user will be logged out when tab closes
+      await setPersistence(auth, browserSessionPersistence)
       await signInWithEmailAndPassword(auth, email, password)
     } catch (err) {
       error.value = getFirebaseErrorMessage(err.code) || 'Sign in failed'
@@ -128,6 +150,8 @@ export const useAuthStore = defineStore('auth', () => {
       success.value = null
       loading.value = true
 
+      // Set persistence to SESSION - user will be logged out when tab closes
+      await setPersistence(auth, browserSessionPersistence)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       return userCredential // Return the credential so we can access the user immediately
     } catch (err) {
@@ -144,6 +168,9 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null
       success.value = null
       loading.value = true
+
+      // Set persistence to SESSION - user will be logged out when tab closes
+      await setPersistence(auth, browserSessionPersistence)
       const provider = new GoogleAuthProvider()
       await signInWithPopup(auth, provider)
     } catch (err) {
@@ -181,6 +208,7 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = null
       success.value = null
       await signOut(auth)
+      sessionStartTime.value = null
     } catch (err) {
       error.value = getFirebaseErrorMessage(err.code) || 'Sign out failed'
       throw err
@@ -247,7 +275,9 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     success,
     initialized,
+    sessionStartTime,
     isAuthenticated,
+    setRouter,
     initializeAuth,
     signInWithEmail,
     signUpWithEmail,
