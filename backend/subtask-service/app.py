@@ -6,113 +6,18 @@ import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timezone
 import os
-import json 
 
 app = Flask(__name__)
 CORS(app)
 
-print("🚀 Starting Subtask Service...")
+# Firebase configuration
+JSON_PATH = os.getenv("JSON_PATH")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Firebase configuration - Updated for Railway with DEBUG
-def initialize_firebase():
-    print("=== SUBTASK SERVICE: FIREBASE INITIALIZATION START ===")
-    
-    # Check if Firebase is already initialized
-    if firebase_admin._apps:
-        print(f"✅ Firebase already initialized. Apps: {list(firebase_admin._apps.keys())}")
-        return True
-    
-    print("🔄 No Firebase apps found, initializing...")
-    
-    try:
-        # Check environment variables
-        firebase_creds = os.getenv("FIREBASE_CREDENTIALS")
-        database_url = os.getenv("DATABASE_URL")
-        
-        print(f"📊 Environment Variables Check:")
-        print(f"   DATABASE_URL exists: {database_url is not None}")
-        if database_url:
-            print(f"   DATABASE_URL: {database_url}")
-        else:
-            print("   ❌ DATABASE_URL is missing!")
-            
-        print(f"   FIREBASE_CREDENTIALS exists: {firebase_creds is not None}")
-        
-        if firebase_creds:
-            print(f"   FIREBASE_CREDENTIALS length: {len(firebase_creds)}")
-            print(f"   FIREBASE_CREDENTIALS starts with: {firebase_creds[:50]}...")
-        else:
-            print("   ❌ FIREBASE_CREDENTIALS is missing!")
-            return False
-        
-        if not database_url:
-            print("❌ DATABASE_URL environment variable is required")
-            return False
-            
-        # Try to parse JSON
-        print("🔄 Parsing Firebase credentials JSON...")
-        try:
-            cred_dict = json.loads(firebase_creds)
-            print(f"✅ JSON parsed successfully!")
-            print(f"   Project ID: {cred_dict.get('project_id', 'N/A')}")
-        except json.JSONDecodeError as e:
-            print(f"❌ JSON parsing failed: {e}")
-            print(f"   Problematic JSON (first 200 chars): {firebase_creds[:200]}")
-            return False
-        except Exception as e:
-            print(f"❌ Unexpected error parsing JSON: {e}")
-            return False
-        
-        # Try to create credentials
-        print("🔄 Creating Firebase credentials object...")
-        try:
-            cred = credentials.Certificate(cred_dict)
-            print("✅ Firebase credentials object created successfully")
-        except Exception as e:
-            print(f"❌ Failed to create credentials object: {e}")
-            return False
-        
-        # Try to initialize Firebase
-        print("🔄 Initializing Firebase app...")
-        try:
-            firebase_admin.initialize_app(cred, {
-                "databaseURL": database_url
-            })
-            print("✅ Firebase app initialized successfully!")
-        except Exception as e:
-            print(f"❌ Firebase app initialization failed: {e}")
-            return False
-        
-        # Verify initialization
-        if firebase_admin._apps:
-            print(f"✅ Verification: Firebase apps now available: {list(firebase_admin._apps.keys())}")
-            print("=== SUBTASK SERVICE: FIREBASE INITIALIZATION SUCCESS ===")
-            return True
-        else:
-            print("❌ Verification failed: No Firebase apps found after initialization")
-            return False
-            
-    except Exception as e:
-        print(f"❌ CRITICAL ERROR during Firebase initialization: {e}")
-        import traceback
-        print(f"   Full traceback: {traceback.format_exc()}")
-        return False
-
-# Initialize Firebase and track success
-print("🔄 Calling initialize_firebase()...")
-firebase_init_success = initialize_firebase()
-print(f"🎯 Firebase initialization result: {firebase_init_success}")
-
-if not firebase_init_success:
-    print("🚨 WARNING: Firebase initialization failed! Service will start but database operations will fail.")
-
-# Add these helper functions for the subtask endpoints
-def ensure_firebase():
-    """Ensure Firebase is initialized before database operations"""
-    if not firebase_admin._apps:
-        print("⚠️ Firebase not initialized in request, reinitializing...")
-        return initialize_firebase()
-    return True
+cred = credentials.Certificate(JSON_PATH)
+firebase_admin.initialize_app(cred, {
+    "databaseURL": DATABASE_URL
+})
 
 # Utility functions
 def current_timestamp():
@@ -367,7 +272,5 @@ def health_check():
     """Health check endpoint"""
     return jsonify(status="healthy", service="subtask-service"), 200
 
-# Update the main run block at the end
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 6003))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=6003, debug=True)
