@@ -1,34 +1,37 @@
-# task-service/app.py
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import firebase_admin
 from firebase_admin import credentials, db
 from datetime import datetime, timezone
 import os
-import time
+
 
 app = Flask(__name__)
 CORS(app)
 
+
 # Firebase configuration
 JSON_PATH = os.getenv("JSON_PATH")
 DATABASE_URL = os.getenv("DATABASE_URL")
+
 
 cred = credentials.Certificate(JSON_PATH)
 firebase_admin.initialize_app(cred, {
     "databaseURL": DATABASE_URL
 })
 
+
 # Utility functions
 def current_timestamp():
     """Return current timestamp in epoch format"""
     return int(datetime.now(timezone.utc).timestamp())
 
+
 def validate_status(status):
     """Validate status is one of the allowed values"""
     allowed_statuses = ["Ongoing", "Unassigned", "Under Review", "Completed"]
     return status.lower() in allowed_statuses
+
 
 def validate_epoch_timestamp(timestamp):
     """Validate that timestamp is a valid epoch timestamp"""
@@ -39,6 +42,7 @@ def validate_epoch_timestamp(timestamp):
     except (ValueError, TypeError):
         return False
 
+
 @app.route("/tasks", methods=["POST"])
 def create_task():
     """Create a new task"""
@@ -46,26 +50,31 @@ def create_task():
     if not data:
         return jsonify(error="Missing JSON body"), 400
 
+
     # Required fields validation
     required_fields = ["title", "creatorId", "deadline"]
     for field in required_fields:
         if not data.get(field):
             return jsonify(error=f"Missing required field: {field}"), 400
 
+
     # Validate deadline format (epoch timestamp)
     deadline = data.get("deadline")
     if not validate_epoch_timestamp(deadline):
         return jsonify(error="Deadline must be a valid epoch timestamp"), 400
+
 
     # Validate status if provided
     status = data.get("status", "ongoing").lower()
     # if not validate_status(status):
     #     return jsonify(error="Status must be one of: Ongoing, Unassigned, Under Review, Completed"), 400
 
+
     # Extract and validate data
     title = data.get("title").strip()
     if not title:
         return jsonify(error="Title cannot be empty"), 400
+
 
     creator_id = data.get("creatorId")
     owner_id = data.get("ownerId", creator_id)  # Default to creator if not specified
@@ -74,18 +83,30 @@ def create_task():
     collaborators = data.get("collaborators", [])
     project_id = data.get("projectId", "")
 
+    # Validate priority if provided
+    priority = data.get("priority")
+    if priority is not None:
+        if not isinstance(priority, int):
+            return jsonify(error="Priority must be an integer"), 400
+    else:
+        priority = 0  # Default priority if not specified
+
+
     # Validate attachments are strings (base64)
     if not isinstance(attachments, list) or not all(isinstance(att, str) for att in attachments):
         return jsonify(error="Attachments must be an array of strings (base64)"), 400
+
 
     # Validate collaborators are strings (user IDs)
     if not isinstance(collaborators, list) or not all(isinstance(collab, str) for collab in collaborators):
         return jsonify(error="Collaborators must be an array of user IDs"), 400
 
+
     # Generate task reference and get auto-generated ID
     tasks_ref = db.reference("tasks")
     new_task_ref = tasks_ref.push()
     task_id = new_task_ref.key
+
 
     # Prepare task data
     current_time = current_timestamp()
@@ -100,9 +121,11 @@ def create_task():
         "collaborators": collaborators,
         "projectId": project_id,
         "ownerId": owner_id,
+        "priority": priority,
         "createdAt": current_time,
         "updatedAt": current_time
     }
+
 
     # Save to Firebase
     try:
@@ -111,19 +134,21 @@ def create_task():
     except Exception as e:
         return jsonify(error=f"Failed to create task: {str(e)}"), 500
 
+
 @app.route("/tasks", methods=["GET"])
 def get_all_tasks():
     """Get all tasks"""
     try:
         tasks_ref = db.reference("tasks")
         all_tasks = tasks_ref.get() or {}
-        
+
         # Convert to list format
         tasks_list = list(all_tasks.values()) if all_tasks else []
-        
+
         return jsonify(tasks=tasks_list), 200
     except Exception as e:
         return jsonify(error=f"Failed to retrieve tasks: {str(e)}"), 500
+
 
 @app.route("/tasks/<task_id>", methods=["GET"])
 def get_task_by_id(task_id):
@@ -131,13 +156,14 @@ def get_task_by_id(task_id):
     try:
         task_ref = db.reference(f"tasks/{task_id}")
         task = task_ref.get()
-        
+
         if not task:
             return jsonify(error="Task not found"), 404
-            
+
         return jsonify(task=task), 200
     except Exception as e:
         return jsonify(error=f"Failed to retrieve task: {str(e)}"), 500
+
 
 @app.route("/tasks/<task_id>", methods=["PUT"])
 def update_task_by_id(task_id):
@@ -146,23 +172,26 @@ def update_task_by_id(task_id):
     if not data:
         return jsonify(error="Missing JSON body"), 400
 
+
     try:
         # Check if task exists
         task_ref = db.reference(f"tasks/{task_id}")
         existing_task = task_ref.get()
-        
+
         if not existing_task:
             return jsonify(error="Task not found"), 404
 
+
         # Prepare update data (only include provided fields)
         update_data = {}
-        
+
         # Validate and update title if provided
         if "title" in data:
             title = data["title"].strip()
             if not title:
                 return jsonify(error="Title cannot be empty"), 400
             update_data["title"] = title
+
 
         # Validate and update deadline if provided
         if "deadline" in data:
@@ -171,6 +200,7 @@ def update_task_by_id(task_id):
                 return jsonify(error="Deadline must be a valid epoch timestamp"), 400
             update_data["deadline"] = deadline
 
+
         # Validate and update status if provided
         if "status" in data:
             status = data["status"].lower()
@@ -178,43 +208,55 @@ def update_task_by_id(task_id):
             #     return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
             update_data["status"] = status
 
+        # Validate and update priority if provided
+        if "priority" in data:
+            priority = data["priority"]
+            if not isinstance(priority, int):
+                return jsonify(error="Priority must be an integer"), 400
+            update_data["priority"] = priority
+
+
         # Update other optional fields if provided
         if "notes" in data:
             update_data["notes"] = data["notes"]
-            
+
         if "attachments" in data:
             attachments = data["attachments"]
             if not isinstance(attachments, list) or not all(isinstance(att, str) for att in attachments):
                 return jsonify(error="Attachments must be an array of strings (base64)"), 400
             update_data["attachments"] = attachments
-            
+
         if "collaborators" in data:
             collaborators = data["collaborators"]
             if not isinstance(collaborators, list) or not all(isinstance(collab, str) for collab in collaborators):
                 return jsonify(error="Collaborators must be an array of user IDs"), 400
             update_data["collaborators"] = collaborators
-            
+
         if "projectId" in data:
             update_data["projectId"] = data["projectId"]
-            
+
         if "ownerId" in data:
             update_data["ownerId"] = data["ownerId"]
+
 
         # Always update the updatedAt timestamp
         update_data["updatedAt"] = current_timestamp()
 
+
         if not update_data or len(update_data) == 1:  # Only updatedAt
             return jsonify(error="No valid fields provided for update"), 400
 
+
         # Perform update
         task_ref.update(update_data)
-        
+
         # Get updated task
         updated_task = task_ref.get()
         return jsonify(message="Task updated successfully", task=updated_task), 200
-        
+
     except Exception as e:
         return jsonify(error=f"Failed to update task: {str(e)}"), 500
+
 
 @app.route("/tasks/<task_id>", methods=["DELETE"])
 def delete_task_by_id(task_id):
@@ -223,17 +265,19 @@ def delete_task_by_id(task_id):
         # Check if task exists
         task_ref = db.reference(f"tasks/{task_id}")
         existing_task = task_ref.get()
-        
+
         if not existing_task:
             return jsonify(error="Task not found"), 404
 
+
         # Delete the task
         task_ref.delete()
-        
+
         return jsonify(message="Task deleted successfully"), 200
-        
+
     except Exception as e:
         return jsonify(error=f"Failed to delete task: {str(e)}"), 500
+
 
 @app.route("/tasks/project/<project_id>", methods=["GET"])
 def get_tasks_by_project(project_id):
@@ -241,22 +285,24 @@ def get_tasks_by_project(project_id):
     try:
         tasks_ref = db.reference("tasks")
         all_tasks = tasks_ref.get() or {}
-        
+
         # Filter tasks by project ID
         filtered_tasks = [
             task for task in all_tasks.values() 
             if task.get("projectId") == project_id
         ]
-        
+
         return jsonify(tasks=filtered_tasks), 200
-        
+
     except Exception as e:
         return jsonify(error=f"Failed to retrieve tasks by project: {str(e)}"), 500
+
 
 @app.route("/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
     return jsonify(status="healthy", service="task-service"), 200
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=6002, debug=True)
