@@ -802,27 +802,34 @@ function removeCollaborator(uid) {
 function fetchAssignableUsers(currentUserId) {
   try {
     const currentUserRole = usersMap[currentUserId]?.role;
-
+    const currentUserDept = usersMap[currentUserId]?.department; // Get current user's department
+    
     const filtered = allUsers.value.filter(user => {
-      if (user.uid === currentUserId) return false;
-
+      if (user.uid === currentUserId) return false; // Can't assign to self
+      
       const userRole = user.role;
-
+      const userDept = user.department;
+      
+      // Must be same department
+      if (userDept !== currentUserDept) return false;
+      
+      // Role hierarchy: director > manager > staff
       if (currentUserRole === 'director') {
-        return userRole === 'manager';
+        return userRole === 'manager' || userRole === 'staff'; // Director can assign to manager or staff only
       } else if (currentUserRole === 'manager') {
-        return userRole === 'staff';
+        return userRole === 'staff'; // Manager can assign to staff only
       }
-
-      return false;
+      
+      return false; // Staff cannot assign ownership
     });
-
+    
     assignableUsers.value = filtered;
   } catch (error) {
     console.error('Failed to filter assignable users:', error);
     assignableUsers.value = [];
   }
 }
+
 
 async function saveProject() {
   if (!currentUser.value) return;
