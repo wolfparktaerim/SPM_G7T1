@@ -13,8 +13,13 @@
 
       <!-- Settings Sections -->
       <div class="space-y-6">
+        <!-- Loading State -->
+        <div v-if="isLoading" class="flex items-center justify-center py-12">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+
         <!-- Notification Settings Card -->
-        <div class="bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 overflow-hidden">
+        <div v-else class="bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 overflow-hidden">
           <!-- Section Header -->
           <div class="p-6 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-600">
             <div class="flex items-center space-x-3">
@@ -148,17 +153,25 @@
                         max="365"
                         placeholder="Enter days"
                         class="block w-32 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
+                        :class="{ 'border-red-300 focus:ring-red-500 focus:border-red-500': addReminderError }"
                       />
                       <span class="text-sm text-gray-600 font-medium">days before deadline</span>
                       <button
                         @click="addReminderTime"
                         type="button"
-                        :disabled="!newReminderDays || newReminderDays < 1 || newReminderDays > 365"
+                        :disabled="isAddButtonDisabled"
                         class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
                         Add
                       </button>
                     </div>
-                    <p class="text-xs text-gray-500 mt-2">
+
+                    <!-- Error Message -->
+                    <p v-if="addReminderError" class="text-xs text-red-600 font-medium mt-2">
+                      {{ addReminderError }}
+                    </p>
+
+                    <!-- Info Message -->
+                    <p v-else class="text-xs text-gray-500 mt-2">
                       Reminders will be automatically sorted in descending order
                     </p>
                   </div>
@@ -168,16 +181,6 @@
               <p v-if="preferences.reminderTimes.length >= 5" class="text-sm text-amber-600 font-medium">
                 Maximum of 5 reminders reached
               </p>
-            </div>
-
-            <!-- Save Status Message -->
-            <div v-if="saveStatus"
-              class="flex items-center space-x-2 p-4 rounded-xl"
-              :class="saveStatus === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'">
-              <component :is="saveStatus === 'success' ? CheckCircle : XCircle" class="w-5 h-5" :stroke-width="2" />
-              <span class="text-sm font-medium">
-                {{ saveStatus === 'success' ? 'Preferences saved successfully!' : 'Failed to save preferences' }}
-              </span>
             </div>
           </div>
         </div>
@@ -199,13 +202,22 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES
 } from '@/models/notificationPreferences'
 import { useAuthStore } from '@/stores/auth'
+import {
+  saveNotificationPreferences,
+  getNotificationPreferences
+} from '@/services/notificationPreferencesService'
+import { useToast } from 'vue-toastification'
 
 // Auth store
 const authStore = useAuthStore()
 
+// Toast
+const toast = useToast()
+
 // Component state
 const saveStatus = ref(null)
 const newReminderDays = ref(null)
+const isLoading = ref(false)
 
 // Notification preferences
 const preferences = reactive(new NotificationPreferences({
@@ -245,10 +257,41 @@ const getChannelClass = (value) => {
 }
 
 /**
+ * Computed: Check if add button should be disabled
+ */
+const isAddButtonDisabled = computed(() => {
+  if (!newReminderDays.value) return true
+  if (newReminderDays.value < 1 || newReminderDays.value > 365) return true
+  if (preferences.reminderTimes.includes(newReminderDays.value)) return true
+  return false
+})
+
+/**
+ * Computed: Error message for add reminder input
+ */
+const addReminderError = computed(() => {
+  if (!newReminderDays.value) return null
+
+  if (newReminderDays.value < 1) {
+    return 'Value must be at least 1 day'
+  }
+
+  if (newReminderDays.value > 365) {
+    return 'Value must not exceed 365 days'
+  }
+
+  if (preferences.reminderTimes.includes(newReminderDays.value)) {
+    return 'This reminder already exists'
+  }
+
+  return null
+})
+
+/**
  * Add a new reminder time
  */
 const addReminderTime = () => {
-  if (newReminderDays.value && newReminderDays.value >= 1 && newReminderDays.value <= 365) {
+  if (newReminderDays.value && newReminderDays.value >= 1 && newReminderDays.value <= 365 && !preferences.reminderTimes.includes(newReminderDays.value)) {
     // Add the new time and let the model validate and sort
     preferences.reminderTimes = [...preferences.reminderTimes, newReminderDays.value]
     preferences.reminderTimes = preferences.validateReminderTimes(preferences.reminderTimes)
@@ -285,21 +328,23 @@ const toggleNotifications = () => {
 }
 
 /**
- * Save preferences
- * TODO: Connect to backend API to persist preferences
+ * Save preferences to Firebase
  */
 const savePreferences = async () => {
+  if (!authStore.user?.uid) {
+    console.error('No user logged in')
+    toast.error('You must be logged in to save preferences')
+    return
+  }
+
   try {
     saveStatus.value = null
+    isLoading.value = true
 
-    // TODO: Make API call to save preferences
-    // For now, we'll save to localStorage as a temporary solution
-    localStorage.setItem(
-      `notification_preferences_${authStore.user?.uid}`,
-      JSON.stringify(preferences.toFirebaseObject())
-    )
+    await saveNotificationPreferences(authStore.user.uid, preferences)
 
     saveStatus.value = 'success'
+    toast.success('Notification preferences saved successfully!')
 
     // Clear success message after 3 seconds
     setTimeout(() => {
@@ -308,29 +353,44 @@ const savePreferences = async () => {
   } catch (error) {
     console.error('Failed to save notification preferences:', error)
     saveStatus.value = 'error'
+    toast.error('Failed to save notification preferences')
 
     // Clear error message after 5 seconds
     setTimeout(() => {
       saveStatus.value = null
     }, 5000)
+  } finally {
+    isLoading.value = false
   }
 }
 
 /**
- * Load preferences from storage
- * TODO: Connect to backend API to fetch preferences
+ * Load preferences from Firebase
  */
-const loadPreferences = () => {
+const loadPreferences = async () => {
+  if (!authStore.user?.uid) {
+    console.error('No user logged in')
+    return
+  }
+
   try {
-    const saved = localStorage.getItem(`notification_preferences_${authStore.user?.uid}`)
-    if (saved) {
-      const data = JSON.parse(saved)
-      Object.assign(preferences, data)
-      // Ensure reminderTimes is properly validated
-      preferences.reminderTimes = preferences.validateReminderTimes(preferences.reminderTimes)
+    isLoading.value = true
+
+    const savedPreferences = await getNotificationPreferences(authStore.user.uid)
+
+    if (savedPreferences) {
+      // Update preferences with saved data
+      Object.assign(preferences, savedPreferences)
+      console.log('Notification preferences loaded from Firebase')
+    } else {
+      // No saved preferences, use defaults
+      console.log('No saved preferences found, using defaults')
     }
   } catch (error) {
     console.error('Failed to load notification preferences:', error)
+    toast.error('Failed to load notification preferences')
+  } finally {
+    isLoading.value = false
   }
 }
 
