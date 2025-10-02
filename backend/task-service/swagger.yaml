@@ -72,6 +72,29 @@ components:
           format: int64
           description: Epoch timestamp of last update
           example: 1727109800
+        active:
+          type: boolean
+          description: Whether the task is currently active, default true at creation unless specified
+          example: true
+        scheduled:
+          type: boolean
+          description: Whether the task is scheduled for repetition, default false unless specified
+          example: false
+        schedule:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+          description: Schedule frequency option for scheduled tasks
+          example: "weekly"
+        custom_schedule:
+          type: integer
+          nullable: true
+          description: Custom schedule timing in days, used only if schedule is 'custom'
+          example: 10
+        start_date:
+          type: number
+          format: int64
+          description: Start date of the task in epoch timestamp, defaults to creation date unless specified
+          example: 1727092800
 
     CreateTaskRequest:
       type: object
@@ -122,6 +145,29 @@ components:
           type: integer
           description: Priority level of the task
           example: 3
+        active:
+          type: boolean
+          description: Whether the task is active, default true unless specified
+          example: true
+        scheduled:
+          type: boolean
+          description: Whether the task is scheduled, default false unless specified
+          example: false
+        schedule:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+          description: Schedule frequency for scheduled tasks
+          example: "weekly"
+        custom_schedule:
+          type: integer
+          nullable: true
+          description: Custom schedule duration in days, only if schedule is 'custom'
+          example: 10
+        start_date:
+          type: number
+          format: int64
+          description: Start date in epoch timestamp, defaults to creation date if omitted
+          example: 1727092800
 
     UpdateTaskRequest:
       type: object
@@ -152,6 +198,29 @@ components:
           type: integer
           description: Priority level of the task
           example: 3
+        active:
+          type: boolean
+          description: Set whether the task is active
+          example: true
+        scheduled:
+          type: boolean
+          description: Set whether the task is scheduled for repetition
+          example: false
+        schedule:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+          description: Schedule frequency for scheduled tasks
+          example: "weekly"
+        custom_schedule:
+          type: integer
+          nullable: true
+          description: Custom schedule duration in days, only if schedule is 'custom'
+          example: 10
+        start_date:
+          type: number
+          format: int64
+          description: Start date in epoch timestamp
+          example: 1727092800
 
     ErrorResponse:
       type: object
@@ -200,7 +269,7 @@ paths:
 
     get:
       summary: Get all tasks
-      description: Retrieves all tasks from the database
+      description: Retrieves all tasks from the database and updates their active state based on current time and start_date
       responses:
         "200":
           description: Tasks retrieved successfully
@@ -223,7 +292,7 @@ paths:
   /tasks/{taskId}:
     get:
       summary: Get a task by ID
-      description: Retrieves a specific task by its ID
+      description: Retrieves a specific task by its ID and updates its active state based on current time and start_date
       parameters:
         - name: taskId
           in: path
@@ -257,7 +326,7 @@ paths:
 
     put:
       summary: Update a task by ID
-      description: Updates an existing task with the provided data
+      description: Updates an existing task with the provided data. If the status changes to completed and the task is scheduled, a new task is created with updated start_date.
       parameters:
         - name: taskId
           in: path
@@ -342,7 +411,7 @@ paths:
   /tasks/project/{projectId}:
     get:
       summary: Get tasks by project ID
-      description: Retrieves all tasks that belong to a specific project
+      description: Retrieves all tasks that belong to a specific project, updating their active state based on current time and start_date
       parameters:
         - name: projectId
           in: path
@@ -388,3 +457,4 @@ paths:
                   service:
                     type: string
                     example: "task-service"
+

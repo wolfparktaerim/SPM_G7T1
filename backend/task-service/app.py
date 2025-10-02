@@ -2,36 +2,31 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import firebase_admin
 from firebase_admin import credentials, db
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
-
+import calendar
 
 app = Flask(__name__)
 CORS(app)
 
-
 # Firebase configuration
 JSON_PATH = os.getenv("JSON_PATH")
 DATABASE_URL = os.getenv("DATABASE_URL")
-
 
 cred = credentials.Certificate(JSON_PATH)
 firebase_admin.initialize_app(cred, {
     "databaseURL": DATABASE_URL
 })
 
-
 # Utility functions
 def current_timestamp():
     """Return current timestamp in epoch format"""
     return int(datetime.now(timezone.utc).timestamp())
 
-
 def validate_status(status):
     """Validate status is one of the allowed values"""
-    allowed_statuses = ["Ongoing", "Unassigned", "Under Review", "Completed"]
-    return status.lower() in allowed_statuses
-
+    allowed_statuses = ["ongoing", "unassigned", "under review", "completed"]
+    return status.lower() in [s.lower() for s in allowed_statuses]
 
 def validate_epoch_timestamp(timestamp):
     """Validate that timestamp is a valid epoch timestamp"""
@@ -42,6 +37,79 @@ def validate_epoch_timestamp(timestamp):
     except (ValueError, TypeError):
         return False
 
+def calculate_new_start_date(old_start_date, schedule, custom_schedule=None):
+    """Calculate the next start date based on schedule type and old start date."""
+    today_ts = current_timestamp()
+    old_dt = datetime.fromtimestamp(old_start_date, tz=timezone.utc)
+
+    if schedule == "daily":
+        new_dt = old_dt + timedelta(days=1)
+    elif schedule == "weekly":
+        new_dt = old_dt + timedelta(weeks=1)
+    elif schedule == "monthly":
+        month = old_dt.month + 1 if old_dt.month < 12 else 1
+        year = old_dt.year if old_dt.month < 12 else old_dt.year + 1
+        day = old_dt.day
+        # handle day overflow in next month
+        try:
+            new_dt = datetime(year, month, day, tzinfo=timezone.utc)
+        except ValueError:
+            last_day = calendar.monthrange(year, month)[1]
+            new_dt = datetime(year, month, last_day, tzinfo=timezone.utc)
+    elif schedule == "custom" and custom_schedule:
+        new_dt = old_dt + timedelta(days=custom_schedule)
+    else:
+        new_dt = old_dt  # fallback
+
+    new_start_ts = int(new_dt.timestamp())
+
+    # If new start date is earlier than today, shift to today + schedule
+    if new_start_ts < today_ts:
+        today_dt = datetime.fromtimestamp(today_ts, tz=timezone.utc)
+        if schedule == "daily":
+            new_dt = today_dt + timedelta(days=1)
+        elif schedule == "weekly":
+            new_dt = today_dt + timedelta(weeks=1)
+        elif schedule == "monthly":
+            month = today_dt.month + 1 if today_dt.month < 12 else 1
+            year = today_dt.year if today_dt.month < 12 else today_dt.year + 1
+            day = today_dt.day
+            try:
+                new_dt = datetime(year, month, day, tzinfo=timezone.utc)
+            except ValueError:
+                last_day = calendar.monthrange(year, month)[1]
+                new_dt = datetime(year, month, last_day, tzinfo=timezone.utc)
+        elif schedule == "custom" and custom_schedule:
+            new_dt = today_dt + timedelta(days=custom_schedule)
+        new_start_ts = int(new_dt.timestamp())
+
+    return new_start_ts
+
+def create_task_with_params(task):
+    """Create a new task with adjusted start_date and active flag."""
+    now = current_timestamp()
+    new_start_date = calculate_new_start_date(
+        task.get("start_date", now),
+        task.get("schedule"),
+        task.get("custom_schedule")
+    )
+
+    active_flag = True if new_start_date <= now else False
+
+    new_task_ref = db.reference("tasks").push()
+    new_task_data = dict(task)  # copy all fields
+
+    # Update fields for the new task
+    new_task_data.update({
+        "taskId": new_task_ref.key,
+        "start_date": new_start_date,
+        "active": active_flag,
+        "status": "ongoing",  # new task is ongoing already
+        "createdAt": now,
+        "updatedAt": now
+    })
+
+    new_task_ref.set(new_task_data)
 
 @app.route("/tasks", methods=["POST"])
 def create_task():
@@ -50,66 +118,64 @@ def create_task():
     if not data:
         return jsonify(error="Missing JSON body"), 400
 
-
-    # Required fields validation
     required_fields = ["title", "creatorId", "deadline"]
     for field in required_fields:
         if not data.get(field):
             return jsonify(error=f"Missing required field: {field}"), 400
 
-
-    # Validate deadline format (epoch timestamp)
     deadline = data.get("deadline")
     if not validate_epoch_timestamp(deadline):
         return jsonify(error="Deadline must be a valid epoch timestamp"), 400
 
-
-    # Validate status if provided
     status = data.get("status", "ongoing").lower()
-    # if not validate_status(status):
-    #     return jsonify(error="Status must be one of: Ongoing, Unassigned, Under Review, Completed"), 400
 
-
-    # Extract and validate data
     title = data.get("title").strip()
     if not title:
         return jsonify(error="Title cannot be empty"), 400
 
-
     creator_id = data.get("creatorId")
-    owner_id = data.get("ownerId", creator_id)  # Default to creator if not specified
+    owner_id = data.get("ownerId", creator_id)
     notes = data.get("notes", "")
     attachments = data.get("attachments", [])
     collaborators = data.get("collaborators", [])
     project_id = data.get("projectId", "")
 
-    # Validate priority if provided
     priority = data.get("priority")
     if priority is not None:
         if not isinstance(priority, int):
             return jsonify(error="Priority must be an integer"), 400
     else:
-        priority = 0  # Default priority if not specified
+        priority = 0
 
-
-    # Validate attachments are strings (base64)
     if not isinstance(attachments, list) or not all(isinstance(att, str) for att in attachments):
         return jsonify(error="Attachments must be an array of strings (base64)"), 400
 
-
-    # Validate collaborators are strings (user IDs)
     if not isinstance(collaborators, list) or not all(isinstance(collab, str) for collab in collaborators):
         return jsonify(error="Collaborators must be an array of user IDs"), 400
 
+    active = data.get("active", True)
+    scheduled = data.get("scheduled", False)
+    schedule = data.get("schedule", "daily")
+    valid_schedules = ["daily", "weekly", "monthly", "custom"]
+    if schedule not in valid_schedules:
+        return jsonify(error=f"Schedule must be one of: {', '.join(valid_schedules)}"), 400
 
-    # Generate task reference and get auto-generated ID
+    custom_schedule = data.get("custom_schedule")
+    if schedule == "custom":
+        if custom_schedule is None or not isinstance(custom_schedule, int):
+            return jsonify(error="custom_schedule must be an integer when schedule is 'custom'"), 400
+    else:
+        custom_schedule = None
+
+    current_time = current_timestamp()
+    start_date = data.get("start_date", current_time)
+    if not validate_epoch_timestamp(start_date):
+        return jsonify(error="start_date must be a valid epoch timestamp"), 400
+
     tasks_ref = db.reference("tasks")
     new_task_ref = tasks_ref.push()
     task_id = new_task_ref.key
 
-
-    # Prepare task data
-    current_time = current_timestamp()
     task_data = {
         "taskId": task_id,
         "title": title,
@@ -123,36 +189,46 @@ def create_task():
         "ownerId": owner_id,
         "priority": priority,
         "createdAt": current_time,
-        "updatedAt": current_time
+        "updatedAt": current_time,
+        "start_date": start_date,
+        "active": bool(active),
+        "scheduled": bool(scheduled),
+        "schedule": schedule,
+        "custom_schedule": custom_schedule
     }
 
-
-    # Save to Firebase
     try:
         new_task_ref.set(task_data)
         return jsonify(message="Task created successfully", task=task_data), 201
     except Exception as e:
         return jsonify(error=f"Failed to create task: {str(e)}"), 500
 
-
 @app.route("/tasks", methods=["GET"])
 def get_all_tasks():
-    """Get all tasks"""
+    """Get all tasks with active flag updated based on start_date"""
     try:
         tasks_ref = db.reference("tasks")
         all_tasks = tasks_ref.get() or {}
 
-        # Convert to list format
-        tasks_list = list(all_tasks.values()) if all_tasks else []
+        now = current_timestamp()
+        for task in all_tasks.values():
+            start_date = task.get("start_date")
+            if start_date is not None:
+                if now >= start_date:
+                    if not task.get("active", False):
+                        # Update active to True if needed in DB
+                        db.reference(f"tasks/{task['taskId']}").update({"active": True})
+                    task["active"] = True
+                else:
+                    task["active"] = False
 
-        return jsonify(tasks=tasks_list), 200
+        return jsonify(tasks=list(all_tasks.values())), 200
     except Exception as e:
         return jsonify(error=f"Failed to retrieve tasks: {str(e)}"), 500
 
-
 @app.route("/tasks/<task_id>", methods=["GET"])
 def get_task_by_id(task_id):
-    """Get a task by ID"""
+    """Get a task by ID with active flag updated based on start_date"""
     try:
         task_ref = db.reference(f"tasks/{task_id}")
         task = task_ref.get()
@@ -160,10 +236,18 @@ def get_task_by_id(task_id):
         if not task:
             return jsonify(error="Task not found"), 404
 
+        now = current_timestamp()
+        start_date = task.get("start_date")
+        if start_date is not None:
+            if now >= start_date and not task.get("active", False):
+                task_ref.update({"active": True})
+                task["active"] = True
+            elif now < start_date:
+                task["active"] = False
+
         return jsonify(task=task), 200
     except Exception as e:
         return jsonify(error=f"Failed to retrieve task: {str(e)}"), 500
-
 
 @app.route("/tasks/<task_id>", methods=["PUT"])
 def update_task_by_id(task_id):
@@ -172,51 +256,38 @@ def update_task_by_id(task_id):
     if not data:
         return jsonify(error="Missing JSON body"), 400
 
-
     try:
-        # Check if task exists
         task_ref = db.reference(f"tasks/{task_id}")
         existing_task = task_ref.get()
-
         if not existing_task:
             return jsonify(error="Task not found"), 404
 
+        prev_status = existing_task.get("status", "").lower()
 
-        # Prepare update data (only include provided fields)
         update_data = {}
 
-        # Validate and update title if provided
         if "title" in data:
             title = data["title"].strip()
             if not title:
                 return jsonify(error="Title cannot be empty"), 400
             update_data["title"] = title
 
-
-        # Validate and update deadline if provided
         if "deadline" in data:
             deadline = data["deadline"]
             if not validate_epoch_timestamp(deadline):
                 return jsonify(error="Deadline must be a valid epoch timestamp"), 400
             update_data["deadline"] = deadline
 
-
-        # Validate and update status if provided
         if "status" in data:
             status = data["status"].lower()
-            # if not validate_status(status):
-            #     return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
             update_data["status"] = status
 
-        # Validate and update priority if provided
         if "priority" in data:
             priority = data["priority"]
             if not isinstance(priority, int):
                 return jsonify(error="Priority must be an integer"), 400
             update_data["priority"] = priority
 
-
-        # Update other optional fields if provided
         if "notes" in data:
             update_data["notes"] = data["notes"]
 
@@ -238,39 +309,67 @@ def update_task_by_id(task_id):
         if "ownerId" in data:
             update_data["ownerId"] = data["ownerId"]
 
+        if "active" in data:
+            update_data["active"] = bool(data["active"])
 
-        # Always update the updatedAt timestamp
+        if "scheduled" in data:
+            update_data["scheduled"] = bool(data["scheduled"])
+
+        if "schedule" in data:
+            schedule = data["schedule"]
+            valid_schedules = ["daily", "weekly", "monthly", "custom"]
+            if schedule not in valid_schedules:
+                return jsonify(error=f"Schedule must be one of: {', '.join(valid_schedules)}"), 400
+            update_data["schedule"] = schedule
+
+            if schedule == "custom":
+                custom_schedule = data.get("custom_schedule")
+                if custom_schedule is None or not isinstance(custom_schedule, int):
+                    return jsonify(error="custom_schedule must be an integer when schedule is 'custom'"), 400
+                update_data["custom_schedule"] = custom_schedule
+            else:
+                update_data["custom_schedule"] = None
+        elif "custom_schedule" in data:
+            if existing_task.get("schedule") == "custom":
+                if data["custom_schedule"] is None or not isinstance(data["custom_schedule"], int):
+                    return jsonify(error="custom_schedule must be an integer when schedule is 'custom'"), 400
+                update_data["custom_schedule"] = data["custom_schedule"]
+
+        if "start_date" in data:
+            start_date = data["start_date"]
+            if not validate_epoch_timestamp(start_date):
+                return jsonify(error="start_date must be a valid epoch timestamp"), 400
+            update_data["start_date"] = start_date
+
         update_data["updatedAt"] = current_timestamp()
 
-
-        if not update_data or len(update_data) == 1:  # Only updatedAt
+        if not update_data or (len(update_data) == 1 and "updatedAt" in update_data):
             return jsonify(error="No valid fields provided for update"), 400
 
-
-        # Perform update
         task_ref.update(update_data)
 
-        # Get updated task
+        # Check for status transition to completed and scheduled true
+        new_status = data.get("status", prev_status).lower()
+        if prev_status != "completed" and new_status == "completed" and existing_task.get("scheduled"):
+            # Create new scheduled task
+            updated_task = task_ref.get()
+            create_task_with_params(updated_task)
+
         updated_task = task_ref.get()
         return jsonify(message="Task updated successfully", task=updated_task), 200
 
     except Exception as e:
         return jsonify(error=f"Failed to update task: {str(e)}"), 500
 
-
 @app.route("/tasks/<task_id>", methods=["DELETE"])
 def delete_task_by_id(task_id):
     """Delete a task by ID"""
     try:
-        # Check if task exists
         task_ref = db.reference(f"tasks/{task_id}")
         existing_task = task_ref.get()
-
         if not existing_task:
             return jsonify(error="Task not found"), 404
 
-
-        # Delete the task
         task_ref.delete()
 
         return jsonify(message="Task deleted successfully"), 200
@@ -278,31 +377,35 @@ def delete_task_by_id(task_id):
     except Exception as e:
         return jsonify(error=f"Failed to delete task: {str(e)}"), 500
 
-
 @app.route("/tasks/project/<project_id>", methods=["GET"])
 def get_tasks_by_project(project_id):
-    """Get all tasks by project ID"""
+    """Get all tasks by project ID with active flag updated"""
     try:
         tasks_ref = db.reference("tasks")
         all_tasks = tasks_ref.get() or {}
 
-        # Filter tasks by project ID
-        filtered_tasks = [
-            task for task in all_tasks.values() 
-            if task.get("projectId") == project_id
-        ]
+        now = current_timestamp()
+        filtered_tasks = []
+        for task in all_tasks.values():
+            if task.get("projectId") == project_id:
+                start_date = task.get("start_date")
+                if start_date is not None:
+                    if now >= start_date:
+                        if not task.get("active", False):
+                            db.reference(f"tasks/{task['taskId']}").update({"active": True})
+                        task["active"] = True
+                    else:
+                        task["active"] = False
+                filtered_tasks.append(task)
 
         return jsonify(tasks=filtered_tasks), 200
-
     except Exception as e:
         return jsonify(error=f"Failed to retrieve tasks by project: {str(e)}"), 500
-
 
 @app.route("/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
     return jsonify(status="healthy", service="task-service"), 200
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=6002, debug=True)
