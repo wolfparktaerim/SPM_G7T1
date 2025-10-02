@@ -16,8 +16,7 @@ import SettingsView from '@/views/SettingsView.vue'
 import AuthenticationView from '@/views/AuthView.vue'
 
 // import tests
-import TestConfirmationModal from '@/tests/TestConfirmationModal.vue'
-import TestTaskBackend from '@/tests/TestTaskBackend.vue'
+import TestConfirmationModal from '@/frontendTests/TestConfirmationModal.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -80,12 +79,6 @@ const router = createRouter({
       path: '/testcm',
       name: 'TestConfirmationModal',
       component: TestConfirmationModal,
-      meta: { requiresAuth: false },
-    },
-    {
-      path: '/testtask',
-      name: 'TestTaskManagement',
-      component: TestTaskBackend,
       meta: { requiresAuth: false },
     },
   ],

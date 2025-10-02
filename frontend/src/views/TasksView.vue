@@ -105,8 +105,8 @@
 
     <!-- Modals -->
     <TaskCreateEditModal :show="showCreateEditModal" :task-data="selectedTask" :is-editing="isEditing"
-      :is-subtask="isSubtask" :parent-task-id="parentTaskId" :all-users="allUsers" @close="closeCreateEditModal"
-      @save="handleSaveTask" />
+      :is-subtask="isSubtask" :parent-task-id="parentTaskId" :parent-task="parentTask" :all-users="allUsers"
+      @close="closeCreateEditModal" @save="handleSaveTask" />
 
     <TaskDetailModal :show="showDetailModal" :task-data="selectedTask" :is-subtask="isSubtask" :all-users="allUsers"
       @close="closeDetailModal" @edit="handleEditFromDetail" @delete="handleDeleteFromDetail"
@@ -158,6 +158,7 @@ const selectedTask = ref(null)
 const isEditing = ref(false)
 const isSubtask = ref(false)
 const parentTaskId = ref(null)
+const parentTask = ref(null)
 
 // Auto refresh state
 const autoRefreshInterval = ref(null)
@@ -233,6 +234,7 @@ const filteredTasks = computed(() => {
   return filtered
 })
 
+
 // API functions
 async function fetchTasks() {
   try {
@@ -240,15 +242,63 @@ async function fetchTasks() {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
     const data = response.data
 
-    // UPDATED: Filter tasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
-    tasks.value = data.tasks?.filter(task => {
+    const currentUserRole = authStore.user?.role
+
+    // Get all tasks first
+    let allTasks = data.tasks || []
+
+    // STAFF: Can only view tasks they own or collaborate in
+    if (currentUserRole === 'staff') {
+      tasks.value = allTasks.filter(task => {
+        return task.ownerId === currentUserId ||
+          task.collaborators?.includes(currentUserId) ||
+          task.creatorId === currentUserId
+      })
+      console.log(`[STAFF] Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
+      return
+    }
+
+    // MANAGER/DIRECTOR: Can view tasks they own/collaborate in + tasks from their projects
+    if (currentUserRole === 'manager' || currentUserRole === 'director') {
+      // Get user's project IDs (projects they own or collaborate in)
+      const userProjectIds = new Set()
+
+      if (projects.value && projects.value.length > 0) {
+        projects.value.forEach(project => {
+          if (project.ownerId === currentUserId ||
+            project.collaborators?.includes(currentUserId)) {
+            userProjectIds.add(project.projectId)
+          }
+        })
+      }
+
+      console.log(`[${currentUserRole.toUpperCase()}] User's project IDs:`, Array.from(userProjectIds))
+
+      tasks.value = allTasks.filter(task => {
+        // Include if user is directly involved
+        const isDirectlyInvolved = task.ownerId === currentUserId ||
+          task.collaborators?.includes(currentUserId) ||
+          task.creatorId === currentUserId
+
+        // Include if task belongs to user's project
+        const isInUserProject = task.projectId && userProjectIds.has(task.projectId)
+
+        return isDirectlyInvolved || isInUserProject
+      })
+
+      console.log(`[${currentUserRole.toUpperCase()}] Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
+      return
+    }
+
+    // Fallback: if role is not recognized, show only directly involved tasks
+    tasks.value = allTasks.filter(task => {
       return task.ownerId === currentUserId ||
         task.collaborators?.includes(currentUserId) ||
         task.creatorId === currentUserId
-    }) || []
+    })
 
-    console.log(`Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
+    console.log(`[FALLBACK] Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
 
   } catch (error) {
     console.error('Error fetching tasks:', error.response?.status, error.response?.data)
@@ -270,6 +320,7 @@ async function fetchTasks() {
 }
 
 
+
 function openCreateTaskModal() {
   selectedTask.value = null
   isEditing.value = false
@@ -283,21 +334,80 @@ function openCreateTaskModal() {
     // Pass the project ID as a prop or emit an event to set the initial project
   }
 }
+// Also update fetchSubtasks with the same logic
 async function fetchSubtasks() {
   try {
     console.log('Fetching subtasks from:', `${import.meta.env.VITE_BACKEND_API}subtasks`)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
     const data = response.data
 
-    // UPDATED: Filter subtasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
-    subtasks.value = data.subtasks?.filter(subtask => {
+    const currentUserRole = authStore.user?.role
+
+    // Get all subtasks first
+    let allSubtasks = data.subtasks || []
+
+    // STAFF: Can only view subtasks they own or collaborate in
+    if (currentUserRole === 'staff') {
+      subtasks.value = allSubtasks.filter(subtask => {
+        return subtask.ownerId === currentUserId ||
+          subtask.collaborators?.includes(currentUserId) ||
+          subtask.creatorId === currentUserId
+      })
+      console.log(`[STAFF] Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
+      return
+    }
+
+    // MANAGER/DIRECTOR: Can view subtasks they own/collaborate in + subtasks from their project tasks
+    if (currentUserRole === 'manager' || currentUserRole === 'director') {
+      // Get user's project IDs (projects they own or collaborate in)
+      const userProjectIds = new Set()
+
+      if (projects.value && projects.value.length > 0) {
+        projects.value.forEach(project => {
+          if (project.ownerId === currentUserId ||
+            project.collaborators?.includes(currentUserId)) {
+            userProjectIds.add(project.projectId)
+          }
+        })
+      }
+
+      // Get task IDs that belong to user's projects
+      const projectTaskIds = new Set()
+      if (tasks.value && tasks.value.length > 0) {
+        tasks.value.forEach(task => {
+          if (task.projectId && userProjectIds.has(task.projectId)) {
+            projectTaskIds.add(task.taskId)
+          }
+        })
+      }
+
+      console.log(`[${currentUserRole.toUpperCase()}] Project task IDs:`, Array.from(projectTaskIds))
+
+      subtasks.value = allSubtasks.filter(subtask => {
+        // Include if user is directly involved
+        const isDirectlyInvolved = subtask.ownerId === currentUserId ||
+          subtask.collaborators?.includes(currentUserId) ||
+          subtask.creatorId === currentUserId
+
+        // Include if subtask belongs to a task in user's project
+        const isInProjectTask = subtask.taskId && projectTaskIds.has(subtask.taskId)
+
+        return isDirectlyInvolved || isInProjectTask
+      })
+
+      console.log(`[${currentUserRole.toUpperCase()}] Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
+      return
+    }
+
+    // Fallback: if role is not recognized, show only directly involved subtasks
+    subtasks.value = allSubtasks.filter(subtask => {
       return subtask.ownerId === currentUserId ||
         subtask.collaborators?.includes(currentUserId) ||
         subtask.creatorId === currentUserId
-    }) || []
+    })
 
-    console.log(`Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
+    console.log(`[FALLBACK] Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
 
   } catch (error) {
     console.error('Error fetching subtasks:', error.response?.status, error.response?.data)
@@ -377,6 +487,7 @@ function closeCreateEditModal() {
   isEditing.value = false
   isSubtask.value = false
   parentTaskId.value = null
+  parentTask.value = null // NEW: Clear parent task reference
 }
 
 function closeDetailModal() {
@@ -436,10 +547,14 @@ function handleDeleteTask(task) {
 }
 
 function handleCreateSubtask(taskId) {
+  // Find the parent task
+  const task = tasks.value.find(t => t.taskId === taskId)
+
   selectedTask.value = null
   isEditing.value = false
   isSubtask.value = true
   parentTaskId.value = taskId
+  parentTask.value = task // NEW: Store parent task reference
   showCreateEditModal.value = true
 }
 
@@ -799,11 +914,22 @@ onMounted(async () => {
   loading.value = true
   try {
     console.log('📊 Loading initial data...')
-    await fetchUsers() // Load users first
-    await fetchProjects() // Load projects
-    await fetchTasks() // Then tasks
-    await fetchSubtasks() // Then subtasks
-    associateSubtasksWithTasks() // Finally associate them
+
+    // Load in the correct order:
+    // 1. Users first (needed for display names)
+    await fetchUsers()
+
+    // 2. Projects second (needed for filtering tasks/subtasks)
+    await fetchProjects()
+
+    // 3. Tasks third (needed before subtasks for project-based filtering)
+    await fetchTasks()
+
+    // 4. Subtasks last (can now check against tasks for project filtering)
+    await fetchSubtasks()
+
+    // 5. Associate subtasks with tasks
+    associateSubtasksWithTasks()
 
     // Check for project filter from navigation
     handleProjectFilterFromNavigation()
@@ -820,6 +946,7 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
 
 onUnmounted(() => {
   stopAutoRefresh()

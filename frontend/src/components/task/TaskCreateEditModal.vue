@@ -41,15 +41,15 @@
             :class="{ 'error': errors.deadline }" />
           <span v-if="errors.deadline" class="error-message">{{ errors.deadline }}</span>
         </div>
-        <!-- Add this after the Deadline field and before the Project field -->
+
+        <!-- Status field for subtask editing -->
         <div v-if="isSubtask && isEditing" class="form-group">
           <label class="form-label required">Status</label>
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
             <option value="unassigned">Unassigned</option>
             <option value="ongoing">Ongoing</option>
-            <option value="under_review ">Under Review</option>
+            <option value="under_review">Under Review</option>
             <option value="completed">Completed</option>
-            
           </select>
           <span v-if="errors.status" class="error-message">{{ errors.status }}</span>
           <p class="form-hint">Update the current status of this subtask</p>
@@ -58,7 +58,8 @@
         <!-- Project Field (Tasks only) -->
         <div v-if="!isSubtask" class="form-group">
           <label class="form-label">Project</label>
-          <select v-model="formData.projectId" class="form-input" :disabled="loadingProjects">
+          <select v-model="formData.projectId" @change="handleProjectChange" class="form-input"
+            :disabled="loadingProjects">
             <option value="">
               {{ loadingProjects ? 'Loading projects...' : 'Select a project (optional)' }}
             </option>
@@ -74,8 +75,10 @@
               - No projects available
             </span>
           </p>
+          <p v-if="formData.projectId" class="form-hint text-blue-600">
+            ℹ️ Only project collaborators can be added as task collaborators
+          </p>
         </div>
-        <!-- Status is automatically managed based on user role and assignments -->
 
         <!-- Owner Assignment (Managers/Directors only) -->
         <div v-if="canAssignOwner" class="form-group">
@@ -95,17 +98,27 @@
         <!-- Collaborators Field (Only for owners) -->
         <div v-if="canManageCollaborators" class="form-group">
           <label class="form-label">Collaborators</label>
-          <!-- Department info -->
-          <div class="dept-info">
-            <span class="dept-badge">{{ currentUser?.department || 'Unknown Department' }}</span>
-            <span class="dept-text">You can only add collaborators from your department</span>
+
+          <!-- Context info based on task type -->
+          <div class="project-requirement-info">
+            <span v-if="isSubtask" class="requirement-badge info">
+              ℹ️ Subtask - Can add parent task collaborators
+            </span>
+            <span v-else-if="!formData.projectId" class="requirement-badge info">
+              ℹ️ Rogue Task - Can add any user in the system
+            </span>
+            <span v-else class="requirement-badge success">
+              ✓ Project Task - Can add project collaborators
+            </span>
           </div>
+
+          <!-- Collaborators input -->
           <div class="collaborators-input">
             <select v-model="selectedCollaborator" @change="addCollaborator" class="form-input"
               :disabled="availableCollaborators.length === 0">
               <option value="">
-                <span v-if="availableCollaborators.length === 0">No available collaborators in your department</span>
-                <span v-else>Select a collaborator from your department...</span>
+                <span v-if="availableCollaborators.length === 0">No available collaborators</span>
+                <span v-else>Select a collaborator...</span>
               </option>
               <option v-for="user in availableCollaborators" :key="user.uid" :value="user.uid">
                 {{ getUserDisplayName(user) }} ({{ formatRole(user.role) }})
@@ -114,13 +127,25 @@
           </div>
 
           <!-- No collaborators message -->
-          <div v-if="availableCollaborators.length === 0" class="no-collaborators-message">
+          <div v-if="showNoCollaboratorsMessage" class="no-collaborators-message">
             <div class="message-icon">👥</div>
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
-              <div class="message-text">There are no other users in your department ({{ currentUser?.department }}) to
-                add as
-                collaborators.</div>
+              <div class="message-text">
+                <span v-if="isSubtask">
+                  No other parent task collaborators available to add. Only users who are collaborators on the parent
+                  task can
+                  be added.
+                </span>
+                <span v-else-if="formData.projectId">
+                  No other project collaborators available to add. Only users who are collaborators on the selected
+                  project can
+                  be added.
+                </span>
+                <span v-else>
+                  No other users available to add as collaborators.
+                </span>
+              </div>
             </div>
           </div>
 
@@ -154,7 +179,7 @@
             </div>
           </div>
           <p class="form-hint">
-            Only the task owner can modify collaborators. Collaborators must be from the same department.
+            Only the task owner can modify collaborators.
           </p>
         </div>
 
@@ -270,6 +295,10 @@ const props = defineProps({
     type: String,
     default: null
   },
+  parentTask: {
+    type: Object,
+    default: null
+  },
   allUsers: {
     type: Array,
     default: () => []
@@ -283,7 +312,6 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 // Reactive data
-const loading = ref(false)
 const allUsers = ref([])
 const projects = ref([])
 const loadingProjects = ref(false)
@@ -292,12 +320,13 @@ const deadlineInput = ref('')
 const newAttachments = ref([])
 const existingAttachments = ref([])
 const errors = ref({})
+const loading = ref(false)
 
 // Form data
 const formData = ref({
   title: '',
   deadline: 0,
-  status: 'unassigned', // Will be set properly in resetForm based on user role
+  status: 'unassigned',
   notes: '',
   projectId: '',
   ownerId: '',
@@ -312,17 +341,14 @@ const canAssignOwner = computed(() => {
   return userRole === 'manager' || userRole === 'director'
 })
 
-// Check if current user can manage collaborators (only owners can)
 const canManageCollaborators = computed(() => {
   if (!props.isEditing) {
-    // During creation, creator can manage collaborators
     return true
   }
-  // During editing, only owner can manage collaborators
   return props.taskData?.ownerId === currentUser.value?.uid
 })
 
-// UPDATED: Filter subordinate users by same department only
+// UPDATED: Filter subordinate users by same department only (for owner assignment)
 const subordinateUsers = computed(() => {
   const currentUserRole = currentUser.value?.role
   const currentUserDept = currentUser.value?.department
@@ -330,7 +356,7 @@ const subordinateUsers = computed(() => {
   if (!currentUserRole || !currentUserDept) return []
 
   return props.allUsers.filter(user => {
-    // Must be in same department
+    // Must be in same department for owner assignment
     if (user.department !== currentUserDept) return false
 
     if (currentUserRole === 'director') {
@@ -342,26 +368,64 @@ const subordinateUsers = computed(() => {
   })
 })
 
-// UPDATED: Filter collaborators by same department only (regardless of role)
-const availableCollaborators = computed(() => {
-  const currentUserDept = currentUser.value?.department
-  if (!currentUserDept) return []
-
-  return props.allUsers.filter(user =>
-    user.uid !== currentUser.value?.uid &&
-    user.department === currentUserDept &&
-    !formData.value.collaborators.includes(user.uid)
-  )
+// Get the selected project details
+const selectedProject = computed(() => {
+  if (!formData.value.projectId) return null
+  return projects.value.find(p => p.projectId === formData.value.projectId)
 })
 
-// UPDATED: Display collaborators excluding the owner (for UI purposes)
+// UPDATED: Collaborator filtering logic:
+// - Rogue tasks (no project): ALL users in system
+// - Project tasks: Only project collaborators
+// - Subtasks: Only parent task collaborators
+const availableCollaborators = computed(() => {
+  if (!props.isSubtask) {
+    // For tasks without project (rogue tasks): allow ALL users in system
+    if (!formData.value.projectId) {
+      return props.allUsers.filter(user =>
+        user.uid !== currentUser.value?.uid &&
+        !formData.value.collaborators.includes(user.uid)
+      )
+    }
+
+    // For tasks with project: must be project collaborator
+    if (!selectedProject.value) {
+      return []
+    }
+
+    const projectCollaborators = selectedProject.value.collaborators || []
+
+    return props.allUsers.filter(user =>
+      user.uid !== currentUser.value?.uid &&
+      projectCollaborators.includes(user.uid) &&
+      !formData.value.collaborators.includes(user.uid)
+    )
+  } else {
+    // For subtasks: only parent task collaborators can be added
+    if (!props.parentTask || !props.parentTask.collaborators) {
+      return []
+    }
+
+    const parentTaskCollaborators = props.parentTask.collaborators || []
+
+    return props.allUsers.filter(user =>
+      user.uid !== currentUser.value?.uid &&
+      parentTaskCollaborators.includes(user.uid) &&
+      !formData.value.collaborators.includes(user.uid)
+    )
+  }
+})
+
+// Show no collaborators message
+const showNoCollaboratorsMessage = computed(() => {
+  return availableCollaborators.value.length === 0
+})
+
 const displayCollaborators = computed(() => {
   if (!props.isEditing) {
-    // During creation, show all collaborators except current user
     return formData.value.collaborators.filter(id => id !== currentUser.value?.uid)
   }
 
-  // During editing, exclude the owner from display
   const ownerId = formData.value.ownerId || currentUser.value?.uid
   return formData.value.collaborators.filter(id => id !== ownerId)
 })
@@ -392,7 +456,6 @@ async function fetchProjects() {
   } catch (error) {
     console.error('Error fetching projects:', error)
     if (error.response?.status === 404) {
-      // No projects found is acceptable
       projects.value = []
     } else {
       toast.error('Failed to load projects')
@@ -402,41 +465,61 @@ async function fetchProjects() {
   }
 }
 
-// UPDATED: Handle owner change with new status rules
+// UPDATED: Handle project change - clear collaborators based on project rules
+function handleProjectChange() {
+  const ownerId = formData.value.ownerId || currentUser.value?.uid
+  const preservedIds = [ownerId, currentUser.value?.uid]
+
+  if (!formData.value.projectId) {
+    // Project cleared - now it's a rogue task
+    // Keep all existing collaborators (no restrictions for rogue tasks)
+    return
+  }
+
+  // Get new project's collaborators
+  const project = projects.value.find(p => p.projectId === formData.value.projectId)
+  if (!project) return
+
+  const projectCollaborators = project.collaborators || []
+
+  // Keep only collaborators who are also project collaborators, plus owner/creator
+  const originalCount = formData.value.collaborators.length
+  formData.value.collaborators = formData.value.collaborators.filter(id =>
+    projectCollaborators.includes(id) || preservedIds.includes(id)
+  )
+
+  // Show info message if collaborators were removed
+  const removedCount = originalCount - formData.value.collaborators.length
+  if (removedCount > 0 && props.isEditing) {
+    toast.info(`${removedCount} collaborator(s) removed - not in selected project`)
+  }
+}
+
 function handleOwnerChange() {
   const currentUserRole = currentUser.value?.role
   const assignedUser = props.allUsers.find(u => u.uid === formData.value.ownerId)
   const assignedUserRole = assignedUser?.role
   const currentStatus = formData.value.status
 
-  // RULE 1 & 2: Staff users always have 'ongoing' status and cannot change it
   if (currentUserRole === 'staff') {
     formData.value.status = 'ongoing'
     return
   }
 
-  // Only change status if current status is "unassigned"
   if (currentStatus !== 'unassigned') {
-    // Keep current status if it's not unassigned during editing
     return
   }
 
-  // RULE 2: For Directors/Managers during creation or when editing unassigned tasks
   if (formData.value.ownerId) {
-    // Someone is assigned as owner
     if (assignedUserRole === 'staff') {
-      // Assigning to staff = ongoing
       formData.value.status = 'ongoing'
     } else {
-      // Director assigning to manager, or manager to manager = unassigned
       formData.value.status = 'unassigned'
     }
   } else {
-    // No owner assigned = unassigned for directors/managers
     formData.value.status = 'unassigned'
   }
 }
-
 
 function getModalTitle() {
   if (props.isEditing) {
@@ -446,20 +529,18 @@ function getModalTitle() {
 }
 
 function getModalSubtitle() {
-  if (props.isSubtask && props.parentTaskId) {
-    const parentTask = props.allUsers.find(task => task.taskId === props.parentTaskId)
-    return `Adding subtask to task: ${parentTask?.title || 'Parent Task'}`
+  if (props.isSubtask && (props.parentTaskId || props.parentTask)) {
+    const taskTitle = props.parentTask?.title || 'Parent Task'
+    return `Adding subtask to task: ${taskTitle}`
   }
   return props.isEditing ? 'Update the details below' : 'Fill in the details below'
 }
 
 function getUserDisplayName(userOrId) {
   if (typeof userOrId === 'string') {
-    // It's a user ID
     const user = props.allUsers.find(u => u.uid === userOrId)
     return user ? (user.name || user.displayName || user.email || 'Unknown User') : 'Unknown User'
   } else {
-    // It's a user object
     return userOrId.name || userOrId.displayName || userOrId.email || 'Unknown User'
   }
 }
@@ -500,7 +581,6 @@ function addCollaborator() {
   }
 }
 
-// UPDATED: Remove collaborator by ID instead of index
 function removeCollaborator(collaboratorId) {
   const index = formData.value.collaborators.findIndex(id => id === collaboratorId)
   if (index > -1) {
@@ -511,28 +591,17 @@ function removeCollaborator(collaboratorId) {
 function epochToDateTime(epoch) {
   if (!epoch) return ''
   const date = new Date(epoch * 1000)
-  
-  // Get the local timezone offset in minutes
   const timezoneOffset = date.getTimezoneOffset()
-  
-  // Adjust for local timezone
   const localDate = new Date(date.getTime() - (timezoneOffset * 60 * 1000))
-  
-  // Return in the format expected by datetime-local
   return localDate.toISOString().slice(0, 16)
 }
 
 function dateTimeToEpoch(dateTimeLocal) {
   if (!dateTimeLocal) return 0
-  
-  // Create date object from the datetime-local string
-  // Replace dashes and T to ensure it's interpreted as local time
   const localDateString = dateTimeLocal.replace(/-/g, '/').replace('T', ' ')
   const date = new Date(localDateString)
-  
   return Math.floor(date.getTime() / 1000)
 }
-
 
 async function handleFileUpload(event) {
   const files = Array.from(event.target.files)
@@ -553,12 +622,11 @@ async function handleFileUpload(event) {
     }
   }
 
-  // Reset input
   event.target.value = ''
 }
 
 function validateFile(file) {
-  const maxSize = 2 * 1024 * 1024 // 2MB
+  const maxSize = 2 * 1024 * 1024
   if (file.size > maxSize) {
     toast.error(`File "${file.name}" is too large. Maximum size is 2MB.`)
     return false
@@ -592,7 +660,6 @@ function formatFileSize(bytes) {
 }
 
 function getAttachmentName(attachment, index) {
-  // Try to detect file type from base64 data and generate a meaningful name
   const header = attachment.slice(0, 10).toLowerCase()
 
   if (header.includes('ivbor')) return `Image_${index + 1}.png`
@@ -634,7 +701,6 @@ async function handleSubmit() {
   try {
     const submitData = { ...formData.value }
 
-    // Handle attachments
     const allAttachments = [
       ...existingAttachments.value,
       ...newAttachments.value.map(file => file.base64)
@@ -644,54 +710,41 @@ async function handleSubmit() {
       submitData.attachments = allAttachments
     }
 
-    // UPDATED: Enhanced status and ownership logic
     const currentUserRole = currentUser.value?.role
-
-    // Only apply status logic during creation OR during editing if current status is 'unassigned'
     const shouldUpdateStatus = !props.isEditing || submitData.status === 'unassigned'
 
     if (!submitData.ownerId) {
-      // No specific owner assigned - current user becomes owner
       submitData.ownerId = currentUser.value.uid
 
-      // Set status based on user role (only if we should update status)
       if (shouldUpdateStatus) {
         if (currentUserRole === 'staff') {
           submitData.status = 'ongoing'
         } else {
-          // Director/Manager creating unassigned task for themselves
           submitData.status = 'unassigned'
         }
       }
     } else if (shouldUpdateStatus) {
-      // Owner is assigned - only update status if we should
       const assignedUser = props.allUsers.find(u => u.uid === submitData.ownerId)
       const assignedUserRole = assignedUser?.role
 
       if (currentUserRole === 'staff') {
-        // Staff always have ongoing status
         submitData.status = 'ongoing'
       } else if (assignedUserRole === 'staff') {
-        // Assigning to staff = ongoing
         submitData.status = 'ongoing'
       } else {
-        // Assigning to manager/director = unassigned
         submitData.status = 'unassigned'
       }
     }
 
-    // Always ensure owner is in collaborators (but hidden in UI)
     const ownerId = submitData.ownerId || currentUser.value.uid
     if (!submitData.collaborators.includes(ownerId)) {
       submitData.collaborators.push(ownerId)
     }
 
-    // Also ensure creator is in collaborators
     if (!submitData.collaborators.includes(currentUser.value.uid)) {
       submitData.collaborators.push(currentUser.value.uid)
     }
 
-    // Add a small delay for better UX (shows loading state)
     await new Promise(resolve => setTimeout(resolve, 500))
 
     emit('save', submitData)
@@ -711,7 +764,6 @@ function handleBackdropClick() {
 }
 
 function resetForm() {
-  // UPDATED: Set initial status based on user role
   const currentUserRole = currentUser.value?.role
   const initialStatus = currentUserRole === 'staff' ? 'ongoing' : 'unassigned'
 
@@ -735,7 +787,6 @@ function resetForm() {
 watch(() => props.show, (newVal) => {
   if (newVal) {
     if (props.isEditing && props.taskData) {
-      // Populate form with existing data
       formData.value = {
         title: props.taskData.title || '',
         deadline: props.taskData.deadline || 0,
@@ -748,9 +799,7 @@ watch(() => props.show, (newVal) => {
       deadlineInput.value = epochToDateTime(props.taskData.deadline)
       existingAttachments.value = props.taskData.attachments || []
     } else {
-      // Creating new task/subtask - set proper initial status
       resetForm()
-      // Ensure status is set correctly for new creation
       const currentUserRole = currentUser.value?.role
       if (currentUserRole === 'staff') {
         formData.value.status = 'ongoing'
@@ -767,7 +816,6 @@ watch(deadlineInput, (newVal) => {
 
 // Initialize users and projects
 onMounted(async () => {
-  // Load users if not passed as prop
   if (props.allUsers.length === 0) {
     try {
       const users = await usersService.getAllUsers()
@@ -780,7 +828,6 @@ onMounted(async () => {
     allUsers.value = props.allUsers
   }
 
-  // Load projects
   await fetchProjects()
 })
 </script>
@@ -809,7 +856,6 @@ onMounted(async () => {
   position: relative;
 }
 
-/* Loading overlay styles */
 .loading-overlay {
   position: absolute;
   top: 0;
@@ -967,6 +1013,10 @@ onMounted(async () => {
   color: #d97706;
 }
 
+.text-blue-600 {
+  color: #2563eb;
+}
+
 .char-counter {
   font-size: 0.75rem;
   color: #6b7280;
@@ -978,29 +1028,36 @@ onMounted(async () => {
   margin-bottom: 0.75rem;
 }
 
-.dept-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.project-requirement-info {
   margin-bottom: 0.75rem;
-  padding: 0.5rem;
-  background-color: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 0.5rem;
 }
 
-.dept-badge {
-  background-color: #2563eb;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 8px;
+.requirement-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
 }
 
-.dept-text {
-  font-size: 0.75rem;
-  color: #0369a1;
+.requirement-badge.warning {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fbbf24;
+}
+
+.requirement-badge.info {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #3b82f6;
+}
+
+.requirement-badge.success {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #10b981;
 }
 
 .no-collaborators-message {
