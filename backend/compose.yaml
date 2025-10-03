@@ -10,6 +10,7 @@ services:
       - PROJECT_SERVICE_URL=http://project-service:6001
       - TASK_SERVICE_URL=http://task-service:6002
       - SUBTASK_SERVICE_URL=http://subtask-service:6003
+      - NOTIFICATION_SERVICE_URL=http://notification-service:6004
 
 
     command: >
@@ -65,6 +66,18 @@ services:
       dockerfile: Dockerfile
     ports:
       - "6003:6003"
+    volumes:
+      - ./firebase-cred.json:/app/firebase.json:ro
+    environment:
+      JSON_PATH: "/app/firebase.json"
+      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "6004:6004"
     volumes:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
