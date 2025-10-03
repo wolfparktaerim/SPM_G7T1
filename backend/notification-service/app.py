@@ -310,19 +310,19 @@ def start_scheduler():
     """Initialize and start the background scheduler"""
     scheduler = BackgroundScheduler()
 
-    # Schedule the task deadline checker to run every hour
-    # You can adjust the interval as needed (e.g., every 30 minutes, every 6 hours)
+    # Schedule the task deadline checker to run every 5 seconds for near real-time notifications
+    # This ensures users get notified immediately when tasks approach their deadlines
     scheduler.add_job(
         func=check_task_deadlines,
         trigger="interval",
-        hours=1,
+        seconds=5,
         id="task_deadline_checker",
         name="Check task deadlines and send notifications",
         replace_existing=True
     )
 
     scheduler.start()
-    logger.info("Scheduler started. Task deadline checker will run every hour.")
+    logger.info("Scheduler started. Task deadline checker will run every 5 seconds.")
 
     # Also run once on startup
     check_task_deadlines()
