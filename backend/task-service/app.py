@@ -86,14 +86,12 @@ def calculate_new_start_date(old_start_date, schedule, custom_schedule=None):
     return new_start_ts
 
 def create_task_with_params(task):
-    """Create a new task with adjusted start_date and active flag."""
     now = current_timestamp()
     new_start_date = calculate_new_start_date(
         task.get("start_date", now),
         task.get("schedule"),
         task.get("custom_schedule")
     )
-
     active_flag = True if new_start_date <= now else False
 
     new_task_ref = db.reference("tasks").push()
@@ -110,6 +108,48 @@ def create_task_with_params(task):
     })
 
     new_task_ref.set(new_task_data)
+
+    # --- Load all subtasks and filter manually to avoid requiring an index ---
+    original_task_id = task.get("taskId")
+    subtasks_ref = db.reference("subtasks")
+    all_subtasks = subtasks_ref.get() or {}
+
+    # Filter locally for subtasks matching the original task ID
+    filtered_subtasks = {
+        subtask_id: subtask
+        for subtask_id, subtask in all_subtasks.items()
+        if subtask.get("taskId") == original_task_id
+    }
+
+    for subtask_id, subtask in filtered_subtasks.items():
+        # Prepare new subtask based on the old one
+        new_subtask = dict(subtask)
+        # Remove old subtask id to generate new one
+        new_subtask.pop("subTaskId", None)
+
+        # Calculate the new start date for the subtask
+        new_subtask_start_date = calculate_new_start_date(
+            subtask.get("start_date", now),
+            subtask.get("schedule") if "schedule" in subtask else None,
+            subtask.get("custom_schedule") if "custom_schedule" in subtask else None
+        )
+        new_subtask["start_date"] = new_subtask_start_date
+        new_subtask["taskId"] = new_task_ref.key
+        new_subtask["status"] = "ongoing"
+        new_subtask["active"] = True if new_subtask_start_date <= now else False
+        new_subtask["createdAt"] = now
+        new_subtask["updatedAt"] = now
+
+        # Conditionally include schedule fields only if they existed in the original subtask
+        if "schedule" not in subtask:
+            new_subtask.pop("schedule", None)
+        if "custom_schedule" not in subtask:
+            new_subtask.pop("custom_schedule", None)
+
+        # Push the new subtask and assign its new ID
+        new_subtask_ref = subtasks_ref.push()
+        new_subtask["subTaskId"] = new_subtask_ref.key
+        new_subtask_ref.set(new_subtask)
 
 @app.route("/tasks", methods=["POST"])
 def create_task():
