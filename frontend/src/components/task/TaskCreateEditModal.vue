@@ -41,7 +41,84 @@
             :class="{ 'error': errors.deadline }" />
           <span v-if="errors.deadline" class="error-message">{{ errors.deadline }}</span>
         </div>
-        <!-- Add this after the Deadline field and before the Project field -->
+
+        <!-- Priority Field -->
+        <div class="form-group">
+          <label class="form-label">Priority (1-10)</label>
+          <div class="priority-selector">
+            <input v-model.number="formData.priority" type="range" min="1" max="10" step="1" class="priority-slider" />
+            <div class="priority-display" :class="getPriorityDisplayClass(formData.priority)">
+              <span class="priority-icon">⭐</span>
+              <span class="priority-value">{{ formData.priority }}</span>
+              <span class="priority-label">{{ getPriorityLabel(formData.priority) }}</span>
+            </div>
+          </div>
+          <div class="priority-legend">
+            <span class="legend-item legend-low">1-3: Low</span>
+            <span class="legend-item legend-medium">4-6: Medium</span>
+            <span class="legend-item legend-high">7-9: High</span>
+            <span class="legend-item legend-critical">10: Critical</span>
+          </div>
+        </div>
+
+        <!-- Recurring Options -->
+        <div class="form-group">
+          <label class="form-label">
+            <input v-model="formData.scheduled" type="checkbox" class="checkbox-input" />
+            <span class="checkbox-label">Make this {{ isSubtask ? 'subtask' : 'task' }} recurring</span>
+          </label>
+          <p class="form-hint">
+            Recurring {{ isSubtask ? 'subtasks' : 'tasks' }} will automatically create a new instance when marked as
+            completed
+          </p>
+        </div>
+
+        <!-- Schedule Type (shown when recurring is enabled) -->
+        <transition name="slide-down">
+          <div v-if="formData.scheduled" class="recurring-options">
+            <div class="form-group">
+              <label class="form-label required">Recurrence Pattern</label>
+              <select v-model="formData.schedule" required class="form-input">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="custom">Custom (specify days)</option>
+              </select>
+              <p class="form-hint">How often should this {{ isSubtask ? 'subtask' : 'task' }} repeat?</p>
+            </div>
+
+            <!-- Custom Schedule Days -->
+            <div v-if="formData.schedule === 'custom'" class="form-group">
+              <label class="form-label required">Repeat every (days)</label>
+              <input v-model.number="formData.custom_schedule" type="number" min="1" max="365" required
+                placeholder="Enter number of days" class="form-input" :class="{ 'error': errors.custom_schedule }" />
+              <span v-if="errors.custom_schedule" class="error-message">{{ errors.custom_schedule }}</span>
+              <p class="form-hint">
+                The {{ isSubtask ? 'subtask' : 'task' }} will repeat every {{ formData.custom_schedule || 'X' }} days
+                after completion
+              </p>
+            </div>
+
+            <!-- Recurring Info Box -->
+            <div class="recurring-info-box">
+              <div class="info-icon">ℹ️</div>
+              <div class="info-content">
+                <div class="info-title">How Recurring Works</div>
+                <ul class="info-list">
+                  <li>A new {{ isSubtask ? 'subtask' : 'task' }} is created automatically when you mark this one as
+                    <strong>Completed</strong>
+                  </li>
+                  <li>The deadline will be calculated based on your selected recurrence pattern</li>
+                  <li>The new {{ isSubtask ? 'subtask' : 'task' }} will maintain the same time offset as the original
+                    (e.g., if original had 2 days to complete, new one will too)</li>
+                  <li>All collaborators, notes, and settings will be copied to the new instance</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Status Field -->
         <div v-if="isSubtask && isEditing" class="form-group">
           <label class="form-label required">Status</label>
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
@@ -49,7 +126,7 @@
             <option value="ongoing">Ongoing</option>
             <option value="under_review ">Under Review</option>
             <option value="completed">Completed</option>
-            
+
           </select>
           <span v-if="errors.status" class="error-message">{{ errors.status }}</span>
           <p class="form-hint">Update the current status of this subtask</p>
@@ -115,7 +192,7 @@
 
           <!-- No collaborators message -->
           <div v-if="availableCollaborators.length === 0" class="no-collaborators-message">
-            <div class="message-icon">👥</div>
+            <div class="message-icon">ðŸ‘¥</div>
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
               <div class="message-text">There are no other users in your department ({{ currentUser?.department }}) to
@@ -402,6 +479,23 @@ async function fetchProjects() {
   }
 }
 
+function getPriorityLabel(priority) {
+  const p = priority || 5
+  if (p >= 10) return 'Critical'
+  if (p >= 7) return 'High'
+  if (p >= 4) return 'Medium'
+  return 'Low'
+}
+
+function getPriorityDisplayClass(priority) {
+  const p = priority || 5
+  if (p >= 10) return 'priority-display-critical'
+  if (p >= 7) return 'priority-display-high'
+  if (p >= 4) return 'priority-display-medium'
+  return 'priority-display-low'
+}
+
+
 // UPDATED: Handle owner change with new status rules
 function handleOwnerChange() {
   const currentUserRole = currentUser.value?.role
@@ -511,25 +605,25 @@ function removeCollaborator(collaboratorId) {
 function epochToDateTime(epoch) {
   if (!epoch) return ''
   const date = new Date(epoch * 1000)
-  
+
   // Get the local timezone offset in minutes
   const timezoneOffset = date.getTimezoneOffset()
-  
+
   // Adjust for local timezone
   const localDate = new Date(date.getTime() - (timezoneOffset * 60 * 1000))
-  
+
   // Return in the format expected by datetime-local
   return localDate.toISOString().slice(0, 16)
 }
 
 function dateTimeToEpoch(dateTimeLocal) {
   if (!dateTimeLocal) return 0
-  
+
   // Create date object from the datetime-local string
   // Replace dashes and T to ensure it's interpreted as local time
   const localDateString = dateTimeLocal.replace(/-/g, '/').replace('T', ' ')
   const date = new Date(localDateString)
-  
+
   return Math.floor(date.getTime() / 1000)
 }
 
@@ -623,6 +717,16 @@ function validateForm() {
     errors.value.deadline = 'Deadline is required'
   }
 
+  if (formData.value.priority < 1 || formData.value.priority > 10) {
+    errors.value.priority = 'Priority must be between 1 and 10'
+  }
+
+  if (formData.value.scheduled && formData.value.schedule === 'custom') {
+    if (!formData.value.custom_schedule || formData.value.custom_schedule < 1) {
+      errors.value.custom_schedule = 'Custom schedule must be at least 1 day'
+    }
+  }
+
   return Object.keys(errors.value).length === 0
 }
 
@@ -711,7 +815,6 @@ function handleBackdropClick() {
 }
 
 function resetForm() {
-  // UPDATED: Set initial status based on user role
   const currentUserRole = currentUser.value?.role
   const initialStatus = currentUserRole === 'staff' ? 'ongoing' : 'unassigned'
 
@@ -722,7 +825,12 @@ function resetForm() {
     notes: '',
     projectId: '',
     ownerId: '',
-    collaborators: []
+    collaborators: [],
+    priority: 5, // NEW: Default priority
+    scheduled: false, // NEW: Recurring disabled by default
+    schedule: 'daily', // NEW: Default schedule
+    custom_schedule: null, // NEW: Custom days
+    start_date: Math.floor(Date.now() / 1000) // NEW: Current timestamp
   }
   deadlineInput.value = ''
   newAttachments.value = []
@@ -735,7 +843,6 @@ function resetForm() {
 watch(() => props.show, (newVal) => {
   if (newVal) {
     if (props.isEditing && props.taskData) {
-      // Populate form with existing data
       formData.value = {
         title: props.taskData.title || '',
         deadline: props.taskData.deadline || 0,
@@ -743,14 +850,17 @@ watch(() => props.show, (newVal) => {
         notes: props.taskData.notes || '',
         projectId: props.taskData.projectId || '',
         ownerId: props.taskData.ownerId || '',
-        collaborators: [...(props.taskData.collaborators || [])]
+        collaborators: [...(props.taskData.collaborators || [])],
+        priority: props.taskData.priority || 5, // NEW
+        scheduled: props.taskData.scheduled || false, // NEW
+        schedule: props.taskData.schedule || 'daily', // NEW
+        custom_schedule: props.taskData.custom_schedule || null, // NEW
+        start_date: props.taskData.start_date || Math.floor(Date.now() / 1000) // NEW
       }
       deadlineInput.value = epochToDateTime(props.taskData.deadline)
       existingAttachments.value = props.taskData.attachments || []
     } else {
-      // Creating new task/subtask - set proper initial status
       resetForm()
-      // Ensure status is set correctly for new creation
       const currentUserRole = currentUser.value?.role
       if (currentUserRole === 'staff') {
         formData.value.status = 'ongoing'
@@ -786,6 +896,252 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Priority Selector Styles */
+.priority-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.priority-slider {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right,
+      #3b82f6 0%,
+      #3b82f6 30%,
+      #f59e0b 30%,
+      #f59e0b 60%,
+      #f97316 60%,
+      #f97316 90%,
+      #dc2626 90%,
+      #dc2626 100%);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.priority-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.priority-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.priority-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.priority-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.priority-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 2px solid;
+  transition: all 0.3s ease;
+}
+
+.priority-icon {
+  font-size: 1.5rem;
+}
+
+.priority-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.priority-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.priority-display-low {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+  border-color: #3b82f6;
+}
+
+.priority-display-medium {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.priority-display-high {
+  background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+  color: #9a3412;
+  border-color: #f97316;
+}
+
+.priority-display-critical {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  border-color: #dc2626;
+  animation: pulse-critical 2s ease-in-out infinite;
+}
+
+@keyframes pulse-critical {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+  }
+}
+
+.priority-legend {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.legend-item {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.legend-low {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.legend-medium {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.legend-high {
+  background-color: #fed7aa;
+  color: #9a3412;
+}
+
+.legend-critical {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Checkbox Styles */
+.checkbox-input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.checkbox-label {
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* Recurring Options Styles */
+.recurring-options {
+  padding: 1.5rem;
+  background-color: #f0f9ff;
+  border: 2px solid #bae6fd;
+  border-radius: 0.75rem;
+  margin-top: 1rem;
+}
+
+.recurring-info-box {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+}
+
+.info-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e40af;
+  margin-bottom: 0.5rem;
+}
+
+.info-list {
+  font-size: 0.8125rem;
+  color: #1e3a8a;
+  line-height: 1.6;
+  margin-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.info-list li {
+  margin-bottom: 0.375rem;
+}
+
+.info-list strong {
+  font-weight: 600;
+}
+
+/* Slide down animation for recurring options */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+  max-height: 0;
+  overflow: hidden;
+}
+
+.slide-down-enter-to,
+.slide-down-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 500px;
+}
+
+
 .modal-overlay {
   position: fixed;
   inset: 0;
