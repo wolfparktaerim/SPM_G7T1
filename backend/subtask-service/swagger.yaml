@@ -95,6 +95,12 @@ components:
           format: int64
           description: Start date of the subtask in epoch timestamp, defaults to creation date unless specified
           example: 1727092800
+        reminderInterval:
+          type: array
+          items:
+            type: integer
+          description: List of reminder intervals in days for the subtask
+          example: [1, 3, 7]
 
     CreateSubTaskRequest:
       type: object
@@ -170,6 +176,12 @@ components:
           format: int64
           description: Start date in epoch timestamp, defaults to creation date if omitted
           example: 1727092800
+        reminderInterval:
+          type: array
+          items:
+            type: integer
+          description: List of reminder intervals in days for the subtask
+          example: [1, 3, 7]
 
     UpdateSubTaskRequest:
       type: object
@@ -223,6 +235,12 @@ components:
           format: int64
           description: Start date in epoch timestamp
           example: 1727092800
+        reminderInterval:
+          type: array
+          items:
+            type: integer
+          description: List of reminder intervals in days for the subtask
+          example: [1, 3, 7]
 
     ErrorResponse:
       type: object
