@@ -68,7 +68,7 @@
                   <select v-model="selectedCollaborator"
                     class="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
                     <option value="">Select a collaborator...</option>
-                    <option v-for="user in allUsers" :key="user.uid" :value="user.uid">
+                    <option v-for="user in availableCollaboratorsForCreate" :key="user.uid" :value="user.uid">
                       {{ user.name }} ({{ user.email }})
                     </option>
                   </select>
@@ -593,15 +593,27 @@ const projects = ref([]);
 const projectTasks = reactive({});  // tasks by projectId
 const message = ref('');
 const error = ref(false);
+const selectedCollaborator = ref('');
+const assignableUsers = ref([]);
+const newlyAddedCollaborators = ref([]);
+const today = new Date().toISOString().split('T')[0] // gives "YYYY-MM-DD"
 
 // Form state
 const showCreateForm = ref(false);
 const newProject = ref({ title: '', deadline: '', description: '', collaborators: [] });
 const collaborators = ref([]);
 const allUsers = ref([]);
+const viewingProject = ref(null);
+const editingProject = ref(null);
+
 
 // --- Helper functions ---
 const isOwner = (project) => project.ownerId && currentUser.value && project.ownerId === currentUser.value;
+
+const availableCollaboratorsForCreate = computed(() => {
+  return allUsers.value.filter(user => user.uid !== currentUser.value);
+});
+
 
 // Get tasks for a project
 function getProjectTasks(projectId) {
@@ -610,17 +622,7 @@ function getProjectTasks(projectId) {
 
 // --- Computed: filter projects based on role ---
 const projectsToShow = computed(() => {
-  if (currentRole.value === "director") {
-    return projects.value.filter(
-      project => project.department === currentUserDepartment.value
-    );
-  } else {
-    return projects.value.filter(
-      project =>
-        project.ownerId === currentUser.value ||
-        (project.collaborators && project.collaborators.includes(currentUser.value))
-    );
-  }
+  return projects.value;
 });
 
 async function fetchAllUsers() {
@@ -673,30 +675,16 @@ async function fetchProjects() {
     let res, data;
 
     if (currentRole.value === "director") {
-      // Step 1: Fetch all projects
-      res = await fetch(`${API_BASE}/allssss`); // <-- updated endpoint
-      if (!res.ok) throw new Error("Failed to fetch projects");
+      // Directors: Fetch projects by their department using the backend endpoint
+      const directorDept = currentUserDepartment.value || "unknown";
+      res = await fetch(`${API_BASE}/department/${directorDept}`);
+      if (!res.ok) throw new Error("Failed to fetch department projects");
       data = await res.json();
-      const allProjects = data.projects || [];
-
-      console.log("All projects retrieved:", allProjects.length);
-
-      // Step 2: Log all departments
-      const departments = new Set();
-      allProjects.forEach(p => {
-        const dept = (p.department || "unknown").toLowerCase();
-        departments.add(dept);
-      });
-      console.log("Departments found:", Array.from(departments));
-
-      // Step 3: Filter projects by director's department
-      const directorDept = (currentUserDepartment.value || "unknown").toLowerCase();
-      projects.value = allProjects.filter(
-        p => ((p.department || "unknown").toLowerCase() === directorDept)
-      );
-
+      projects.value = data.projects || [];
+      
+      console.log(`Director department: ${directorDept}, Projects found: ${projects.value.length}`);
     } else {
-      // Non-directors see only projects they own/collaborate on
+      // Non-directors: Fetch only projects they own or collaborate on
       res = await fetch(`${API_BASE}/${currentUser.value}`);
       if (!res.ok) throw new Error("Failed to fetch projects");
       data = await res.json();
@@ -720,6 +708,7 @@ async function fetchProjects() {
     loading.value = false;
   }
 }
+
 
 // --- Handle creating a project ---
 async function handleCreate() {
@@ -820,6 +809,11 @@ function addCollaborator() {
       if (!editingProject.value.collaborators.includes(selectedCollaborator.value)) {
         editingProject.value.collaborators.push(selectedCollaborator.value);
         newlyAddedCollaborators.value.push(selectedCollaborator.value);
+        
+        console.log('Added collaborator:', selectedCollaborator.value);
+        console.log('Current collaborators:', editingProject.value.collaborators);
+        console.log('Newly added:', newlyAddedCollaborators.value);
+        
         selectedCollaborator.value = '';
         fetchAvailableUsers(editingProject.value);
       }
@@ -871,30 +865,38 @@ function fetchAssignableUsers(currentUserId) {
   }
 }
 
-
 async function saveProject() {
   if (!currentUser.value) return;
-
+  
+  console.log('Saving project...');
+  console.log('Newly added collaborators:', newlyAddedCollaborators.value);
+  console.log('Full collaborators list:', editingProject.value.collaborators);
+  
   try {
     const currentUserRole = usersMap[currentUser.value]?.role;
-
+    
+    const payload = {
+      userid: currentUser.value,
+      role: currentUserRole,
+      projectId: editingProject.value.projectId,
+      title: editingProject.value.title,
+      deadline: editingProject.value.deadline,
+      description: editingProject.value.description,
+      collaborators: newlyAddedCollaborators.value, // Send only newly added
+      ownerId: editingProject.value.ownerId,
+    };
+    
+    console.log('Sending payload:', payload);
+    
     const res = await fetch(`${API_BASE}/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userid: currentUser.value,
-        role: currentUserRole,
-        projectId: editingProject.value.projectId,
-        title: editingProject.value.title,
-        deadline: editingProject.value.deadline,
-        description: editingProject.value.description,
-        collaborators: newlyAddedCollaborators.value,
-        ownerId: editingProject.value.ownerId,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
-
+    console.log('Server response:', data);
+    
     if (!res.ok) {
       throw new Error(data.error || "Failed to update project");
     }
@@ -902,21 +904,23 @@ async function saveProject() {
     message.value = "Project updated successfully!";
     error.value = false;
     closeEditModal();
-    await fetchProjects();
-
+    await fetchProjects(); // Refresh to see updates
+    
     setTimeout(() => {
       message.value = '';
     }, 5000);
-
+    
   } catch (err) {
     error.value = true;
     message.value = err.message;
+    console.error('Save error:', err);
     setTimeout(() => {
       message.value = '';
       error.value = false;
     }, 5000);
   }
 }
+
 
 // Navigation functions
 function viewAllProjectTasks(project) {
