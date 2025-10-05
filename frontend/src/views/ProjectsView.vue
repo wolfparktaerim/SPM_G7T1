@@ -548,8 +548,9 @@
   </div>
 </template>
 
+
 <script setup>
-import { ref, computed, onMounted, reactive, watch } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { auth } from '@/firebase/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -573,58 +574,55 @@ import {
   ChevronRight
 } from 'lucide-vue-next';
 
-// Composables
+// --- Composables ---
 const router = useRouter();
 
-// API endpoints
+// --- API endpoints ---
 const API_BASE = `${import.meta.env.VITE_BACKEND_API}project`;
 const TASK_API_BASE = `${import.meta.env.VITE_BACKEND_API}tasks`;
 
-// Reactive state
+// --- Reactive state ---
 const currentUser = ref(null);
-const currentRole = ref("manager");
+const currentRole = ref(""); // manager / director / staff
+const currentUserDepartment = ref(""); // needed for director filtering
 const usersMap = reactive({});
 const availableUsers = ref({});
 const loading = ref(false);
 const loadingTasks = reactive({});
+const projects = ref([]);
+const projectTasks = reactive({});  // tasks by projectId
+const message = ref('');
+const error = ref(false);
 
 // Form state
 const showCreateForm = ref(false);
-const projects = ref([]);
-const projectTasks = reactive({});  // Store tasks by project ID
-const message = ref('');
-const error = ref(false);
 const newProject = ref({ title: '', deadline: '', description: '', collaborators: [] });
-const editingProject = ref(null);
-const viewingProject = ref(null);
-const searchQuery = ref('');
-const filterOption = ref('');
 const collaborators = ref([]);
 const allUsers = ref([]);
-const selectedCollaborator = ref('');
-const assignableUsers = ref([]);
-const newlyAddedCollaborators = ref([]);
-const today = new Date().toISOString().split('T')[0] // gives "YYYY-MM-DD"
 
-// Helper functions
-const isOwner = (project) => {
-  return project.ownerId && currentUser.value && project.ownerId === currentUser.value;
-};
+// --- Helper functions ---
+const isOwner = (project) => project.ownerId && currentUser.value && project.ownerId === currentUser.value;
 
-// Initialize
-onMounted(() => {
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      currentUser.value = user.uid;
-      fetchProjects();
-      fetchAllUsers();
-    } else {
-      router.push('/authentication');
-    }
-  });
+// Get tasks for a project
+function getProjectTasks(projectId) {
+  return projectTasks[projectId] || [];
+}
+
+// --- Computed: filter projects based on role ---
+const projectsToShow = computed(() => {
+  if (currentRole.value === "director") {
+    return projects.value.filter(
+      project => project.department === currentUserDepartment.value
+    );
+  } else {
+    return projects.value.filter(
+      project =>
+        project.ownerId === currentUser.value ||
+        (project.collaborators && project.collaborators.includes(currentUser.value))
+    );
+  }
 });
 
-// Fetch data functions
 async function fetchAllUsers() {
   try {
     const users = await usersService.getAllUsers();
@@ -637,40 +635,12 @@ async function fetchAllUsers() {
   }
 }
 
-async function fetchProjects() {
-  if (!currentUser.value) return;
-  loading.value = true;
-  try {
-    const res = await fetch(`${API_BASE}/${currentUser.value}`);
-    if (!res.ok) throw new Error("Failed to fetch projects");
-    const data = await res.json();
-    projects.value = data.projects || [];
-
-    // Fetch tasks for each project
-    for (const project of projects.value) {
-      await fetchProjectTasks(project.projectId);
-      fetchAvailableUsers(project);
-    }
-  } catch (err) {
-    error.value = true;
-    message.value = err.message;
-    setTimeout(() => {
-      message.value = '';
-      error.value = false;
-    }, 5000);
-  } finally {
-    loading.value = false;
-  }
-}
-
+// --- Fetch tasks for a project ---
 async function fetchProjectTasks(projectId) {
   loadingTasks[projectId] = true;
   try {
-    // Fetch tasks by project ID from the actual task service API
     const res = await fetch(`${TASK_API_BASE}/project/${projectId}`);
-    if (!res.ok) {
-      throw new Error("Failed to fetch tasks");
-    }
+    if (!res.ok) throw new Error("Failed to fetch tasks");
     const data = await res.json();
     projectTasks[projectId] = data.tasks || [];
   } catch (err) {
@@ -681,10 +651,7 @@ async function fetchProjectTasks(projectId) {
   }
 }
 
-function getProjectTasks(projectId) {
-  return projectTasks[projectId] || [];
-}
-
+// --- Fetch available users for collaboration ---
 async function fetchAvailableUsers(project) {
   try {
     const res = await fetch(`${API_BASE}/users/available-for-collaboration/${project.projectId}`);
@@ -697,7 +664,64 @@ async function fetchAvailableUsers(project) {
   }
 }
 
-// Project operations
+// --- Fetch projects (role-based) ---
+async function fetchProjects() {
+  if (!currentUser.value) return;
+  loading.value = true;
+
+  try {
+    let res, data;
+
+    if (currentRole.value === "director") {
+      // Step 1: Fetch all projects
+      res = await fetch(`${API_BASE}/allssss`); // <-- updated endpoint
+      if (!res.ok) throw new Error("Failed to fetch projects");
+      data = await res.json();
+      const allProjects = data.projects || [];
+
+      console.log("All projects retrieved:", allProjects.length);
+
+      // Step 2: Log all departments
+      const departments = new Set();
+      allProjects.forEach(p => {
+        const dept = (p.department || "unknown").toLowerCase();
+        departments.add(dept);
+      });
+      console.log("Departments found:", Array.from(departments));
+
+      // Step 3: Filter projects by director's department
+      const directorDept = (currentUserDepartment.value || "unknown").toLowerCase();
+      projects.value = allProjects.filter(
+        p => ((p.department || "unknown").toLowerCase() === directorDept)
+      );
+
+    } else {
+      // Non-directors see only projects they own/collaborate on
+      res = await fetch(`${API_BASE}/${currentUser.value}`);
+      if (!res.ok) throw new Error("Failed to fetch projects");
+      data = await res.json();
+      projects.value = data.projects || [];
+    }
+
+    // Fetch tasks and available users for each project
+    for (const project of projects.value) {
+      await fetchProjectTasks(project.projectId);
+      fetchAvailableUsers(project);
+    }
+
+  } catch (err) {
+    error.value = true;
+    message.value = err.message;
+    setTimeout(() => {
+      message.value = '';
+      error.value = false;
+    }, 5000);
+  } finally {
+    loading.value = false;
+  }
+}
+
+// --- Handle creating a project ---
 async function handleCreate() {
   if (!currentUser.value) return;
   try {
@@ -719,27 +743,44 @@ async function handleCreate() {
     message.value = "Project created successfully!";
     error.value = false;
     projects.value.push(data.project);
-
-    // Initialize tasks for new project
     projectTasks[data.project.projectId] = [];
-
-    newProject.value = { title: '', deadline: '', description: '' };
+    newProject.value = { title: '', deadline: '', description: '', collaborators: [] };
     collaborators.value = [];
     showCreateForm.value = false;
     fetchAvailableUsers(data.project);
 
-    setTimeout(() => {
-      message.value = '';
-    }, 5000);
+    setTimeout(() => { message.value = ''; }, 5000);
+
   } catch (err) {
     error.value = true;
     message.value = err.message;
-    setTimeout(() => {
-      message.value = '';
-      error.value = false;
-    }, 5000);
+    setTimeout(() => { message.value = ''; error.value = false; }, 5000);
   }
 }
+
+// --- Initialization ---
+onMounted(() => {
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      currentUser.value = user.uid;
+
+      try {
+        const userInfo = await usersService.getUserById(user.uid);
+        currentRole.value = userInfo.role;
+        currentUserDepartment.value = userInfo.department || "";
+
+        fetchProjects();
+        fetchAllUsers();
+      } catch (err) {
+        console.error("Failed to fetch user info:", err);
+      }
+
+    } else {
+      router.push('/authentication');
+    }
+  });
+});
+
 
 // Modal functions
 function openEditModal(project) {
@@ -993,25 +1034,7 @@ function getStatusBadgeClass(status) {
 }
 
 // Computed properties
-const projectsToShow = computed(() => {
-  let filtered = projects.value;
 
-  if (searchQuery.value) {
-    filtered = filtered.filter(p =>
-      p.title.toLowerCase().includes(searchQuery.value.toLowerCase())
-    );
-  }
-
-  if (filterOption.value === "deadline") {
-    filtered = [...filtered].sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
-  } else if (filterOption.value === "createdAt") {
-    filtered = [...filtered].sort((a, b) => new Date(a.creationDate) - new Date(b.creationDate));
-  } else if (filterOption.value === "owner") {
-    filtered = filtered.filter(p => p.ownerId === currentUser.value);
-  }
-
-  return filtered;
-});
 </script>
 
 <style scoped>
