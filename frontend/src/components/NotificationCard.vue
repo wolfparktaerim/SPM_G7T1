@@ -101,19 +101,6 @@
           />
         </div>
       </div>
-
-      <!-- Footer -->
-      <div
-        v-if="!loading && !error && displayedNotifications.length > 0"
-        class="p-4 bg-gray-50 border-t border-gray-200"
-      >
-        <button
-          @click="handleViewAll"
-          class="w-full text-sm font-medium text-blue-600 hover:text-blue-700 py-2 rounded-lg hover:bg-blue-50 transition-all duration-200"
-        >
-          View all notifications
-        </button>
-      </div>
     </div>
   </transition>
 </template>
@@ -270,12 +257,6 @@ const handleMarkAllAsRead = async () => {
     console.error('Failed to mark all as read:', err)
     toast.error('Failed to mark all notifications as read')
   }
-}
-
-const handleViewAll = () => {
-  emit('update:show', false)
-  // Navigate to a dedicated notifications page if you have one
-  // router.push('/notifications')
 }
 
 // Start auto-refresh when card is shown

@@ -64,7 +64,7 @@
               <!-- Unread count badge -->
               <span
                 v-if="unreadNotificationCount > 0"
-                class="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full ring-2 ring-white animate-pulse"
+                class="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full ring-2 ring-white"
               >
                 {{ unreadNotificationCount > 9 ? '9+' : unreadNotificationCount }}
               </span>
@@ -303,6 +303,7 @@ import ConfirmationModal from '@/components/ConfirmationModal.vue'
 import NotificationCard from '@/components/NotificationCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
+import { notificationService } from '@/services/notificationService'
 
 // Auth store
 const authStore = useAuthStore()
@@ -321,6 +322,7 @@ const showMobileMenu = ref(false)
 const showLogoutConfirmation = ref(false)
 const isLoggingOut = ref(false)
 const unreadNotificationCount = ref(0)
+let unreadCountInterval = null
 
 // Navigation items with routes
 const navigationItems = [
@@ -442,6 +444,41 @@ const toggleUserMenu = () => {
   }
 }
 
+// Fetch unread notification count
+const fetchUnreadCount = async () => {
+  if (!authStore.user?.uid) {
+    unreadNotificationCount.value = 0
+    return
+  }
+
+  try {
+    const { count } = await notificationService.getUnreadNotifications(authStore.user.uid)
+    unreadNotificationCount.value = count
+  } catch (error) {
+    console.error('Failed to fetch unread count:', error)
+    // Don't update count on error to avoid flickering
+  }
+}
+
+// Start auto-refresh for unread count
+const startUnreadCountRefresh = () => {
+  // Fetch immediately on start
+  fetchUnreadCount()
+
+  // Refresh every 5 seconds to sync with backend scheduler
+  unreadCountInterval = setInterval(() => {
+    fetchUnreadCount()
+  }, 5000)
+}
+
+// Stop auto-refresh
+const stopUnreadCountRefresh = () => {
+  if (unreadCountInterval) {
+    clearInterval(unreadCountInterval)
+    unreadCountInterval = null
+  }
+}
+
 // Handle unread count change from notification card
 const handleUnreadCountChange = (count) => {
   unreadNotificationCount.value = count
@@ -470,11 +507,19 @@ const handleClickOutside = (event) => {
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('click', handleClickOutside)
+
+  // Start auto-refresh for unread count if user is authenticated
+  if (authStore.isAuthenticated) {
+    startUnreadCountRefresh()
+  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('click', handleClickOutside)
+
+  // Stop auto-refresh on component unmount
+  stopUnreadCountRefresh()
 })
 </script>
 
