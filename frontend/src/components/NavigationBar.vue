@@ -272,7 +272,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   CheckSquare, User, Settings, LogOut, ChevronDown, ChevronRight,
-  Home, FolderOpen, ListChecks, UserCircle
+  Home, FolderOpen, ListChecks, UserCircle, Calendar,
 } from 'lucide-vue-next'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -299,6 +299,7 @@ const navigationItems = [
   { name: 'Dashboard', label: 'Dashboard', route: '/dashboard' },
   { name: 'Projects', label: 'Projects', route: '/projects' },
   { name: 'Tasks', label: 'Tasks', route: '/tasks' },
+  { name: 'Schedule', label: 'Schedule', route: '/schedule' },
 ]
 
 // Get navigation icon component
@@ -307,6 +308,7 @@ const getNavIcon = (itemName) => {
     'Dashboard': Home,
     'Projects': FolderOpen,
     'Tasks': ListChecks,
+    'Schedule': Calendar,
   }
   return iconMap[itemName] || Home
 }

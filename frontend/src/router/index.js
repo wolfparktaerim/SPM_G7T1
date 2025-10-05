@@ -14,6 +14,7 @@ import TasksView from '@/views/TasksView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import AuthenticationView from '@/views/AuthView.vue'
+import ScheduleView from '@/views/ScheduleView.vue'
 
 // import tests
 import TestConfirmationModal from '@/frontendTests/TestConfirmationModal.vue'
@@ -80,6 +81,12 @@ const router = createRouter({
       name: 'TestConfirmationModal',
       component: TestConfirmationModal,
       meta: { requiresAuth: false },
+    },
+    {
+      path: '/schedule',
+      name: 'schedule',
+      component: ScheduleView,
+      meta: { requiresAuth: true },
     },
   ],
 })
