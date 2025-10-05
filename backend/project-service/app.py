@@ -7,23 +7,19 @@ import os
 
 app = Flask(__name__)
 CORS(app)
+
+# --- Firebase setup ---
 JSON_PATH = os.getenv("JSON_PATH")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 cred = credentials.Certificate(JSON_PATH)
-firebase_admin.initialize_app(cred, {
-    "databaseURL": DATABASE_URL
-})
+firebase_admin.initialize_app(cred, {"databaseURL": DATABASE_URL})
 
-
-# Helper to check role for creation
-# def can_create(role):
-#     return role in ("manager", "director")
-
-# Helper to get current timestamp string
+# --- Helpers ---
 def current_timestamp():
     return int(datetime.now(timezone.utc).timestamp())
 
+# --- Create project ---
 @app.route("/project/create", methods=["POST"])
 def create_project():
     data = request.get_json()
@@ -32,138 +28,72 @@ def create_project():
 
     userid = data.get("userid")
     role = data.get("role")
-
-    # Check required fields
     if not userid or not role:
         return jsonify(error="userid and role required"), 400
 
-    # if not can_create(role):
-    #     return jsonify(error="Unauthorized: role not allowed to create"), 403
+    # Fetch creator info
+    users_ref = db.reference("users")
+    user_info = users_ref.child(userid).get()
+    if not user_info:
+        return jsonify(error="User not found"), 404
 
-    # Generate unique UID for new project
+    department = user_info.get("department", "Unknown")
+
     project_ref = db.reference("project")
     new_proj_ref = project_ref.push()
     uid = new_proj_ref.key
 
-    # Create project data
     project_data = {
         "projectId": uid,
         "title": data.get("title", ""),
         "ownerId": userid,
-        "collaborators": data.get("collaborators", [])+[userid],
+        "collaborators": list(set(data.get("collaborators", []) + [userid])),
         "description": data.get("description", ""),
         "deadline": data.get("deadline", ""),
         "creationDate": current_timestamp(),
-        # "comments": data.get("comments", [])
+        "department": department
     }
 
     new_proj_ref.set(project_data)
-
     return jsonify({"message": "Project created", "project": project_data}), 201
 
-# outdated read projects
-# @app.route("/project/<userid>", methods=["GET"])
-# def read_projects(userid):
-#     # Retrieve all projects under "project" node
-#     project_ref = db.reference("project")
-#     all_projects = project_ref.get() or {}
+# --- Get all projects (admin/debug) ---
+@app.route("/project/all", methods=["GET"])
+def get_all_projects():
+    project_ref = db.reference("project")
+    all_projects = project_ref.get() or {}
+    print("All projects retrieved from DB:", len(all_projects))
+    return jsonify({"projects": list(all_projects.values())}), 200
 
-#     # Filter projects where the user is in the collaborators list
-#     collaborator_projects = [
-#         proj for proj in all_projects.values()
-#         if userid in proj.get("collaborators", [])
-#     ]
+# --- Get projects by department (for directors) ---
+@app.route("/project/department/<department>", methods=["GET"])
+def get_projects_by_department(department):
+    project_ref = db.reference("project")
+    all_projects = project_ref.get() or {}
+    
+    dept_lower = (department or "unknown").lower()
+    dept_projects = [
+        proj for proj in all_projects.values()
+        if (proj.get("department") or "unknown").lower() == dept_lower
+    ]
 
-#     return jsonify({"projects": collaborator_projects}), 200
+    print(f"Department requested: {department}, Projects found: {len(dept_projects)}")
+    return jsonify({"projects": dept_projects}), 200
 
+# --- Get projects for a specific user (non-directors) ---
 @app.route("/project/<userid>", methods=["GET"])
-def read_projects(userid):
-    """
-    Returns all projects where the user is a collaborator.
-    """
+def get_user_projects(userid):
     project_ref = db.reference("project")
     all_projects = project_ref.get() or {}
 
-    # Only include projects where user is a collaborator
     user_projects = [
         proj for proj in all_projects.values()
-        if userid in proj.get("collaborators", [])
+        if userid == proj.get("ownerId") or userid in proj.get("collaborators", [])
     ]
     return jsonify({"projects": user_projects}), 200
 
-# @app.route("/project/delete", methods=["POST"])
-# def delete_project():
-#     data = request.get_json()
-#     if not data:
-#         return jsonify(error="Missing JSON body"), 400
-
-#     userid = data.get("userid")
-#     uid = data.get("uid")
-#     if not userid or not uid:
-#         return jsonify(error="userid and uid required"), 400
-
-#     project_ref = db.reference(f"project/{uid}")
-#     project = project_ref.get()
-#     if not project:
-#         return jsonify(error="Project not found"), 404
-
-#     if project.get("ownerId") != userid:
-#         return jsonify(error="Unauthorized: only owner can delete"), 403
-
-#     project_ref.delete()
-#     return jsonify({"message": "Project deleted"}), 200
-
-@app.route("/project/all-users", methods=["GET"])
-def get_all_users():
-    users_ref = db.reference("users")
-    all_users = users_ref.get() or {}
-
-    users_list = []
-    for uid, info in all_users.items():
-        users_list.append({
-            "uid": uid,
-            "name": info.get("name"),
-            "email": info.get("email")
-        })
-
-    return jsonify({"users": users_list}), 200
-
-
-# @app.route("/project/update", methods=["POST"])
-# def update_project():
-#     data = request.get_json()
-#     if not data:
-#         return jsonify(error="Missing JSON body"), 400
-
-#     userid = data.get("userid")
-#     uid = data.get("uid")
-#     if not userid or not uid:
-#         return jsonify(error="userid and uid required"), 400
-
-#     # Fields allowed to update
-#     allowed_fields = {"deadline", "description", "title"}
-
-#     # Filter update fields present in the request
-#     updates = {k: v for k, v in data.items() if k in allowed_fields}
-
-#     if not updates:
-#         return jsonify(error="At least one updatable field (deadline, description, title) required"), 400
-
-#     project_ref = db.reference(f"project/{uid}")
-#     project = project_ref.get()
-#     if not project:
-#         return jsonify(error="Project not found"), 404
-
-#     if project.get("ownerId") != userid:
-#         return jsonify(error="Unauthorized: only owner can update"), 403
-
-#     # Update project data with allowed fields
-#     project_ref.update(updates)
-
-#     updated_project = project_ref.get()
-#     return jsonify({"message": "Project updated", "project": updated_project}), 200
-
-@app.route('/project/update', methods=['POST'])
+# --- Update project ---
+@app.route("/project/update", methods=["POST"])
 def update_project():
     data = request.get_json()
     if not data:
@@ -174,25 +104,21 @@ def update_project():
     new_title = data.get('title')
     new_deadline = data.get('deadline')
     new_description = data.get('description')
-    new_collaborators = data.get('collaborators', []) # assumption is the collaborators chosen are not in the project (but need to check)
+    new_collaborators = data.get('collaborators', [])
     new_owner_id = data.get('ownerId')
 
-    if not userid or not project_id or not new_title or not new_deadline or not new_description:
-        return jsonify(error="userid, role, and projectId, new_title, new_deadline, new_description are required"), 400
+    if not userid or not project_id:
+        return jsonify(error="userid and projectId are required"), 400
 
     project_ref = db.reference(f'project/{project_id}')
     project = project_ref.get()
-
     if not project:
         return jsonify(error="Project not found"), 404
 
-    # Only current owner can update project
     if project.get('ownerId') != userid:
         return jsonify(error="Only project owner can update the project"), 403
 
     updated_data = {}
-
-    # Update project basic info
     if new_title is not None:
         updated_data['title'] = new_title
     if new_deadline is not None:
@@ -201,81 +127,61 @@ def update_project():
         updated_data['description'] = new_description
 
     current_collaborators = set(project.get('collaborators', []))
-    # Include new collaborators only if not already present
-    if isinstance(new_collaborators, list):
-        # Filter out any collaborator IDs already in current collaborators
-        filtered_new_collaborators = [uid for uid in new_collaborators if uid not in current_collaborators]
-    else:
-        filtered_new_collaborators = []
-
-    # Start with current collaborators
-    updated_collaborators = list(current_collaborators)
-
-    # Add filtered new collaborators
-    updated_collaborators.extend(filtered_new_collaborators)
+    filtered_new_collaborators = [uid for uid in new_collaborators if uid not in current_collaborators]
+    updated_collaborators = list(current_collaborators) + filtered_new_collaborators
     updated_data['collaborators'] = updated_collaborators
 
-    # Handle owner change logic
-    users_ref = db.reference("users")
-    users = users_ref.get() or {}
-
-    current_owner_role = users.get(userid, {}).get("role")
-
     if new_owner_id and new_owner_id != project.get('ownerId'):
-        # Fetch new owner role from users DB
+        users_ref = db.reference("users")
+        users = users_ref.get() or {}
+        current_owner_role = users.get(userid, {}).get("role")
         new_owner_role = users.get(new_owner_id, {}).get("role")
-
-        # Role hierarchy rules: director > manager > staff
         roles_order = {'director': 3, 'manager': 2, 'staff': 1}
 
         if roles_order.get(current_owner_role, 0) < roles_order.get(new_owner_role, 0):
             return jsonify(error="Cannot assign project ownership to a higher role"), 403
 
         updated_data['ownerId'] = new_owner_id
+        if new_owner_id not in updated_collaborators:
+            updated_collaborators.append(new_owner_id)
+        updated_data['collaborators'] = updated_collaborators
 
-        # Check if new owner is not already in the current collaborators, add if missing
-        if new_owner_id and new_owner_id not in current_collaborators:
-            updated_data['ownerId'] = new_owner_id
-            if new_owner_id not in updated_collaborators:
-                updated_collaborators.append(new_owner_id)
-                
     if updated_data:
         project_ref.update(updated_data)
 
     return jsonify(success=True, updatedProject=updated_data), 200
 
+# --- Get all users ---
+@app.route("/project/all-users", methods=["GET"])
+def get_all_users():
+    users_ref = db.reference("users")
+    all_users = users_ref.get() or {}
+    users_list = [{"uid": uid, "name": info.get("name"), "email": info.get("email")} 
+                  for uid, info in all_users.items()]
+    return jsonify({"users": users_list}), 200
+
+# --- Get available users for collaboration ---
 @app.route("/project/users/available-for-collaboration/<uid>", methods=["GET"])
 def get_available_users(uid):
-    """
-    Returns a list of users who can be added as collaborators for a project:
-    Excludes the owner and existing collaborators.
-    Each user returned includes: uid, name, email
-    """
-    # Get project
     project_ref = db.reference(f"project/{uid}")
     project = project_ref.get()
     if not project:
         return jsonify(error="Project not found"), 404
 
-    # Get all users
     users_ref = db.reference("users")
     all_users = users_ref.get() or {}
-
-    # Exclude owner and current collaborators
     owner_uid = project.get("ownerId")
     current_collaborators = set(project.get("collaborators", []))
 
-    available_users = []
-    for user_uid, user_info in all_users.items():
-        if user_uid != owner_uid and user_uid not in current_collaborators:
-            available_users.append({
-                "uid": user_uid,
-                "name": user_info.get("name"),
-                "email": user_info.get("email")
-            })
+    available_users = [
+        {"uid": user_uid, "name": user_info.get("name"), "email": user_info.get("email")}
+        for user_uid, user_info in all_users.items()
+        if user_uid != owner_uid and user_uid not in current_collaborators
+    ]
 
     return jsonify({"availableUsers": available_users}), 200
 
+# --- Add collaborators ---
 @app.route("/project/add-collaborator", methods=["POST"])
 def add_collaborator():
     data = request.get_json()
@@ -283,7 +189,6 @@ def add_collaborator():
         return jsonify(error="Missing JSON body"), 400
 
     userid = data.get("userid")
-    #adduserid retrieves the array of collborators userid
     adduserid = data.get("adduserid")
     uid = data.get("uid")
     if not userid or not adduserid or not uid:
@@ -294,7 +199,6 @@ def add_collaborator():
     if not project:
         return jsonify(error="Project not found"), 404
 
-    # Only owner can add collaborators
     if project.get("ownerId") != userid:
         return jsonify(error="Unauthorized: only owner can add collaborators"), 403
 
@@ -303,19 +207,18 @@ def add_collaborator():
         collaborators.add(new_collab)
 
     project_ref.update({"collaborators": list(collaborators)})
-
     updated_project = project_ref.get()
     return jsonify({"message": "Collaborator added", "project": updated_project}), 200
 
-
+# --- Change project owner ---
 @app.route("/project/change-owner", methods=["POST"])
 def change_owner():
     data = request.get_json()
     if not data:
         return jsonify(error="Missing JSON body"), 400
 
-    userid = data.get("userid")          # Current owner making the change
-    changeuserid = data.get("changeuserid")  # New owner to assign
+    userid = data.get("userid")
+    changeuserid = data.get("changeuserid")
     uid = data.get("uid")
     if not userid or not changeuserid or not uid:
         return jsonify(error="userid, changeuserid, and uid required"), 400
@@ -325,11 +228,9 @@ def change_owner():
     if not project:
         return jsonify(error="Project not found"), 404
 
-    # Check current owner matches userid
     if project.get("ownerId") != userid:
         return jsonify(error="Unauthorized: only current owner can change owner"), 403
 
-    # Get roles of both users from /users node
     users_ref = db.reference("users")
     users = users_ref.get() or {}
 
@@ -339,9 +240,6 @@ def change_owner():
     if not current_owner_role or not new_owner_role:
         return jsonify(error="User roles not found in /users database"), 404
 
-    # Validate delegation rules:
-    # director can delegate only to manager
-    # manager can delegate to users who are NOT manager or director
     if current_owner_role == "director":
         if new_owner_role != "manager":
             return jsonify(error="Director can only delegate ownership to a manager"), 403
@@ -351,7 +249,6 @@ def change_owner():
     else:
         return jsonify(error="Only director or manager can delegate ownership"), 403
 
-    # Perform ownership change and add new owner as collaborator if not already present
     collaborators = set(project.get("collaborators", []))
     collaborators.add(changeuserid)
 
@@ -363,7 +260,6 @@ def change_owner():
     updated_project = project_ref.get()
     return jsonify({"message": "Project ownership changed", "project": updated_project}), 200
 
-
-
+# --- Run app ---
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=6001, debug=True)
