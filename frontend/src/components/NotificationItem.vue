@@ -85,8 +85,17 @@
         </div>
       </div>
 
-      <!-- Delete button -->
+      <!-- Action button (Mark as read or Delete) -->
       <button
+        v-if="notification.isUnread()"
+        @click.stop="handleMarkAsRead"
+        class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-1.5 rounded-lg hover:bg-blue-100 text-gray-400 hover:text-blue-600"
+        title="Mark as read"
+      >
+        <Eye class="w-4 h-4" :stroke-width="2" />
+      </button>
+      <button
+        v-else
         @click.stop="handleDelete"
         class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-600"
         title="Delete notification"
@@ -98,7 +107,7 @@
 </template>
 
 <script setup>
-import { Clock, Calendar, X, AlertCircle, Bell, AlertTriangle } from 'lucide-vue-next'
+import { Clock, Calendar, X, Eye, AlertCircle, Bell, AlertTriangle } from 'lucide-vue-next'
 import { Notification } from '@/models/notification'
 
 const props = defineProps({
@@ -108,7 +117,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['click', 'delete'])
+const emit = defineEmits(['click', 'delete', 'markAsRead'])
 
 const handleClick = () => {
   emit('click', props.notification)
@@ -116,6 +125,10 @@ const handleClick = () => {
 
 const handleDelete = () => {
   emit('delete', props.notification)
+}
+
+const handleMarkAsRead = () => {
+  emit('markAsRead', props.notification)
 }
 
 const getUrgencyIcon = () => {

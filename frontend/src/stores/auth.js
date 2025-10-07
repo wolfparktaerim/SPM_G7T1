@@ -13,8 +13,9 @@ import {
   setPersistence,
   browserSessionPersistence,
 } from 'firebase/auth'
-import { ref as dbRef, get } from 'firebase/database'
+import { ref as dbRef, get, set } from 'firebase/database'
 import { auth, database } from '@/firebase/firebaseConfig'
+import { NotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES } from '@/models/notificationPreferences'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -30,6 +31,27 @@ export const useAuthStore = defineStore('auth', () => {
   // Set router instance for navigation
   const setRouter = (routerInstance) => {
     router = routerInstance
+  }
+
+  // Initialize default notification preferences if they don't exist
+  const initializeNotificationPreferences = async (userId) => {
+    try {
+      const preferencesRef = dbRef(database, `notificationPreferences/${userId}`)
+      const snapshot = await get(preferencesRef)
+
+      if (!snapshot.exists()) {
+        // Create default notification preferences
+        const defaultPreferences = new NotificationPreferences({
+          ...DEFAULT_NOTIFICATION_PREFERENCES,
+          userId: userId
+        })
+        await set(preferencesRef, defaultPreferences.toFirebaseObject())
+        console.log('Default notification preferences created for user:', userId)
+      }
+    } catch (error) {
+      console.error('Error initializing notification preferences:', error)
+      // Don't throw - this shouldn't block the auth flow
+    }
   }
 
   // Initialize auth state listener
@@ -81,6 +103,9 @@ export const useAuthStore = defineStore('auth', () => {
             }
             console.log('User data loaded:', user.value)
             sessionStartTime.value = Date.now()
+
+            // Initialize default notification preferences if they don't exist
+            await initializeNotificationPreferences(firebaseUser.uid)
           } catch (error) {
             console.error('Error fetching user data from Realtime Database:', error)
             // Fallback to basic Firebase Auth data

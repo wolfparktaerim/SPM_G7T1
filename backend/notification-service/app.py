@@ -85,33 +85,55 @@ def should_send_notification(task_id, user_id, days_until, reminder_times):
     """
     # Check if current days_until matches any reminder time (with tolerance)
     should_send = False
+    matched_reminder_day = None
     for reminder_day in reminder_times:
         # Allow a small tolerance for matching (e.g., 6.9-7.1 days matches 7 days)
         if abs(days_until - reminder_day) < 0.5:
             should_send = True
+            matched_reminder_day = reminder_day
             break
 
     if not should_send:
         return False
 
     # Check if we've already sent a notification for this task and reminder interval
+    # Use a separate tracking node to prevent re-sending after user deletes notification
     try:
-        notifications_ref = db.reference(f"notifications/{user_id}")
-        user_notifications = notifications_ref.get() or {}
+        # Create a unique key for this notification based on task, user, and reminder interval
+        notification_key = f"{task_id}_{user_id}_{matched_reminder_day}"
+        sent_ref = db.reference(f"notificationsSent/{notification_key}")
+        sent_record = sent_ref.get()
 
-        # Look for existing notifications for this task created within the last 24 hours
         current_time = current_timestamp()
-        for notification in user_notifications.values():
-            if (notification.get('taskId') == task_id and
-                notification.get('type') == 'task_deadline_reminder' and
-                current_time - notification.get('createdAt', 0) < 86400):  # 24 hours
-                logger.info(f"Notification already sent for task {task_id} to user {user_id} recently")
+
+        if sent_record:
+            sent_timestamp = sent_record.get('sentAt', 0)
+            # Check if notification was sent within the last 24 hours
+            if current_time - sent_timestamp < 86400:  # 24 hours
                 return False
 
-        return True
+        # Return the matched_reminder_day so we can track it
+        return matched_reminder_day
     except Exception as e:
-        logger.error(f"Error checking existing notifications: {str(e)}")
+        logger.error(f"Error checking sent notifications: {str(e)}")
         return False
+
+def mark_notification_sent(task_id, user_id, matched_reminder_day):
+    """
+    Mark that a notification has been sent for this task/user/reminder combination
+    This prevents duplicate notifications even if the user deletes the notification
+    """
+    try:
+        notification_key = f"{task_id}_{user_id}_{matched_reminder_day}"
+        sent_ref = db.reference(f"notificationsSent/{notification_key}")
+        sent_ref.set({
+            'taskId': task_id,
+            'userId': user_id,
+            'reminderDay': matched_reminder_day,
+            'sentAt': current_timestamp()
+        })
+    except Exception as e:
+        logger.error(f"Error marking notification as sent: {str(e)}")
 
 def check_task_deadlines():
     """
@@ -136,25 +158,6 @@ def check_task_deadlines():
             if task_data.get('status', '').lower() == 'completed':
                 continue
 
-            # Get task owner
-            owner_id = task_data.get('ownerId')
-            if not owner_id:
-                continue
-
-            # Get owner's notification preferences
-            user_prefs = all_preferences.get(owner_id)
-            if not user_prefs:
-                continue
-
-            # Check if notifications are enabled
-            if not user_prefs.get('enabled', False) or not user_prefs.get('taskDeadlineReminders', False):
-                continue
-
-            # Check if in-app notifications are enabled
-            channel = user_prefs.get('channel', 'both')
-            if channel not in ['in-app', 'both']:
-                continue
-
             # Calculate days until deadline
             deadline = task_data.get('deadline')
             if not deadline:
@@ -166,16 +169,51 @@ def check_task_deadlines():
             if days_until < -1:
                 continue
 
-            # Get reminder times
-            reminder_times = user_prefs.get('reminderTimes', [])
-            if not reminder_times:
-                continue
+            # Collect all users to notify (owner + collaborators)
+            users_to_notify = []
 
-            # Check if we should send notification
-            if should_send_notification(task_id, owner_id, days_until, reminder_times):
-                notification_id = create_notification(owner_id, task_id, task_data, days_until)
-                if notification_id:
-                    notification_count += 1
+            # Add task owner
+            owner_id = task_data.get('ownerId')
+            if owner_id:
+                users_to_notify.append(owner_id)
+
+            # Add collaborators
+            collaborators = task_data.get('collaborators', [])
+            if isinstance(collaborators, list):
+                users_to_notify.extend(collaborators)
+
+            # Remove duplicates
+            users_to_notify = list(set(users_to_notify))
+
+            # Send notifications to all relevant users
+            for user_id in users_to_notify:
+                # Get user's notification preferences
+                user_prefs = all_preferences.get(user_id)
+                if not user_prefs:
+                    continue
+
+                # Check if notifications are enabled
+                if not user_prefs.get('enabled', False) or not user_prefs.get('taskDeadlineReminders', False):
+                    continue
+
+                # Check if in-app notifications are enabled
+                channel = user_prefs.get('channel', 'both')
+                if channel not in ['in-app', 'both']:
+                    continue
+
+                # Get reminder times
+                reminder_times = user_prefs.get('reminderTimes', [])
+                if not reminder_times:
+                    continue
+
+                # Check if we should send notification
+                matched_reminder_day = should_send_notification(task_id, user_id, days_until, reminder_times)
+                if matched_reminder_day:
+                    notification_id = create_notification(user_id, task_id, task_data, days_until)
+                    if notification_id:
+                        # Mark this notification as sent to prevent duplicates
+                        mark_notification_sent(task_id, user_id, matched_reminder_day)
+                        notification_count += 1
 
         logger.info(f"Task deadline check completed. Created {notification_count} notifications.")
 

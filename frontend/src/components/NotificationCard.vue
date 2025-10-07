@@ -98,6 +98,7 @@
             :notification="notification"
             @click="handleNotificationClick"
             @delete="handleNotificationDelete"
+            @mark-as-read="handleMarkAsRead"
           />
         </div>
       </div>
@@ -210,6 +211,32 @@ const handleNotificationClick = async (notification) => {
   } catch (err) {
     console.error('Failed to handle notification click:', err)
     toast.error('Failed to update notification')
+  }
+}
+
+const handleMarkAsRead = async (notification) => {
+  try {
+    await notificationService.markNotificationAsRead(
+      authStore.user.uid,
+      notification.notificationId
+    )
+
+    // Update local state
+    const index = allNotifications.value.findIndex(
+      n => n.notificationId === notification.notificationId
+    )
+    if (index !== -1) {
+      allNotifications.value[index].read = true
+      allNotifications.value[index].readAt = Date.now()
+    }
+
+    // Emit unread count change
+    emit('unreadCountChange', unreadCount.value)
+
+    toast.success('Marked as read')
+  } catch (err) {
+    console.error('Failed to mark notification as read:', err)
+    toast.error('Failed to mark notification as read')
   }
 }
 
