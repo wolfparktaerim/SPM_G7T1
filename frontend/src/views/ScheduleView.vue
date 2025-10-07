@@ -7,16 +7,96 @@
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                <div>
                   <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Schedule</h1>
-                  <p class="text-gray-600 mt-1">View and manage your schedule</p>
+                  <p class="text-gray-600 mt-1">{{ viewingUserId === currentUser ? 'View and manage your schedule' : `Viewing ${getUserDisplayName(viewingUserId)}'s schedule` }}</p>
                </div>
             </div>
          </div>
       </div>
       <!-- Main Content -->
+      <!-- Main Content with Sidebar -->
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-         <!-- Calendar Container -->
-         <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6">
-            <FullCalendar :options="calendarOptions" />
+         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Sidebar Filters -->
+            <div class="lg:col-span-1">
+               <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6 space-y-6 sticky top-24">
+                  <div>
+                     <h3 class="text-lg font-bold text-gray-900 mb-4">Filter Schedule</h3>
+                     <!-- Viewing User Info -->
+                     <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+                        <p class="text-xs text-gray-600 mb-1">Currently viewing:</p>
+                        <p class="text-sm font-semibold text-gray-900">
+                           {{ viewingUserId === currentUser ? 'Your Schedule' : getUserDisplayName(viewingUserId) }}
+                        </p>
+                     </div>
+                     <!-- Show role context for directors -->
+                     <div v-if="currentRole?.toLowerCase() === 'director'" class="pt-2 border-t border-blue-200">
+                        <p class="text-xs text-gray-600 mb-1">Department:</p>
+                        <p class="text-xs font-semibold text-blue-700">
+                           {{ currentUserDepartment || 'N/A' }}
+                        </p>
+                     </div>
+                     <!-- Project Dropdown -->
+                     <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Select Project
+                        </label>
+                        <select 
+                           v-model="selectedProjectId"
+                           @change="onProjectSelect($event.target.value)"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           >
+                           <option :value="null">All Projects</option>
+                           <option 
+                              v-for="project in userProjects" 
+                              :key="project.projectId" 
+                              :value="project.projectId"
+                              >
+                              {{ project.title }}
+                           </option>
+                        </select>
+                     </div>
+                     <!-- Collaborator Dropdown (only shown when project is selected) -->
+                     <div v-if="selectedProject && projectCollaborators.length > 0" class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                        View Team Member's Schedule
+                        </label>
+                        <select 
+                           v-model="selectedCollaborator"
+                           @change="onCollaboratorSelect($event.target.value)"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                           >
+                           <option :value="null">Select a team member</option>
+                           <option 
+                              v-for="collaborator in projectCollaborators" 
+                              :key="collaborator.uid" 
+                              :value="collaborator.uid"
+                              >
+                              {{ collaborator.name }}
+                              {{ collaborator.isCurrentUser ? ' (You)' : '' }}
+                              {{ collaborator.isOwner ? ' 👑' : '' }}
+                           </option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">
+                           {{ projectCollaborators.length }} team member{{ projectCollaborators.length !== 1 ? 's' : '' }} in this project
+                        </p>
+                     </div>
+                     <!-- Reset Button -->
+                     <button 
+                        v-if="selectedProject || selectedCollaborator"
+                        @click="resetFilters"
+                        class="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-all"
+                        >
+                     Reset Filters
+                     </button>
+                  </div>
+               </div>
+            </div>
+            <!-- Calendar Container -->
+            <div class="lg:col-span-3">
+               <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6">
+                  <FullCalendar :options="calendarOptions" />
+               </div>
+            </div>
          </div>
       </div>
       <!-- Task Detail Modal -->
@@ -163,6 +243,18 @@
             </div>
          </div>
       </transition>
+      <!-- Toast Notification -->
+      <transition name="fade">
+         <div 
+            v-if="showNotification" 
+            class="fixed bottom-8 right-8 z-50 bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3"
+            >
+            <span>{{ notificationMessage }}</span>
+            <button @click="showNotification = false" class="text-gray-400 hover:text-white">
+               <X class="w-4 h-4" />
+            </button>
+         </div>
+      </transition>
    </div>
 </template>
 <script setup>
@@ -185,6 +277,7 @@
    // --- API Base URL ---
    const KONG_BASE = import.meta.env.VITE_BACKEND_API || 'http://localhost:8000/';
    const API_BASE = `${KONG_BASE}tasks`;
+   const PROJECT_API_BASE = `${import.meta.env.VITE_BACKEND_API}project`;
    
    // --- Reactive state ---
    const currentUser = ref(null);
@@ -200,59 +293,121 @@
    const allUsers = ref([]);
    const usersMap = ref({});
    
+   // --- Sidebar state ---
+   const userProjects = ref([]);
+   const selectedProject = ref(null);
+   const projectCollaborators = ref([]);
+   const selectedCollaborator = ref(null);
+   const viewingUserId = ref(null); // The user whose schedule is being viewed
+   const selectedProjectId = ref(null);
+   
+   // --- Show notification ---
+   const showNotification = ref(false);
+   const notificationMessage = ref('');
+   
    // --- Computed: Transform filtered tasks into calendar events ---
    const calendarEvents = computed(() => {
-     return filteredTasks.value.map(task => {
-       // Convert epoch timestamp to ISO date string
-       const taskDate = new Date(task.deadline * 1000).toISOString().split('T')[0];
-       
-       // Calculate days until deadline
-       const today = new Date();
-       today.setHours(0, 0, 0, 0); // Reset time to start of day
-       const deadlineDate = new Date(task.deadline * 1000);
-       deadlineDate.setHours(0, 0, 0, 0); // Reset time to start of day
-       const daysUntilDeadline = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
-       
-       // Determine color based on priority logic
-       let backgroundColor = '#3b82f6'; // Default blue (ongoing)
-       let borderColor = '#2563eb';
-       
-       const statusLower = (task.status || '').toLowerCase();
-       
-       // Priority 1: Completed tasks (grey)
-       if (statusLower === 'completed') {
-         backgroundColor = '#9ca3af'; // grey
+   return filteredTasks.value.map(task => {
+      // Safety check and convert to Date object
+      let deadlineDate;
+      
+      if (!task.deadline) {
+         console.warn('Task missing deadline:', task);
+         return null;
+      }
+      
+      // Check if deadline is already a Date object
+      if (task.deadline instanceof Date) {
+         deadlineDate = task.deadline;
+      } 
+      // Check if it's a Unix timestamp (number)
+      else if (typeof task.deadline === 'number') {
+         deadlineDate = new Date(task.deadline * 1000);
+      }
+      // Check if it's a string
+      else if (typeof task.deadline === 'string') {
+         deadlineDate = new Date(task.deadline);
+      }
+      else {
+         console.warn('Invalid deadline format:', task.deadline);
+         return null;
+      }
+      
+      // Determine start date (today or task creation date)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      let startDate;
+      if (task.createdAt) {
+         // Use task creation date as start if available
+         const taskCreatedDate = new Date(task.createdAt * 1000);
+         startDate = taskCreatedDate < today ? taskCreatedDate : today;
+      } else {
+         // Default to today if no creation date
+         startDate = today;
+      }
+      
+      // Format dates as YYYY-MM-DD
+      const formatDate = (date) => {
+         const year = date.getFullYear();
+         const month = String(date.getMonth() + 1).padStart(2, '0');
+         const day = String(date.getDate()).padStart(2, '0');
+         return `${year}-${month}-${day}`;
+      };
+      
+      const startString = formatDate(startDate);
+      const endString = formatDate(new Date(deadlineDate.getTime() + 86400000)); // +1 day for inclusive end
+      
+      // Your existing status and color logic
+      const statusLower = task.status?.toLowerCase() || 'unassigned';
+      let backgroundColor, borderColor;
+      
+      if (statusLower === 'completed') {
+         backgroundColor = '#9ca3af';
          borderColor = '#6b7280';
-       }
-       // Priority 2: Overdue tasks (red) - not completed and past deadline
-       else if (daysUntilDeadline < 0 && statusLower !== 'completed') {
-         backgroundColor = '#ef4444'; // red
-         borderColor = '#dc2626';
-       }
-       // Priority 3: Due soon (orange) - within 3 days
-       else if (daysUntilDeadline >= 0 && daysUntilDeadline <= 3) {
-         backgroundColor = '#f59e0b'; // orange
+      } else if (statusLower === 'ongoing') {
+         backgroundColor = '#3b82f6';
+         borderColor = '#2563eb';
+      } else if (statusLower === 'under review') {
+         backgroundColor = '#f59e0b';
          borderColor = '#d97706';
-       }
-       // Default: Ongoing (blue)
-       // else - already set to blue by default
-       
-       return {
+      } else if(statusLower === 'unassigned'){
+         backgroundColor = '#8b5cf6'; // Violet-500
+         borderColor = '#7c3aed'; // Violet-600
+      } else {
+         backgroundColor = '#ef4444';
+         borderColor = '#dc2626';
+      }
+      
+      // Check if current user can view this task
+      const isViewable = canViewTaskDetails(task);
+      
+      // Calculate days until deadline
+      deadlineDate.setHours(0, 0, 0, 0);
+      const daysUntilDeadline = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
+      
+      return {
          id: task.taskId,
          title: task.title,
-         start: taskDate,
+         start: startString, // ✅ Start date
+         end: endString, // ✅ End date (deadline + 1 day for inclusive)
+         allDay: true,
          backgroundColor: backgroundColor,
          borderColor: borderColor,
+         classNames: isViewable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
          extendedProps: {
-           status: task.status,
-           notes: task.notes,
-           projectId: task.projectId,
-           ownerId: task.ownerId,
-           daysUntilDeadline: daysUntilDeadline // Store for debugging/tooltips
+         status: task.status,
+         notes: task.notes,
+         projectId: task.projectId,
+         ownerId: task.ownerId,
+         daysUntilDeadline: daysUntilDeadline,
+         isViewable: isViewable
          }
-       };
-     });
+      };
+   }).filter(event => event !== null);
    });
+
+
    
    // --- Calendar Configuration ---
    const calendarOptions = ref({
@@ -269,20 +424,38 @@
      dayMaxEvents: true,
      weekends: true,
      events: calendarEvents, // Use computed events
-   // Event click handler
-   eventClick: function(info) {
-     const taskId = info.event.id;
-     const task = filteredTasks.value.find(t => t.taskId === taskId);
-     if (task) {
-       openTaskDetailModal(task);
-     }
-   },
+      // Event click handler
+      eventClick: function(info) {
+      const taskId = info.event.id;
+      const task = filteredTasks.value.find(t => t.taskId === taskId);
+      
+      if (!task) return;
+      
+      // Check if current user has permission to view
+      if (!canViewTaskDetails(task)) {
+         showToast('🔒 You do not have permission to view this task');
+         return;
+      }
+      
+      // If permission granted, open modal
+      openTaskDetailModal(task);
+      },
      // Date select handler
      select: function(info) {
        console.log('Date selected:', info.startStr, 'to', info.endStr);
        // You'll add create task functionality later
      }
    });
+   
+   function showToast(message) {
+      notificationMessage.value = message;
+      showNotification.value = true;
+      
+      // Auto-hide after 3 seconds
+      setTimeout(() => {
+         showNotification.value = false;
+      }, 3000);
+   }
    
    // --- Fetch all tasks from backend ---
    async function fetchAllTasks() {
@@ -391,16 +564,22 @@
    
    // --- Handle edit task ---
    function handleEditTask(task) {
-     closeTaskDetailModal();
-     // TODO: Add edit task logic (navigate to tasks page or open edit modal)
-     console.log('Edit task:', task.taskId);
+      closeTaskDetailModal();
+      // Navigate to Tasks page with taskId as query parameter
+      router.push({ 
+         name: 'tasks', 
+         query: { 
+            taskId: task.taskId,
+            action: 'edit' // Optional: indicates intent to edit
+         }
+      });
    }
-   
+
     // --- Get due soon badge ---
     function getDueSoonBadge(task) {
     // Don't show due soon badge for completed tasks
     if (task?.status?.toLowerCase() === 'completed') {
-        return null; // ✅ Completed tasks don't get overdue/due soon badges
+        return null; 
     }
     
     const today = new Date();
@@ -415,11 +594,139 @@
     return null;
     }
    
+   // --- Fetch user's projects (role-aware) ---
+   async function fetchUserProjects() {
+   if (!currentUser.value) return;
+   
+   try {
+      let response;
+      
+      // Check if user is a director
+      if (currentRole.value?.toLowerCase() === 'director') {
+         // Directors see all projects in their department
+         response = await fetch(`${PROJECT_API_BASE}/department/${currentUserDepartment.value}`);
+      } else {
+         // Non-directors see only projects they're involved in
+         response = await fetch(`${PROJECT_API_BASE}/${currentUser.value}`);
+      }
+      
+      if (!response.ok) {
+         throw new Error('Failed to fetch projects');
+      }
+      
+      const data = await response.json();
+      userProjects.value = data.projects || [];
+      
+      console.log(`Projects loaded for ${currentRole.value}:`, userProjects.value.length);
+   } catch (error) {
+      console.error('Error fetching user projects:', error);
+      userProjects.value = [];
+   }
+   }
+   
+   // --- Handle project selection ---
+   async function onProjectSelect(projectId) {
+   if (!projectId) {
+      selectedProject.value = null;
+      projectCollaborators.value = [];
+      selectedCollaborator.value = null;
+      viewingUserId.value = currentUser.value;
+      filterTasksByUser(currentUser.value);
+      return;
+   }
+   
+   const project = userProjects.value.find(p => p.projectId === projectId);
+   selectedProject.value = project;
+   selectedProjectId.value = projectId;
+   
+   // Get all unique collaborators (owner + collaborators)
+   const collaboratorIds = new Set();
+   
+   // Add project owner
+   if (project.ownerId) {
+      collaboratorIds.add(project.ownerId);
+   }
+   
+   // Add all collaborators
+   if (project.collaborators && Array.isArray(project.collaborators)) {
+      project.collaborators.forEach(id => collaboratorIds.add(id));
+   }
+   
+   // Convert to array and map to user objects
+   projectCollaborators.value = Array.from(collaboratorIds)
+      .map(userId => {
+         const user = usersMap.value[userId];
+         return {
+         uid: userId,
+         name: user ? (user.name || user.displayName || user.email) : 'Unknown User',
+         isCurrentUser: userId === currentUser.value,
+         isOwner: userId === project.ownerId
+         };
+      })
+      .sort((a, b) => {
+         // Sort: current user first, then owner, then alphabetically
+         if (a.isCurrentUser) return -1;
+         if (b.isCurrentUser) return 1;
+         if (a.isOwner) return -1;
+         if (b.isOwner) return 1;
+         return a.name.localeCompare(b.name);
+      });
+   
+   console.log('Project collaborators:', projectCollaborators.value);
+   
+   // Reset collaborator selection
+   selectedCollaborator.value = null;
+   }
+   
+   // --- Handle collaborator selection ---
+   function onCollaboratorSelect(userId) {
+   if (!userId) {
+      selectedCollaborator.value = null;
+      viewingUserId.value = currentUser.value;
+      filterTasksByUser(currentUser.value);
+      return;
+   }
+   
+   selectedCollaborator.value = userId;
+   viewingUserId.value = userId;
+   
+   // Filter tasks for the selected user
+   filterTasksByUser(userId);
+   
+   console.log('Now viewing schedule for:', getUserDisplayName(userId));
+   }
+   
+   // --- Check if current user can view task details ---
+   function canViewTaskDetails(task) {
+   if (!task) return false;
+   
+   // Directors can view all tasks
+   if (currentRole.value?.toLowerCase() === 'director') {
+      return true;
+   }
+   
+   // Non-directors: check if they're a collaborator
+   if (!task.collaborators) return false;
+   return task.collaborators.includes(currentUser.value);
+   }
+
+   
+   // --- Reset filters ---
+   function resetFilters() {
+   selectedProject.value = null;
+   selectedProjectId.value = null;
+   projectCollaborators.value = [];
+   selectedCollaborator.value = null;
+   viewingUserId.value = currentUser.value;
+   filterTasksByUser(currentUser.value);
+   }
+   
    // --- Initialization ---
    onMounted(() => {
      onAuthStateChanged(auth, async (user) => {
        if (user) {
          currentUser.value = user.uid;
+         viewingUserId.value = user.uid;
    
          try {
            // Fetch user info
@@ -430,6 +737,7 @@
            // Fetch all tasks
            await fetchAllTasks();
            await fetchAllUsers();
+           await fetchUserProjects();
    
            // Filter tasks for current user
            filterTasksByUser(currentUser.value);
