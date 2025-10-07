@@ -1,262 +1,279 @@
 <template>
-   <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <NavigationBar />
-      <!-- Page Header -->
-      <div class="bg-white/70 backdrop-blur-sm border-b border-gray-200/50 sticky top-0 z-10">
-         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-               <div>
-                  <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Schedule</h1>
-                  <p class="text-gray-600 mt-1">{{ viewingUserId === currentUser ? 'View and manage your schedule' : `Viewing ${getUserDisplayName(viewingUserId)}'s schedule` }}</p>
-               </div>
-            </div>
-         </div>
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <NavigationBar />
+
+    <!-- 🧭 Page Header -->
+    <div class="bg-white/70 backdrop-blur-sm border-b border-gray-200/50 sticky top-0 z-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Schedule</h1>
+            <p class="text-gray-600 mt-1">
+              {{ viewingUserId === currentUser
+                ? 'View and manage your schedule'
+                : `Viewing ${getUserDisplayName(viewingUserId)}'s schedule` }}
+            </p>
+          </div>
+        </div>
       </div>
-      <!-- Main Content -->
-      <!-- Main Content with Sidebar -->
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <!-- Sidebar Filters -->
-            <div class="lg:col-span-1">
-               <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6 space-y-6 sticky top-24">
-                  <div>
-                     <h3 class="text-lg font-bold text-gray-900 mb-4">Filter Schedule</h3>
-                     <!-- Viewing User Info -->
-                     <div class="mb-4 p-3 bg-blue-50 rounded-lg">
-                        <p class="text-xs text-gray-600 mb-1">Currently viewing:</p>
-                        <p class="text-sm font-semibold text-gray-900">
-                           {{ viewingUserId === currentUser ? 'Your Schedule' : getUserDisplayName(viewingUserId) }}
-                        </p>
-                     </div>
-                     <!-- Show role context for directors -->
-                     <div v-if="currentRole?.toLowerCase() === 'director'" class="pt-2 border-t border-blue-200">
-                        <p class="text-xs text-gray-600 mb-1">Department:</p>
-                        <p class="text-xs font-semibold text-blue-700">
-                           {{ currentUserDepartment || 'N/A' }}
-                        </p>
-                     </div>
-                     <!-- Project Dropdown -->
-                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                        Select Project
-                        </label>
-                        <select 
-                           v-model="selectedProjectId"
-                           @change="onProjectSelect($event.target.value)"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                           >
-                           <option :value="null">All Projects</option>
-                           <option 
-                              v-for="project in userProjects" 
-                              :key="project.projectId" 
-                              :value="project.projectId"
-                              >
-                              {{ project.title }}
-                           </option>
-                        </select>
-                     </div>
-                     <!-- Collaborator Dropdown (only shown when project is selected) -->
-                     <div v-if="selectedProject && projectCollaborators.length > 0" class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                        View Team Member's Schedule
-                        </label>
-                        <select 
-                           v-model="selectedCollaborator"
-                           @change="onCollaboratorSelect($event.target.value)"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                           >
-                           <option :value="null">Select a team member</option>
-                           <option 
-                              v-for="collaborator in projectCollaborators" 
-                              :key="collaborator.uid" 
-                              :value="collaborator.uid"
-                              >
-                              {{ collaborator.name }}
-                              {{ collaborator.isCurrentUser ? ' (You)' : '' }}
-                              {{ collaborator.isOwner ? ' 👑' : '' }}
-                           </option>
-                        </select>
-                        <p class="text-xs text-gray-500 mt-1">
-                           {{ projectCollaborators.length }} team member{{ projectCollaborators.length !== 1 ? 's' : '' }} in this project
-                        </p>
-                     </div>
-                     <!-- Reset Button -->
-                     <button 
-                        v-if="selectedProject || selectedCollaborator"
-                        @click="resetFilters"
-                        class="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-all"
-                        >
-                     Reset Filters
-                     </button>
-                  </div>
-               </div>
+    </div>
+
+    <!-- 🧭 Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- 🧭 Sidebar Filters -->
+        <div class="lg:col-span-1">
+          <div
+            class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6 space-y-6 sticky top-24"
+          >
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Filter Schedule</h3>
+
+            <!-- 👤 Viewing User -->
+            <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+              <p class="text-xs text-gray-600 mb-1">Currently viewing:</p>
+              <p class="text-sm font-semibold text-gray-900">
+                {{ viewingUserId === currentUser ? 'Your Schedule' : getUserDisplayName(viewingUserId) }}
+              </p>
             </div>
-            <!-- Calendar Container -->
-            <div class="lg:col-span-3">
-               <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6">
-                  <FullCalendar :options="calendarOptions" />
-               </div>
+
+            <!-- 🏢 Department (Directors only) -->
+            <div v-if="isDirector" class="pt-2 border-t border-blue-200">
+              <p class="text-xs text-gray-600 mb-1">Department:</p>
+              <p class="text-xs font-semibold text-blue-700">
+                {{ currentUserDepartment || 'N/A' }}
+              </p>
             </div>
-         </div>
-      </div>
-      <!-- Task Detail Modal -->
-      <transition name="fade">
-         <div v-if="showTaskDetailModal" class="fixed inset-0 z-50 overflow-y-auto" @click.self="closeTaskDetailModal">
-            <div class="flex items-center justify-center min-h-screen px-4 py-6">
-               <!-- Modal panel -->
-               <transition name="scale">
-                  <div 
-                     v-if="showTaskDetailModal"
-                     class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl transform transition-all"
-                     @click.stop
-                     >
-                     <!-- Header -->
-                     <div class="px-6 py-4 border-b border-gray-200">
-                        <div class="flex items-start justify-between">
-                           <div class="flex-1 pr-4">
-                              <h3 class="text-xl font-bold text-gray-900 mb-3">
-                                 {{ selectedTaskDetail?.title || 'Task Details' }}
-                              </h3>
-                              <div class="flex items-center gap-2 flex-wrap">
-                                 <!-- Status Badge -->
-                                 <span 
-                                    v-if="selectedTaskDetail?.status"
-                                    :class="getStatusBadgeClass(selectedTaskDetail.status)" 
-                                    class="px-3 py-1 rounded-full text-xs font-semibold"
-                                    >
-                                 <span class="mr-1">●</span>{{ formatStatus(selectedTaskDetail.status) }}
-                                 </span>
-                                 <!-- Owner Badge -->
-                                 <span v-if="isTaskOwner(selectedTaskDetail)" class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
-                                    <Crown class="w-3 h-3 inline-block mr-1" />
-                                    Owner
-                                 </span>
-                                 <!-- Due Soon Badge -->
-                                 <span 
-                                    v-if="getDueSoonBadge(selectedTaskDetail)" 
-                                    :class="getDueSoonBadge(selectedTaskDetail).class" 
-                                    class="px-3 py-1 rounded-full text-xs font-semibold"
-                                    >
-                                 {{ getDueSoonBadge(selectedTaskDetail).text }}
-                                 </span>
-                              </div>
-                           </div>
-                           <div class="flex items-center gap-2">
-                              <!-- Edit Button (only if owner) -->
-                              <button 
-                                 v-if="isTaskOwner(selectedTaskDetail)"
-                                 @click="handleEditTask(selectedTaskDetail)"
-                                 class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                 title="Edit Task"
-                                 >
-                                 <Edit3 class="w-5 h-5" />
-                              </button>
-                              <!-- Close Button -->
-                              <button 
-                                 @click="closeTaskDetailModal"
-                                 class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-                                 >
-                                 <X class="w-5 h-5" />
-                              </button>
-                           </div>
-                        </div>
-                     </div>
-                     <!-- Body -->
-                     <div class="px-6 py-6 space-y-6 max-h-[60vh] overflow-y-auto">
-                        <!-- Basic Information -->
-                        <div>
-                           <h4 class="text-sm font-semibold text-gray-900 mb-4">Basic Information</h4>
-                           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <!-- Deadline -->
-                              <div>
-                                 <div class="flex items-center gap-2 text-sm text-gray-600 mb-1">
-                                    <Calendar class="w-4 h-4" />
-                                    <span class="font-medium">Deadline</span>
-                                 </div>
-                                 <p class="text-sm text-gray-900 ml-6">
-                                    {{ formatDateDisplay(selectedTaskDetail?.deadline) }}
-                                 </p>
-                              </div>
-                              <!-- Owner -->
-                              <div>
-                                 <div class="flex items-center gap-2 text-sm text-gray-600 mb-1">
-                                    <User class="w-4 h-4" />
-                                    <span class="font-medium">Owner</span>
-                                 </div>
-                                 <div class="flex items-center gap-2 ml-6">
-                                    <p class="text-sm text-gray-900">
-                                       {{ getUserDisplayName(selectedTaskDetail?.ownerId) }}
-                                    </p>
-                                    <span v-if="selectedTaskDetail?.ownerId === currentUser" class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                    You
-                                    </span>
-                                 </div>
-                              </div>
-                           </div>
-                        </div>
-                        <!-- Collaborators -->
-                        <div v-if="selectedTaskDetail?.collaborators && selectedTaskDetail.collaborators.length > 0">
-                           <h4 class="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                              <Users class="w-4 h-4" />
-                              Collaborators ({{ selectedTaskDetail.collaborators.length }})
-                           </h4>
-                           <div class="space-y-2">
-                              <div 
-                                 v-for="collaboratorId in selectedTaskDetail.collaborators" 
-                                 :key="collaboratorId"
-                                 class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
-                                 >
-                                 <div class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
-                                    {{ getUserDisplayName(collaboratorId).charAt(0).toUpperCase() }}
-                                 </div>
-                                 <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-900">
-                                       {{ getUserDisplayName(collaboratorId) }}
-                                    </p>
-                                    <p class="text-xs text-gray-600">
-                                       {{ usersMap[collaboratorId]?.role || 'Collaborator' }}
-                                    </p>
-                                 </div>
-                                 <span v-if="collaboratorId === currentUser" class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                 You
-                                 </span>
-                              </div>
-                           </div>
-                        </div>
-                        <!-- Notes -->
-                        <div v-if="selectedTaskDetail?.notes">
-                           <h4 class="text-sm font-semibold text-gray-900 mb-2">Notes</h4>
-                           <p class="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg">{{ selectedTaskDetail.notes }}</p>
-                        </div>
-                     </div>
-                     <!-- Footer -->
-                     <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end rounded-b-2xl">
-                        <button 
-                           @click="closeTaskDetailModal"
-                           class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-all"
-                           >
-                        Close
-                        </button>
-                     </div>
-                  </div>
-               </transition>
+
+            <!-- 📁 Project Filter -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Select Project</label>
+              <select
+                v-model="selectedProjectId"
+                @change="onProjectSelect($event.target.value)"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option :value="null">All Projects</option>
+                <option v-for="p in userProjects" :key="p.projectId" :value="p.projectId">
+                  {{ p.title }}
+                </option>
+              </select>
             </div>
-         </div>
-      </transition>
-      <!-- Toast Notification -->
-      <transition name="fade">
-         <div 
-            v-if="showNotification" 
-            class="fixed bottom-8 right-8 z-50 bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3"
+
+            <!-- 👥 Collaborator Filter -->
+            <div v-if="selectedProject && projectCollaborators.length" class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-2">View Team Member</label>
+              <select
+                v-model="selectedCollaborator"
+                @change="onCollaboratorSelect($event.target.value)"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option :value="null">Select a team member</option>
+                <option
+                  v-for="c in projectCollaborators"
+                  :key="c.uid"
+                  :value="c.uid"
+                >
+                  {{ c.name }} {{ c.isCurrentUser ? '(You)' : '' }} {{ c.isOwner ? '👑' : '' }}
+                </option>
+              </select>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ projectCollaborators.length }} member{{ projectCollaborators.length !== 1 ? 's' : '' }}
+              </p>
+            </div>
+
+            <!-- 🔄 Reset -->
+            <button
+              v-if="selectedProject || selectedCollaborator"
+              @click="resetFilters"
+              class="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-all"
             >
-            <span>{{ notificationMessage }}</span>
-            <button @click="showNotification = false" class="text-gray-400 hover:text-white">
-               <X class="w-4 h-4" />
+              Reset Filters
             </button>
-         </div>
-      </transition>
-   </div>
+          </div>
+        </div>
+
+        <!-- 📅 Calendar -->
+        <div class="lg:col-span-3">
+          <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6">
+            <FullCalendar :options="calendarOptions" />
+
+            <!-- 🧭 Legend -->
+            <div class="flex flex-wrap gap-3 mt-4 text-sm">
+              <div v-for="(color, label) in statusColors" :key="label" class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full" :style="{ backgroundColor: color }"></span>
+                <span class="capitalize">{{ label }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🧭 Task Detail Modal -->
+    <transition name="fade">
+      <div
+        v-if="showTaskDetailModal"
+        class="fixed inset-0 z-50 overflow-y-auto"
+        @click.self="closeTaskDetailModal"
+      >
+        <div class="flex items-center justify-center min-h-screen px-4 py-6">
+          <transition name="scale">
+            <div
+              v-if="showTaskDetailModal"
+              class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl transform transition-all"
+              @click.stop
+            >
+              <!-- Header -->
+              <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-start">
+                <div>
+                  <h3 class="text-xl font-bold text-gray-900 mb-3">
+                    {{ selectedTaskDetail?.title || 'Task Details' }}
+                  </h3>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span
+                      v-if="selectedTaskDetail?.status"
+                      :class="getStatusBadgeClass(selectedTaskDetail.status)"
+                      class="px-3 py-1 rounded-full text-xs font-semibold"
+                    >
+                      ● {{ formatStatus(selectedTaskDetail.status) }}
+                    </span>
+                    <span
+                      v-if="isTaskOwner(selectedTaskDetail)"
+                      class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700"
+                    >
+                      <Crown class="w-3 h-3 inline-block mr-1" /> Owner
+                    </span>
+                    <span
+                      v-if="getDueSoonBadge(selectedTaskDetail)"
+                      :class="getDueSoonBadge(selectedTaskDetail).class"
+                      class="px-3 py-1 rounded-full text-xs font-semibold"
+                    >
+                      {{ getDueSoonBadge(selectedTaskDetail).text }}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    v-if="isTaskOwner(selectedTaskDetail)"
+                    @click="handleEditTask(selectedTaskDetail)"
+                    class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                    title="Edit Task"
+                  >
+                    <Edit3 class="w-5 h-5" />
+                  </button>
+                  <button
+                    @click="closeTaskDetailModal"
+                    class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                  >
+                    <X class="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <!-- Body -->
+              <div class="px-6 py-6 space-y-6 max-h-[60vh] overflow-y-auto">
+                <!-- 📋 Basic Info -->
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-900 mb-4">Basic Information</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div class="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                        <Calendar class="w-4 h-4" />
+                        <span class="font-medium">Deadline</span>
+                      </div>
+                      <p class="text-sm text-gray-900 ml-6">
+                        {{ formatDateDisplay(selectedTaskDetail?.deadline) }}
+                      </p>
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                        <User class="w-4 h-4" />
+                        <span class="font-medium">Owner</span>
+                      </div>
+                      <div class="flex items-center gap-2 ml-6">
+                        <p class="text-sm text-gray-900">
+                          {{ getUserDisplayName(selectedTaskDetail?.ownerId) }}
+                        </p>
+                        <span
+                          v-if="selectedTaskDetail?.ownerId === currentUser"
+                          class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                          >You</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 👥 Collaborators -->
+                <div v-if="selectedTaskDetail?.collaborators?.length">
+                  <h4 class="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Users class="w-4 h-4" />
+                    Collaborators ({{ selectedTaskDetail.collaborators.length }})
+                  </h4>
+                  <div class="space-y-2">
+                    <div
+                      v-for="id in selectedTaskDetail.collaborators"
+                      :key="id"
+                      class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div
+                        class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm"
+                      >
+                        {{ getUserDisplayName(id).charAt(0).toUpperCase() }}
+                      </div>
+                      <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900">{{ getUserDisplayName(id) }}</p>
+                        <p class="text-xs text-gray-600">{{ usersMap[id]?.role || 'Collaborator' }}</p>
+                      </div>
+                      <span
+                        v-if="id === currentUser"
+                        class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                        >You</span
+                      >
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 📝 Notes -->
+                <div v-if="selectedTaskDetail?.notes">
+                  <h4 class="text-sm font-semibold text-gray-900 mb-2">Notes</h4>
+                  <p class="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg">
+                    {{ selectedTaskDetail.notes }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Footer -->
+              <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end rounded-b-2xl">
+                <button
+                  @click="closeTaskDetailModal"
+                  class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </transition>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 🔔 Toast -->
+    <transition name="fade">
+      <div
+        v-if="showNotification"
+        class="fixed bottom-8 right-8 z-50 bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3"
+      >
+        <span>{{ notificationMessage }}</span>
+        <button @click="showNotification = false" class="text-gray-400 hover:text-white">
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+    </transition>
+  </div>
 </template>
+
 <script setup>
    import { ref, onMounted, computed } from 'vue';
    import { useRouter } from 'vue-router';
@@ -359,25 +376,18 @@
       const endString = formatDate(new Date(deadlineDate.getTime() + 86400000)); // +1 day for inclusive end
       
       // Your existing status and color logic
+const statusColors = {
+  completed:      '#bbf7d0', // green
+  'in progress':  '#fde68a', // yellow
+  pending:        '#bfdbfe', // blue
+  'under review': '#f59e0b', // orange
+  overdue:        '#fecaca', // red
+  unassigned:     '#d1d5db'  // gray fallback
+};
+
       const statusLower = task.status?.toLowerCase() || 'unassigned';
-      let backgroundColor, borderColor;
-      
-      if (statusLower === 'completed') {
-         backgroundColor = '#9ca3af';
-         borderColor = '#6b7280';
-      } else if (statusLower === 'ongoing') {
-         backgroundColor = '#3b82f6';
-         borderColor = '#2563eb';
-      } else if (statusLower === 'under review') {
-         backgroundColor = '#f59e0b';
-         borderColor = '#d97706';
-      } else if(statusLower === 'unassigned'){
-         backgroundColor = '#8b5cf6'; // Violet-500
-         borderColor = '#7c3aed'; // Violet-600
-      } else {
-         backgroundColor = '#ef4444';
-         borderColor = '#dc2626';
-      }
+      const { background: backgroundColor, border: borderColor } =
+  statusColors[statusLower] || statusColors['unassigned'];
       
       // Check if current user can view this task
       const isViewable = canViewTaskDetails(task);
@@ -410,42 +420,118 @@
 
    
    // --- Calendar Configuration ---
-   const calendarOptions = ref({
-     plugins: [dayGridPlugin, interactionPlugin],
-     initialView: 'dayGridMonth',
-     headerToolbar: {
-       left: 'prev,next today',
-       center: 'title',
-       right: 'dayGridMonth,dayGridWeek,dayGridDay'
-     },
-     editable: true,
-     selectable: true,
-     selectMirror: true,
-     dayMaxEvents: true,
-     weekends: true,
-     events: calendarEvents, // Use computed events
-      // Event click handler
-      eventClick: function(info) {
-      const taskId = info.event.id;
-      const task = filteredTasks.value.find(t => t.taskId === taskId);
-      
-      if (!task) return;
-      
-      // Check if current user has permission to view
-      if (!canViewTaskDetails(task)) {
-         showToast('🔒 You do not have permission to view this task');
-         return;
+  // --- Status-based color mapping ---
+
+const statusColors = {
+  completed:      '#bbf7d0', // green
+  'in progress':  '#fde68a', // yellow
+  pending:        '#bfdbfe', // blue
+  'under review': '#f59e0b', // orange
+  overdue:        '#fecaca', // red
+  unassigned:     '#d1d5db'  // gray fallback
+};
+
+// --- Calendar Configuration ---
+const calendarOptions = ref({
+  plugins: [dayGridPlugin, interactionPlugin],
+  initialView: 'dayGridMonth',
+  headerToolbar: {
+    left: 'prev,next today',
+    center: 'title',
+    right: 'dayGridMonth,dayGridWeek,dayGridDay'
+  },
+  editable: true,
+  selectable: true,
+  selectMirror: true,
+  dayMaxEvents: true,
+  weekends: true,
+  events: calendarEvents, // your computed or reactive events list
+  //more than 2 tasks
+  eventContent(info) {
+  const status = info.event.extendedProps.status?.toLowerCase();
+const color = statusColors[status] || statusColors['unassigned'];
+
+
+  // Return a small circle + text (not a pill)
+  return {
+    html: `
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      ">
+        <span style="
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background-color: ${color};
+          flex-shrink: 0;
+        "></span>
+        <span>${info.event.title}</span>
+      </div>
+    `
+  };
+},
+
+  // 🔹 Highlight day cells based on event statuses
+  dayCellDidMount(info) {
+    // Format cell date
+    const cellDate = info.date.toISOString().split('T')[0];
+
+    // Find events that match this date
+    const dayEvents = calendarEvents.value?.filter(e => 
+      e.start.startsWith(cellDate)
+    ) || [];
+
+    if (dayEvents.length > 0) {
+      // Optional: Choose one color if multiple events — e.g. priority order
+      const priorityOrder = ['overdue', 'in progress', 'pending', 'completed'];
+      const status = priorityOrder.find(s => 
+        dayEvents.some(e => e.status?.toLowerCase() === s)
+      );
+
+      // Apply background color
+      const color = statusColors[status];
+      if (color) {
+      //   info.el.style.backgroundColor = color;
+      // info.el.style.background = `linear-gradient(${color}99, ${color}99)`; // '99' adds 60% opacity
+info.el.style.borderRadius = '8px';
+
+        info.el.style.transition = 'background-color 0.3s ease';
+        info.el.style.background = `linear-gradient(${color}55, ${color}55)`; // subtle tint
+info.el.style.boxShadow = `inset 0 0 0 2px ${color}`; // colored border
+
+
       }
-      
-      // If permission granted, open modal
-      openTaskDetailModal(task);
-      },
-     // Date select handler
-     select: function(info) {
-       console.log('Date selected:', info.startStr, 'to', info.endStr);
-       // You'll add create task functionality later
-     }
-   });
+    }
+  },
+
+  // 🔹 Event click handler
+  eventClick(info) {
+    const taskId = info.event.id;
+    const task = filteredTasks.value.find(t => t.taskId === taskId);
+    if (!task) return;
+
+    if (!canViewTaskDetails(task)) {
+      showToast('🔒 You do not have permission to view this task');
+      return;
+    }
+
+    openTaskDetailModal(task);
+  },
+
+  // 🔹 Date select handler (optional)
+  select(info) {
+    console.log('Date selected:', info.startStr, 'to', info.endStr);
+    // You can add create task logic later
+  }
+});
+
    
    function showToast(message) {
       notificationMessage.value = message;
