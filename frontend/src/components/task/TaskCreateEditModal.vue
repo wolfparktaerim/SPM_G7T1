@@ -225,8 +225,7 @@
         <!-- Project Field (Tasks only) -->
         <div v-if="!isSubtask" class="form-group">
           <label class="form-label">Project</label>
-          <select v-model="formData.projectId" @change="handleProjectChange" class="form-input"
-            :disabled="loadingProjects">
+          <select v-model="formData.projectId" class="form-input" :disabled="loadingProjects">
             <option value="">
               {{ loadingProjects ? 'Loading projects...' : 'Select a project (optional)' }}
             </option>
@@ -241,9 +240,6 @@
             <span v-if="availableProjects.length === 0 && !loadingProjects" class="text-amber-600">
               - No projects available
             </span>
-          </p>
-          <p v-if="formData.projectId" class="form-hint text-blue-600">
-            ℹ️ Only project collaborators can be added as task collaborators
           </p>
         </div>
 
@@ -265,27 +261,17 @@
         <!-- Collaborators Field (Only for owners) -->
         <div v-if="canManageCollaborators" class="form-group">
           <label class="form-label">Collaborators</label>
-
-          <!-- Context info based on task type -->
-          <div class="project-requirement-info">
-            <span v-if="isSubtask" class="requirement-badge info">
-              ℹ️ Subtask - Can add parent task collaborators
-            </span>
-            <span v-else-if="!formData.projectId" class="requirement-badge info">
-              ℹ️ Rogue Task - Can add any user in the system
-            </span>
-            <span v-else class="requirement-badge success">
-              ✓ Project Task - Can add project collaborators
-            </span>
+          <!-- Department info -->
+          <div class="dept-info">
+            <span class="dept-badge">{{ currentUser?.department || 'Unknown Department' }}</span>
+            <span class="dept-text">You can only add collaborators from your department</span>
           </div>
-
-          <!-- Collaborators input -->
           <div class="collaborators-input">
             <select v-model="selectedCollaborator" @change="addCollaborator" class="form-input"
               :disabled="availableCollaborators.length === 0">
               <option value="">
-                <span v-if="availableCollaborators.length === 0">No available collaborators</span>
-                <span v-else>Select a collaborator...</span>
+                <span v-if="availableCollaborators.length === 0">No available collaborators in your department</span>
+                <span v-else>Select a collaborator from your department...</span>
               </option>
               <option v-for="user in availableCollaborators" :key="user.uid" :value="user.uid">
                 {{ getUserDisplayName(user) }} ({{ formatRole(user.role) }})
@@ -294,7 +280,7 @@
           </div>
 
           <!-- No collaborators message -->
-          <div v-if="showNoCollaboratorsMessage" class="no-collaborators-message">
+          <div v-if="availableCollaborators.length === 0" class="no-collaborators-message">
             <div class="message-icon">👥</div>
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
@@ -333,7 +319,7 @@
             </div>
           </div>
           <p class="form-hint">
-            Only the task owner can modify collaborators.
+            Only the task owner can modify collaborators. Collaborators must be from the same department.
           </p>
         </div>
 
@@ -449,10 +435,6 @@ const props = defineProps({
     type: String,
     default: null
   },
-  parentTask: {
-    type: Object,
-    default: null
-  },
   allUsers: {
     type: Array,
     default: () => []
@@ -466,6 +448,7 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 // Reactive data
+const loading = ref(false)
 const allUsers = ref([])
 const projects = ref([])
 const loadingProjects = ref(false)
@@ -528,46 +511,14 @@ const subordinateUsers = computed(() => {
 })
 
 const availableCollaborators = computed(() => {
-  if (!props.isSubtask) {
-    // For tasks without project (rogue tasks): allow ALL users in system
-    if (!formData.value.projectId) {
-      return props.allUsers.filter(user =>
-        user.uid !== currentUser.value?.uid &&
-        !formData.value.collaborators.includes(user.uid)
-      )
-    }
+  const currentUserDept = currentUser.value?.department
+  if (!currentUserDept) return []
 
-    // For tasks with project: must be project collaborator
-    if (!selectedProject.value) {
-      return []
-    }
-
-    const projectCollaborators = selectedProject.value.collaborators || []
-
-    return props.allUsers.filter(user =>
-      user.uid !== currentUser.value?.uid &&
-      projectCollaborators.includes(user.uid) &&
-      !formData.value.collaborators.includes(user.uid)
-    )
-  } else {
-    // For subtasks: only parent task collaborators can be added
-    if (!props.parentTask || !props.parentTask.collaborators) {
-      return []
-    }
-
-    const parentTaskCollaborators = props.parentTask.collaborators || []
-
-    return props.allUsers.filter(user =>
-      user.uid !== currentUser.value?.uid &&
-      parentTaskCollaborators.includes(user.uid) &&
-      !formData.value.collaborators.includes(user.uid)
-    )
-  }
-})
-
-// Show no collaborators message
-const showNoCollaboratorsMessage = computed(() => {
-  return availableCollaborators.value.length === 0
+  return props.allUsers.filter(user =>
+    user.uid !== currentUser.value?.uid &&
+    user.department === currentUserDept &&
+    !formData.value.collaborators.includes(user.uid)
+  )
 })
 
 const displayCollaborators = computed(() => {
@@ -703,9 +654,9 @@ function getModalTitle() {
 }
 
 function getModalSubtitle() {
-  if (props.isSubtask && (props.parentTaskId || props.parentTask)) {
-    const taskTitle = props.parentTask?.title || 'Parent Task'
-    return `Adding subtask to task: ${taskTitle}`
+  if (props.isSubtask && props.parentTaskId) {
+    const parentTask = props.allUsers.find(task => task.taskId === props.parentTaskId)
+    return `Adding subtask to task: ${parentTask?.title || 'Parent Task'}`
   }
   return props.isEditing ? 'Update the details below' : 'Fill in the details below'
 }
@@ -1632,10 +1583,6 @@ onMounted(async () => {
   color: #d97706;
 }
 
-.text-blue-600 {
-  color: #2563eb;
-}
-
 .char-counter {
   font-size: 0.75rem;
   color: #6b7280;
@@ -1647,36 +1594,29 @@ onMounted(async () => {
   margin-bottom: 0.75rem;
 }
 
-.project-requirement-info {
+.dept-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 0.5rem;
 }
 
-.requirement-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
+.dept-badge {
+  background-color: #2563eb;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 600;
 }
 
-.requirement-badge.warning {
-  background-color: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fbbf24;
-}
-
-.requirement-badge.info {
-  background-color: #dbeafe;
-  color: #1e40af;
-  border: 1px solid #3b82f6;
-}
-
-.requirement-badge.success {
-  background-color: #d1fae5;
-  color: #065f46;
-  border: 1px solid #10b981;
+.dept-text {
+  font-size: 0.75rem;
+  color: #0369a1;
 }
 
 .no-collaborators-message {
