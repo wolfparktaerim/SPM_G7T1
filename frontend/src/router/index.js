@@ -16,7 +16,7 @@ import SettingsView from '@/views/SettingsView.vue'
 import AuthenticationView from '@/views/AuthView.vue'
 
 // import tests
-import TestConfirmationModal from '@/frontendTests/TestConfirmationModal.vue'
+import TestConfirmationModal from '@/tests/TestConfirmationModal.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

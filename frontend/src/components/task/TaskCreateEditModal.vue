@@ -1,3 +1,5 @@
+<!-- frontend/src/components/task/TaskCreateEditModal.vue -->
+
 <template>
   <div v-if="show" class="modal-overlay" @click="handleBackdropClick">
     <div class="modal" @click.stop>
@@ -42,7 +44,172 @@
           <span v-if="errors.deadline" class="error-message">{{ errors.deadline }}</span>
         </div>
 
-        <!-- Status field for subtask editing -->
+        <!-- Priority Field -->
+        <div class="form-group">
+          <label class="form-label">Priority (1-10)</label>
+          <div class="priority-selector">
+            <input v-model.number="formData.priority" type="range" min="1" max="10" step="1" class="priority-slider" />
+            <div class="priority-display" :class="getPriorityDisplayClass(formData.priority)">
+              <span class="priority-icon">⭐</span>
+              <span class="priority-value">{{ formData.priority }}</span>
+              <span class="priority-label">{{ getPriorityLabel(formData.priority) }}</span>
+            </div>
+          </div>
+          <div class="priority-legend">
+            <span class="legend-item legend-low">1-3: Low</span>
+            <span class="legend-item legend-medium">4-6: Medium</span>
+            <span class="legend-item legend-high">7-9: High</span>
+            <span class="legend-item legend-critical">10: Critical</span>
+          </div>
+        </div>
+
+        <!-- NEW: Deadline Reminders Section -->
+        <div class="form-group">
+          <label class="form-label">
+            <input v-model="formData.taskDeadLineReminders" type="checkbox" class="checkbox-input" />
+            <span class="checkbox-label">Enable deadline reminders</span>
+          </label>
+          <p class="form-hint">
+            Get notified before the deadline to help you stay on track
+          </p>
+        </div>
+
+        <!-- NEW: Reminder Times Configuration (shown when reminders enabled) -->
+        <transition name="slide-down">
+          <div v-if="formData.taskDeadLineReminders" class="reminder-options">
+            <div class="form-group">
+              <label class="form-label">Reminder Schedule</label>
+
+              <!-- Quick Add Buttons -->
+              <div class="reminder-quick-add">
+                <button type="button" @click="addReminderTime(1)" :disabled="formData.reminderTimes.includes(1)"
+                  class="quick-reminder-btn">
+                  1 day
+                </button>
+                <button type="button" @click="addReminderTime(3)" :disabled="formData.reminderTimes.includes(3)"
+                  class="quick-reminder-btn">
+                  3 days
+                </button>
+                <button type="button" @click="addReminderTime(7)" :disabled="formData.reminderTimes.includes(7)"
+                  class="quick-reminder-btn">
+                  1 week
+                </button>
+                <button type="button" @click="addReminderTime(14)" :disabled="formData.reminderTimes.includes(14)"
+                  class="quick-reminder-btn">
+                  2 weeks
+                </button>
+              </div>
+
+              <!-- Custom Reminder Input -->
+              <div class="custom-reminder-input">
+                <input v-model.number="customReminderDays" type="number" min="1" max="365" placeholder="Custom days..."
+                  class="form-input reminder-custom-input" @keypress.enter.prevent="addCustomReminder" />
+                <button type="button" @click="addCustomReminder" class="add-reminder-btn">
+                  Add
+                </button>
+              </div>
+
+              <span v-if="errors.reminderTimes" class="error-message">{{ errors.reminderTimes }}</span>
+
+              <!-- Reminder Times List -->
+              <div v-if="formData.reminderTimes.length > 0" class="reminder-times-list">
+                <div class="reminder-times-header">
+                  <span class="list-title">Active Reminders ({{ formData.reminderTimes.length }})</span>
+                  <button type="button" @click="clearAllReminders" class="clear-all-btn">
+                    Clear All
+                  </button>
+                </div>
+                <div class="reminder-chips">
+                  <div v-for="days in sortedReminderTimes" :key="days" class="reminder-chip">
+                    <span class="chip-icon">🔔</span>
+                    <span class="chip-text">{{ formatReminderDays(days) }}</span>
+                    <button type="button" @click="removeReminderTime(days)" class="chip-remove">
+                      <X class="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="no-reminders-message">
+                <span class="message-icon">📅</span>
+                <span class="message-text">No reminders set. Add reminders using the buttons above.</span>
+              </div>
+
+              <!-- Reminder Info Box -->
+              <div class="reminder-info-box">
+                <div class="info-icon">ℹ️</div>
+                <div class="info-content">
+                  <div class="info-title">How Reminders Work</div>
+                  <ul class="info-list">
+                    <li>You'll receive notifications on the days you specify before the deadline</li>
+                    <li>All collaborators will receive the reminders</li>
+                    <li>Reminders are sent at 9:00 AM in your local timezone</li>
+                    <li>You can add multiple reminder times (e.g., 1, 3, and 7 days before)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Recurring Options -->
+        <div class="form-group">
+          <label class="form-label">
+            <input v-model="formData.scheduled" type="checkbox" class="checkbox-input" />
+            <span class="checkbox-label">Make this {{ isSubtask ? 'subtask' : 'task' }} recurring</span>
+          </label>
+          <p class="form-hint">
+            Recurring {{ isSubtask ? 'subtasks' : 'tasks' }} will automatically create a new instance when marked as
+            completed
+          </p>
+        </div>
+
+        <!-- Schedule Type (shown when recurring is enabled) -->
+        <transition name="slide-down">
+          <div v-if="formData.scheduled" class="recurring-options">
+            <div class="form-group">
+              <label class="form-label required">Recurrence Pattern</label>
+              <select v-model="formData.schedule" required class="form-input">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="custom">Custom (specify days)</option>
+              </select>
+              <p class="form-hint">How often should this {{ isSubtask ? 'subtask' : 'task' }} repeat?</p>
+            </div>
+
+            <!-- Custom Schedule Days -->
+            <div v-if="formData.schedule === 'custom'" class="form-group">
+              <label class="form-label required">Repeat every (days)</label>
+              <input v-model.number="formData.custom_schedule" type="number" min="1" max="365" required
+                placeholder="Enter number of days" class="form-input" :class="{ 'error': errors.custom_schedule }" />
+              <span v-if="errors.custom_schedule" class="error-message">{{ errors.custom_schedule }}</span>
+              <p class="form-hint">
+                The {{ isSubtask ? 'subtask' : 'task' }} will repeat every {{ formData.custom_schedule || 'X' }} days
+                after completion
+              </p>
+            </div>
+
+            <!-- Recurring Info Box -->
+            <div class="recurring-info-box">
+              <div class="info-icon">ℹ️</div>
+              <div class="info-content">
+                <div class="info-title">How Recurring Works</div>
+                <ul class="info-list">
+                  <li>A new {{ isSubtask ? 'subtask' : 'task' }} is created automatically when you mark this one as
+                    <strong>Completed</strong>
+                  </li>
+                  <li>The deadline will be calculated based on your selected recurrence pattern</li>
+                  <li>The new {{ isSubtask ? 'subtask' : 'task' }} will maintain the same time offset as the original
+                    (e.g., if original had 2 days to complete, new one will too)</li>
+                  <li>All collaborators, notes, and settings will be copied to the new instance</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Status Field -->
         <div v-if="isSubtask && isEditing" class="form-group">
           <label class="form-label required">Status</label>
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
@@ -84,7 +251,7 @@
         <div v-if="canAssignOwner" class="form-group">
           <label class="form-label">Assign Owner</label>
           <select v-model="formData.ownerId" @change="handleOwnerChange" class="form-input">
-            <option value="">Yourself</option>
+            <option :value="currentUser?.uid">Yourself</option>
             <option v-for="user in subordinateUsers" :key="user.uid" :value="user.uid">
               {{ getUserDisplayName(user) }} ({{ formatRole(user.role) }})
             </option>
@@ -131,21 +298,8 @@
             <div class="message-icon">👥</div>
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
-              <div class="message-text">
-                <span v-if="isSubtask">
-                  No other parent task collaborators available to add. Only users who are collaborators on the parent
-                  task can
-                  be added.
-                </span>
-                <span v-else-if="formData.projectId">
-                  No other project collaborators available to add. Only users who are collaborators on the selected
-                  project can
-                  be added.
-                </span>
-                <span v-else>
-                  No other users available to add as collaborators.
-                </span>
-              </div>
+              <div class="message-text">There are no other users in your department ({{ currentUser?.department }}) to
+                add as collaborators.</div>
             </div>
           </div>
 
@@ -320,7 +474,7 @@ const deadlineInput = ref('')
 const newAttachments = ref([])
 const existingAttachments = ref([])
 const errors = ref({})
-const loading = ref(false)
+const customReminderDays = ref(null)
 
 // Form data
 const formData = ref({
@@ -330,7 +484,14 @@ const formData = ref({
   notes: '',
   projectId: '',
   ownerId: '',
-  collaborators: []
+  collaborators: [],
+  priority: 5,
+  scheduled: false,
+  schedule: 'daily',
+  custom_schedule: null,
+  start_date: Math.floor(Date.now() / 1000),
+  reminderTimes: [],
+  taskDeadLineReminders: false
 })
 
 // Computed properties
@@ -348,7 +509,6 @@ const canManageCollaborators = computed(() => {
   return props.taskData?.ownerId === currentUser.value?.uid
 })
 
-// UPDATED: Filter subordinate users by same department only (for owner assignment)
 const subordinateUsers = computed(() => {
   const currentUserRole = currentUser.value?.role
   const currentUserDept = currentUser.value?.department
@@ -356,7 +516,6 @@ const subordinateUsers = computed(() => {
   if (!currentUserRole || !currentUserDept) return []
 
   return props.allUsers.filter(user => {
-    // Must be in same department for owner assignment
     if (user.department !== currentUserDept) return false
 
     if (currentUserRole === 'director') {
@@ -368,16 +527,6 @@ const subordinateUsers = computed(() => {
   })
 })
 
-// Get the selected project details
-const selectedProject = computed(() => {
-  if (!formData.value.projectId) return null
-  return projects.value.find(p => p.projectId === formData.value.projectId)
-})
-
-// UPDATED: Collaborator filtering logic:
-// - Rogue tasks (no project): ALL users in system
-// - Project tasks: Only project collaborators
-// - Subtasks: Only parent task collaborators
 const availableCollaborators = computed(() => {
   if (!props.isSubtask) {
     // For tasks without project (rogue tasks): allow ALL users in system
@@ -437,6 +586,10 @@ const availableProjects = computed(() => {
   )
 })
 
+const sortedReminderTimes = computed(() => {
+  return [...formData.value.reminderTimes].sort((a, b) => a - b)
+})
+
 const isFormValid = computed(() => {
   return formData.value.title.trim() &&
     formData.value.deadline > 0 &&
@@ -449,15 +602,11 @@ async function fetchProjects() {
 
   loadingProjects.value = true
   try {
-    console.log('Fetching projects for user:', currentUser.value.uid)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUser.value.uid}`)
     projects.value = response.data.projects || []
-    console.log(`Loaded ${projects.value.length} projects`)
   } catch (error) {
     console.error('Error fetching projects:', error)
-    if (error.response?.status === 404) {
-      projects.value = []
-    } else {
+    if (error.response?.status !== 404) {
       toast.error('Failed to load projects')
     }
   } finally {
@@ -465,34 +614,59 @@ async function fetchProjects() {
   }
 }
 
-// UPDATED: Handle project change - clear collaborators based on project rules
-function handleProjectChange() {
-  const ownerId = formData.value.ownerId || currentUser.value?.uid
-  const preservedIds = [ownerId, currentUser.value?.uid]
+function getPriorityLabel(priority) {
+  const p = priority || 5
+  if (p >= 10) return 'Critical'
+  if (p >= 7) return 'High'
+  if (p >= 4) return 'Medium'
+  return 'Low'
+}
 
-  if (!formData.value.projectId) {
-    // Project cleared - now it's a rogue task
-    // Keep all existing collaborators (no restrictions for rogue tasks)
-    return
+function getPriorityDisplayClass(priority) {
+  const p = priority || 5
+  if (p >= 10) return 'priority-display-critical'
+  if (p >= 7) return 'priority-display-high'
+  if (p >= 4) return 'priority-display-medium'
+  return 'priority-display-low'
+}
+
+// NEW: Reminder management functions
+function addReminderTime(days) {
+  if (!formData.value.reminderTimes.includes(days)) {
+    formData.value.reminderTimes.push(days)
   }
+}
 
-  // Get new project's collaborators
-  const project = projects.value.find(p => p.projectId === formData.value.projectId)
-  if (!project) return
-
-  const projectCollaborators = project.collaborators || []
-
-  // Keep only collaborators who are also project collaborators, plus owner/creator
-  const originalCount = formData.value.collaborators.length
-  formData.value.collaborators = formData.value.collaborators.filter(id =>
-    projectCollaborators.includes(id) || preservedIds.includes(id)
-  )
-
-  // Show info message if collaborators were removed
-  const removedCount = originalCount - formData.value.collaborators.length
-  if (removedCount > 0 && props.isEditing) {
-    toast.info(`${removedCount} collaborator(s) removed - not in selected project`)
+function removeReminderTime(days) {
+  const index = formData.value.reminderTimes.indexOf(days)
+  if (index > -1) {
+    formData.value.reminderTimes.splice(index, 1)
   }
+}
+
+function addCustomReminder() {
+  if (customReminderDays.value && customReminderDays.value > 0 && customReminderDays.value <= 365) {
+    if (!formData.value.reminderTimes.includes(customReminderDays.value)) {
+      formData.value.reminderTimes.push(customReminderDays.value)
+      customReminderDays.value = null
+    } else {
+      toast.warning('This reminder time is already added')
+    }
+  } else {
+    toast.error('Please enter a valid number of days (1-365)')
+  }
+}
+
+function clearAllReminders() {
+  formData.value.reminderTimes = []
+}
+
+function formatReminderDays(days) {
+  if (days === 1) return '1 day before'
+  if (days === 7) return '1 week before'
+  if (days === 14) return '2 weeks before'
+  if (days === 30) return '1 month before'
+  return `${days} days before`
 }
 
 function handleOwnerChange() {
@@ -661,13 +835,11 @@ function formatFileSize(bytes) {
 
 function getAttachmentName(attachment, index) {
   const header = attachment.slice(0, 10).toLowerCase()
-
   if (header.includes('ivbor')) return `Image_${index + 1}.png`
   if (header.includes('/9j/')) return `Image_${index + 1}.jpg`
   if (header.includes('jvber')) return `Document_${index + 1}.pdf`
   if (header.includes('uesdb')) return `Document_${index + 1}.docx`
   if (header.includes('pk')) return `Spreadsheet_${index + 1}.xlsx`
-
   return `Attachment_${index + 1}`
 }
 
@@ -688,6 +860,21 @@ function validateForm() {
 
   if (!formData.value.deadline) {
     errors.value.deadline = 'Deadline is required'
+  }
+
+  if (formData.value.priority < 1 || formData.value.priority > 10) {
+    errors.value.priority = 'Priority must be between 1 and 10'
+  }
+
+  if (formData.value.scheduled && formData.value.schedule === 'custom') {
+    if (!formData.value.custom_schedule || formData.value.custom_schedule < 1) {
+      errors.value.custom_schedule = 'Custom schedule must be at least 1 day'
+    }
+  }
+
+  // NEW: Validate reminder times
+  if (formData.value.taskDeadLineReminders && formData.value.reminderTimes.length === 0) {
+    errors.value.reminderTimes = 'Please add at least one reminder time or disable reminders'
   }
 
   return Object.keys(errors.value).length === 0
@@ -774,12 +961,20 @@ function resetForm() {
     notes: '',
     projectId: '',
     ownerId: '',
-    collaborators: []
+    collaborators: [],
+    priority: 5,
+    scheduled: false,
+    schedule: 'daily',
+    custom_schedule: null,
+    start_date: Math.floor(Date.now() / 1000),
+    reminderTimes: [],
+    taskDeadLineReminders: false
   }
   deadlineInput.value = ''
   newAttachments.value = []
   existingAttachments.value = []
   selectedCollaborator.value = ''
+  customReminderDays.value = null
   errors.value = {}
 }
 
@@ -794,7 +989,14 @@ watch(() => props.show, (newVal) => {
         notes: props.taskData.notes || '',
         projectId: props.taskData.projectId || '',
         ownerId: props.taskData.ownerId || '',
-        collaborators: [...(props.taskData.collaborators || [])]
+        collaborators: [...(props.taskData.collaborators || [])],
+        priority: props.taskData.priority || 5,
+        scheduled: props.taskData.scheduled || false,
+        schedule: props.taskData.schedule || 'daily',
+        custom_schedule: props.taskData.custom_schedule || null,
+        start_date: props.taskData.start_date || Math.floor(Date.now() / 1000),
+        reminderTimes: [...(props.taskData.reminderTimes || [])],
+        taskDeadLineReminders: props.taskData.taskDeadLineReminders || false
       }
       deadlineInput.value = epochToDateTime(props.taskData.deadline)
       existingAttachments.value = props.taskData.attachments || []
@@ -833,6 +1035,423 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* NEW: Reminder Options Styles */
+.reminder-options {
+  padding: 1.5rem;
+  background-color: #fef3c7;
+  border: 2px solid #fbbf24;
+  border-radius: 0.75rem;
+  margin-top: 1rem;
+}
+
+.reminder-quick-add {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.quick-reminder-btn {
+  padding: 0.5rem 1rem;
+  background-color: white;
+  border: 2px solid #d97706;
+  color: #92400e;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.quick-reminder-btn:hover:not(:disabled) {
+  background-color: #fbbf24;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.quick-reminder-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+  color: #9ca3af;
+}
+
+.custom-reminder-input {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.reminder-custom-input {
+  flex: 1;
+}
+
+.add-reminder-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: #f59e0b;
+  color: white;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.add-reminder-btn:hover {
+  background-color: #d97706;
+  transform: translateY(-1px);
+}
+
+.reminder-times-list {
+  margin-top: 1rem;
+}
+
+.reminder-times-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.list-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.clear-all-btn {
+  font-size: 0.75rem;
+  color: #dc2626;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.clear-all-btn:hover {
+  background-color: #fee2e2;
+}
+
+.reminder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.reminder-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background-color: white;
+  border: 2px solid #f59e0b;
+  border-radius: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #92400e;
+  transition: all 0.2s ease;
+}
+
+.reminder-chip:hover {
+  background-color: #fffbeb;
+  transform: translateY(-1px);
+}
+
+.chip-icon {
+  font-size: 1rem;
+}
+
+.chip-text {
+  font-weight: 600;
+}
+
+.chip-remove {
+  padding: 0.125rem;
+  color: #dc2626;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.chip-remove:hover {
+  background-color: #fee2e2;
+}
+
+.no-reminders-message {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: white;
+  border: 2px dashed #d97706;
+  border-radius: 0.5rem;
+  color: #92400e;
+}
+
+.message-icon {
+  font-size: 1.5rem;
+}
+
+.message-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.reminder-info-box {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* Priority Selector Styles */
+.priority-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.priority-slider {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right,
+      #3b82f6 0%,
+      #3b82f6 30%,
+      #f59e0b 30%,
+      #f59e0b 60%,
+      #f97316 60%,
+      #f97316 90%,
+      #dc2626 90%,
+      #dc2626 100%);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.priority-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.priority-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.priority-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.priority-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.priority-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 2px solid;
+  transition: all 0.3s ease;
+}
+
+.priority-icon {
+  font-size: 1.5rem;
+}
+
+.priority-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.priority-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.priority-display-low {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+  border-color: #3b82f6;
+}
+
+.priority-display-medium {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.priority-display-high {
+  background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+  color: #9a3412;
+  border-color: #f97316;
+}
+
+.priority-display-critical {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  border-color: #dc2626;
+  animation: pulse-critical 2s ease-in-out infinite;
+}
+
+@keyframes pulse-critical {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+  }
+}
+
+.priority-legend {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.legend-item {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.legend-low {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.legend-medium {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.legend-high {
+  background-color: #fed7aa;
+  color: #9a3412;
+}
+
+.legend-critical {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Checkbox Styles */
+.checkbox-input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.checkbox-label {
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* Recurring Options Styles */
+.recurring-options {
+  padding: 1.5rem;
+  background-color: #f0f9ff;
+  border: 2px solid #bae6fd;
+  border-radius: 0.75rem;
+  margin-top: 1rem;
+}
+
+.recurring-info-box {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+}
+
+.info-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e40af;
+  margin-bottom: 0.5rem;
+}
+
+.info-list {
+  font-size: 0.8125rem;
+  color: #1e3a8a;
+  line-height: 1.6;
+  margin-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.info-list li {
+  margin-bottom: 0.375rem;
+}
+
+.info-list strong {
+  font-weight: 600;
+}
+
+/* Slide down animation */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+  max-height: 0;
+  overflow: hidden;
+}
+
+.slide-down-enter-to,
+.slide-down-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 500px;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

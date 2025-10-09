@@ -75,7 +75,9 @@
                 <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
                 <select v-model="filters.sortBy"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+
                   <option value="createdAt">Creation Date</option>
+                  <option value="priority">Priority (High to Low)</option>
                   <option value="deadline">Deadline</option>
                   <option value="title">Title</option>
                 </select>
@@ -147,7 +149,7 @@ const showFilters = ref(false)
 const filters = ref({
   search: '',
   project: '',
-  sortBy: 'createdAt'
+  sortBy: 'createdAt' // Default sort by creation date
 })
 
 // Modal state
@@ -206,13 +208,11 @@ const filteredTasks = computed(() => {
     )
   }
 
-  // Project filter - improved to handle project names
+  // Project filter
   if (filters.value.project) {
     if (filters.value.project === 'no-project') {
-      // Filter tasks without projects (empty string or null projectId)
       filtered = filtered.filter(task => !task.projectId || task.projectId.trim() === '')
     } else {
-      // Filter by specific project ID
       filtered = filtered.filter(task => task.projectId === filters.value.project)
     }
   }
@@ -220,13 +220,19 @@ const filteredTasks = computed(() => {
   // Sort
   const sortBy = filters.value.sortBy
   filtered.sort((a, b) => {
-    if (sortBy === 'deadline') {
-      return a.deadline - b.deadline
+    if (sortBy === 'priority') {
+      // Sort by priority (highest first), then by creation date for ties
+      const priorityDiff = (b.priority || 5) - (a.priority || 5)
+      if (priorityDiff !== 0) return priorityDiff
+      return b.createdAt - a.createdAt
+    } else if (sortBy === 'deadline') {
+      // Sort by deadline (earliest first)
+      return (a.deadline || Infinity) - (b.deadline || Infinity)
     } else if (sortBy === 'title') {
-      return a.title?.localeCompare(b.title)
-    } else if (sortBy === 'status') {
-      return a.status?.localeCompare(b.status)
+      // Sort alphabetically by title
+      return (a.title || '').localeCompare(b.title || '')
     } else {
+      // Default: sort by creation date (newest first)
       return b.createdAt - a.createdAt
     }
   })
@@ -901,11 +907,13 @@ function handleProjectFilterFromNavigation() {
   }
 }
 
-
-// Watch for filters changes
-watch(filters, () => {
-  autoRefreshCountdown.value = 30
-}, { deep: true })
+// Watch for modals opening/closing to pause auto-refresh
+watch(anyModalOpen, (isOpen) => {
+  autoRefreshPaused.value = isOpen
+  if (!isOpen) {
+    autoRefreshCountdown.value = 30
+  }
+})
 
 // Lifecycle
 onMounted(async () => {

@@ -33,7 +33,7 @@
             <p class="text-sm text-gray-500 text-center mt-2">No {{ status.title.toLowerCase() }} tasks</p>
           </div>
 
-          <TaskCard v-for="task in getTasksByStatus(status.key)" :key="task.taskId" :task="task"
+          <TaskCard v-for="task in getSortedTasksByStatus(status.key)" :key="task.taskId" :task="task"
             :current-user-id="currentUserId" :all-users="allUsers" @view="$emit('view-task', task)"
             @edit="$emit('edit-task', task)" @delete="$emit('delete-task', task)"
             @create-subtask="$emit('create-subtask', task.taskId)" @view-subtask="$emit('view-subtask', $event)"
@@ -80,7 +80,7 @@ const emit = defineEmits([
   'view-subtask',
   'edit-subtask',
   'delete-subtask',
-  'subtask-expanded' // NEW: Forward subtask expansion event
+  'subtask-expanded'
 ])
 
 const authStore = useAuthStore()
@@ -139,7 +139,21 @@ function getTasksByStatus(status) {
   return props.tasks.filter(task => task.status === status)
 }
 
-// NEW: Handle subtask expansion state from TaskCard
+// NEW: Sort tasks by priority (highest first), then by creation date
+function getSortedTasksByStatus(status) {
+  const tasks = getTasksByStatus(status)
+  return tasks.sort((a, b) => {
+    // First sort by priority (descending - higher priority first)
+    const priorityA = a.priority || 0
+    const priorityB = b.priority || 0
+    if (priorityB !== priorityA) {
+      return priorityB - priorityA
+    }
+
+    return (a.createdAt || 0) - (b.createdAt || 0)
+  })
+}
+
 function handleSubtaskExpanded(expanded) {
   emit('subtask-expanded', expanded)
 }
@@ -152,7 +166,6 @@ function handleDragStart(task) {
 function handleDragEnd() {
   draggedTask.value = null
   dragOverColumn.value = null
-  // Remove drag-over class from all columns
   document.querySelectorAll('.board-column').forEach(col => {
     col.classList.remove('drag-over')
   })
@@ -166,12 +179,10 @@ function handleDragEnter(event) {
   event.preventDefault()
   const column = event.currentTarget
 
-  // Remove drag-over from all columns first
   document.querySelectorAll('.board-column').forEach(col => {
     col.classList.remove('drag-over')
   })
 
-  // Add to current column
   dragOverColumn.value = column
   column.classList.add('drag-over')
 }
@@ -182,7 +193,6 @@ function handleDragLeave(event) {
   const x = event.clientX
   const y = event.clientY
 
-  // Only remove drag-over class if truly leaving the column
   if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
     column.classList.remove('drag-over')
     if (dragOverColumn.value === column) {
@@ -201,13 +211,11 @@ function handleDrop(event, newStatus) {
   const task = draggedTask.value
   const oldStatus = task.status
 
-  // Don't move if dropping on same status
   if (oldStatus === newStatus) {
     draggedTask.value = null
     return
   }
 
-  // Emit the task move event - let parent handle validation and confirmation
   emit('task-moved', task.taskId, newStatus, oldStatus)
   draggedTask.value = null
 }
@@ -287,10 +295,7 @@ function handleDrop(event, newStatus) {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  /* Remove gap since TaskCard now has margin-bottom */
   padding-right: 4px;
-  /* Space for scrollbar */
-  /* Custom scrollbar */
   scrollbar-width: thin;
   scrollbar-color: #cbd5e0 transparent;
 }
