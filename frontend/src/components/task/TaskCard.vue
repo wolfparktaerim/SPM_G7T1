@@ -17,12 +17,15 @@
           </div>
           <div class="task-meta">
             <span class="project-badge">{{ projectDisplayName }}</span>
-            <!-- Ownership indicator -->
-            <span v-if="isOwnedByYou" class="ownership-indicator" title="You are the owner">
-              👑 Owner
+            <!-- Ownership indicator - Clear and prominent -->
+            <span v-if="isOwnedByYou" class="ownership-indicator-you" title="You are the owner">
+              👑 You Own This
             </span>
-            <span v-else-if="isCollaboratedByYou" class="collaborator-indicator" title="You are a collaborator">
-              🤝 Collaborator
+            <span v-else-if="isCollaboratedByYou" class="ownership-indicator-collab" title="You are a collaborator">
+              🤝 Collaborating
+            </span>
+            <span v-else class="ownership-indicator-other" title="Owned by another user">
+              👤 Others' Task
             </span>
             <!-- Recurring indicator -->
             <span v-if="task.scheduled" class="recurring-indicator"
@@ -45,8 +48,9 @@
         <Calendar class="w-4 h-4" />
         <span class="deadline-text">Deadline:</span>
         <span class="deadline-text">{{ formatDeadline(task.deadline) }}</span>
-        <span v-if="isOverdue" class="overdue-badge">Overdue</span>
-        <span v-else-if="isDueSoon" class="due-soon-badge">Due Soon</span>
+        <span v-if="task.status === 'completed'" class="status-badge-completed">✓ Completed</span>
+        <span v-else-if="isOverdue" class="status-badge-overdue">⚠ Overdue</span>
+        <span v-else-if="isDueSoon" class="status-badge-due-soon">⏰ Due Soon</span>
       </div>
 
       <!-- Owner -->
@@ -115,19 +119,20 @@
                 <div class="subtask-deadline">
                   <Calendar class="w-3 h-3" />
                   <span>{{ formatDeadline(subtask.deadline) }}</span>
-                  <span v-if="isSubtaskOverdue(subtask)" class="subtask-overdue-badge">Overdue</span>
-                  <span v-else-if="isSubtaskDueSoon(subtask)" class="subtask-due-soon-badge">Due Soon</span>
+                  <span v-if="subtask.status === 'completed'" class="subtask-status-badge-completed">✓</span>
+                  <span v-else-if="isSubtaskOverdue(subtask)" class="subtask-status-badge-overdue">⚠</span>
+                  <span v-else-if="isSubtaskDueSoon(subtask)" class="subtask-status-badge-due-soon">⏰</span>
                 </div>
                 <div class="subtask-owner">
                   <User class="w-3 h-3" />
                   <span>{{ formatOwner(subtask.ownerId) }}</span>
                 </div>
                 <!-- Subtask ownership indicators -->
-                <div v-if="subtask.ownerId === currentUserId" class="subtask-ownership-badge">
-                  👑 You own
+                <div v-if="subtask.ownerId === currentUserId" class="subtask-ownership-badge-you">
+                  👑 You
                 </div>
-                <div v-else-if="subtask.collaborators?.includes(currentUserId)" class="subtask-collaboration-badge">
-                  🤝 You collaborate
+                <div v-else-if="subtask.collaborators?.includes(currentUserId)" class="subtask-ownership-badge-collab">
+                  🤝 Collab
                 </div>
                 <!-- Subtask recurring indicator -->
                 <div v-if="subtask.scheduled" class="subtask-recurring-badge"
@@ -306,7 +311,40 @@ const canDelete = computed(() => {
   return props.task.ownerId === props.currentUserId
 })
 
-const projectName = ref('')
+  // Default: White background with ownership border
+  if (isOwnedByYou.value) {
+    return 'task-owned-by-you'
+  } else if (isCollaboratedByYou.value) {
+    return 'task-collaborated'
+  }
+
+  return 'task-default'
+}
+
+// NEW: Get subtask card class with same priority logic
+function getSubtaskCardClass(subtask) {
+  const classes = [getSubtaskStatusClass(subtask.status)]
+
+  // Priority 1: Completed
+  if (subtask.status === 'completed') {
+    classes.push('subtask-completed')
+  }
+  // Priority 2: Overdue
+  else if (isSubtaskOverdue(subtask)) {
+    classes.push('subtask-overdue')
+  }
+  // Priority 3: Due soon
+  else if (isSubtaskDueSoon(subtask)) {
+    classes.push('subtask-due-soon')
+  }
+  // Default: White with ownership indicator
+  else {
+    if (subtask.ownerId === props.currentUserId) {
+      classes.push('subtask-owned-by-you')
+    } else if (subtask.collaborators?.includes(props.currentUserId)) {
+      classes.push('subtask-collaborated')
+    }
+  }
 
 const projectDisplayName = computed(() => {
   if (!props.task.projectId) {
@@ -456,10 +494,11 @@ function handleDragEnd() {
 </script>
 
 <style scoped>
+/* Base task card - WHITE background */
 .task-card {
   background-color: white;
   border-radius: 0.75rem;
-  border: 1px solid #e5e7eb;
+  border: 2px solid #e5e7eb;
   padding: 1.25rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -755,13 +794,11 @@ function handleDragEnd() {
 .ownership-indicator {
   background-color: #fef3c7;
   color: #92400e;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.625rem;
   border-radius: 12px;
-  font-size: 0.65rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  border: 1px solid #fbbf24;
 }
 
 .collaborator-indicator {
@@ -769,11 +806,8 @@ function handleDragEnd() {
   color: #6b21a8;
   padding: 0.25rem 0.5rem;
   border-radius: 12px;
-  font-size: 0.65rem;
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  border: 1px solid #dc2626;
 }
 
 .recurring-indicator {
@@ -1050,10 +1084,10 @@ function handleDragEnd() {
   font-size: 0.65rem;
   padding: 0.125rem 0.375rem;
   border-radius: 8px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.125rem;
+  font-weight: 700;
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #3b82f6;
 }
 
 .subtask-ownership-badge {
