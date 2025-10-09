@@ -59,8 +59,16 @@
           {{ notification.taskTitle }}
         </p>
 
+        <!-- Parent task (for subtasks only) -->
+        <p
+          v-if="notification.parentTaskTitle"
+          class="mt-1 text-xs text-gray-500"
+        >
+          Part of task: <span class="font-medium text-gray-700">{{ notification.parentTaskTitle }}</span>
+        </p>
+
         <!-- Deadline info -->
-        <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <div class="mt-2 space-y-1 text-xs">
           <!-- Due date -->
           <div class="flex items-center space-x-1 text-gray-600">
             <Calendar class="w-3.5 h-3.5" :stroke-width="2" />
@@ -70,18 +78,13 @@
           <!-- Time remaining with urgency badge -->
           <div
             :class="[
-              'flex items-center space-x-1 px-2 py-0.5 rounded-full font-medium',
+              'flex items-center space-x-1 px-2 py-0.5 rounded-full font-medium w-fit',
               getUrgencyBadgeClasses()
             ]"
           >
             <Clock class="w-3.5 h-3.5" :stroke-width="2" />
             <span>{{ notification.getTimeRemainingText() }}</span>
           </div>
-        </div>
-
-        <!-- Timestamp -->
-        <div class="mt-2 flex items-center text-xs text-gray-400">
-          <span>{{ notification.getFormattedCreatedAt() }}</span>
         </div>
       </div>
 

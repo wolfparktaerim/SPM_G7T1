@@ -16,7 +16,8 @@ export class Notification {
     daysUntilDeadline = null,
     read = false,
     createdAt = Date.now(),
-    readAt = null
+    readAt = null,
+    parentTaskTitle = null
   } = {}) {
     this.notificationId = notificationId
     this.userId = userId
@@ -30,6 +31,7 @@ export class Notification {
     this.read = read
     this.createdAt = createdAt
     this.readAt = readAt
+    this.parentTaskTitle = parentTaskTitle
   }
 
   /**
@@ -142,7 +144,8 @@ export class Notification {
       daysUntilDeadline: data.daysUntilDeadline,
       read: data.read || false,
       createdAt: data.createdAt,
-      readAt: data.readAt
+      readAt: data.readAt,
+      parentTaskTitle: data.parentTaskTitle
     })
   }
 
@@ -163,7 +166,8 @@ export class Notification {
       daysUntilDeadline: this.daysUntilDeadline,
       read: this.read,
       createdAt: this.createdAt,
-      readAt: this.readAt
+      readAt: this.readAt,
+      parentTaskTitle: this.parentTaskTitle
     }
   }
 }

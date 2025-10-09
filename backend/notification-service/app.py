@@ -42,8 +42,8 @@ def days_until_deadline(deadline_epoch):
     days = seconds_until_deadline / (24 * 60 * 60)
     return round(days, 1)  # Return with one decimal place
 
-def create_notification(user_id, task_id, task_data, days_until):
-    """Create a notification in Firebase"""
+def create_notification(user_id, item_id, item_data, days_until, is_subtask=False, parent_task_title=None):
+    """Create a notification in Firebase for a task or subtask"""
     try:
         notifications_ref = db.reference(f"notifications/{user_id}")
         new_notification_ref = notifications_ref.push()
@@ -59,23 +59,42 @@ def create_notification(user_id, task_id, task_data, days_until):
         else:
             time_msg = f"due in {int(days_until)} days"
 
+        # Determine notification type and format message
+        if is_subtask:
+            notification_type = "subtask_deadline_reminder"
+            title = "Subtask Deadline Approaching"
+            message = f"'{item_data.get('title', 'Untitled')}' is {time_msg}"
+            item_id_field = "subTaskId"
+        else:
+            notification_type = "task_deadline_reminder"
+            title = "Task Deadline Approaching"
+            message = f"'{item_data.get('title', 'Untitled')}' is {time_msg}"
+            item_id_field = "taskId"
+
         notification_data = {
             "notificationId": notification_id,
             "userId": user_id,
-            "taskId": task_id,
-            "type": "task_deadline_reminder",
-            "title": "Task Deadline Approaching",
-            "message": f"Task '{task_data.get('title', 'Untitled')}' is {time_msg}",
-            "taskTitle": task_data.get('title', 'Untitled'),
-            "taskDeadline": task_data.get('deadline'),
+            item_id_field: item_id,
+            "type": notification_type,
+            "title": title,
+            "message": message,
+            "taskTitle": item_data.get('title', 'Untitled'),
+            "taskDeadline": item_data.get('deadline'),
             "daysUntilDeadline": days_until,
             "read": False,
             "createdAt": current_timestamp(),
             "readAt": None
         }
 
+        # Add parent task information for subtasks
+        if is_subtask and 'taskId' in item_data:
+            notification_data["taskId"] = item_data["taskId"]
+            if parent_task_title:
+                notification_data["parentTaskTitle"] = parent_task_title
+
         new_notification_ref.set(notification_data)
-        logger.info(f"Created notification for user {user_id}, task {task_id}, {days_until} days until deadline")
+        item_type = "subtask" if is_subtask else "task"
+        logger.info(f"Created notification for user {user_id}, {item_type} {item_id}, {days_until} days until deadline")
         return notification_id
     except Exception as e:
         logger.error(f"Failed to create notification: {str(e)}")
@@ -139,18 +158,25 @@ def mark_notification_sent(task_id, user_id, matched_reminder_day):
     except Exception as e:
         logger.error(f"Error marking notification as sent: {str(e)}")
 
-def send_email_notification(user_email, task_data, days_until):
+def send_email_notification(user_email, task_data, days_until, is_subtask=False, parent_task_title=None):
     """Send email notification via email service"""
     try:
+        payload = {
+            "toEmail": user_email,
+            "taskTitle": task_data.get('title', 'Untitled'),
+            "taskDeadline": task_data.get('deadline'),
+            "daysUntilDeadline": days_until,
+            "taskNotes": task_data.get('notes', ''),
+            "isSubtask": is_subtask
+        }
+
+        # Add parent task title for subtasks
+        if is_subtask and parent_task_title:
+            payload["parentTaskTitle"] = parent_task_title
+
         response = requests.post(
             f"{EMAIL_SERVICE_URL}/email/send-task-reminder",
-            json={
-                "toEmail": user_email,
-                "taskTitle": task_data.get('title', 'Untitled'),
-                "taskDeadline": task_data.get('deadline'),
-                "daysUntilDeadline": days_until,
-                "taskNotes": task_data.get('notes', '')
-            },
+            json=payload,
             timeout=10
         )
 
@@ -166,15 +192,19 @@ def send_email_notification(user_email, task_data, days_until):
 
 def check_task_deadlines():
     """
-    Scheduled job to check all tasks and create notifications
-    This runs periodically (every hour by default)
+    Scheduled job to check all tasks and subtasks and create notifications
+    This runs periodically (every 5 seconds by default)
     """
-    logger.info("Starting task deadline check...")
+    logger.info("Starting task and subtask deadline check...")
 
     try:
         # Get all tasks
         tasks_ref = db.reference("tasks")
         all_tasks = tasks_ref.get() or {}
+
+        # Get all subtasks
+        subtasks_ref = db.reference("subtasks")
+        all_subtasks = subtasks_ref.get() or {}
 
         # Get all notification preferences
         preferences_ref = db.reference("notificationPreferences")
@@ -266,10 +296,105 @@ def check_task_deadlines():
                             if email_sent:
                                 email_count += 1
 
-        logger.info(f"Task deadline check completed. Created {notification_count} in-app notifications and sent {email_count} emails.")
+        # Check subtasks
+        for subtask_id, subtask_data in all_subtasks.items():
+            # Skip completed subtasks
+            if subtask_data.get('status', '').lower() == 'completed':
+                continue
+
+            # Calculate days until deadline
+            deadline = subtask_data.get('deadline')
+            if not deadline:
+                continue
+
+            days_until = days_until_deadline(deadline)
+
+            # Skip if deadline has passed by more than 1 day
+            if days_until < -1:
+                continue
+
+            # Get parent task title for context
+            parent_task_id = subtask_data.get('taskId')
+            parent_task_title = None
+            if parent_task_id and parent_task_id in all_tasks:
+                parent_task_title = all_tasks[parent_task_id].get('title', 'Untitled')
+
+            # Collect all users to notify (owner + collaborators)
+            users_to_notify = []
+
+            # Add subtask owner
+            owner_id = subtask_data.get('ownerId')
+            if owner_id:
+                users_to_notify.append(owner_id)
+
+            # Add collaborators (excluding owner to avoid duplicates)
+            collaborators = subtask_data.get('collaborators', [])
+            if isinstance(collaborators, list):
+                # Filter out the owner from collaborators to prevent duplicates
+                collaborators_without_owner = [collab for collab in collaborators if collab != owner_id]
+                users_to_notify.extend(collaborators_without_owner)
+
+            # Remove any remaining duplicates (defensive programming)
+            users_to_notify = list(set(users_to_notify))
+
+            # Send notifications to all relevant users
+            for user_id in users_to_notify:
+                # Get user's notification preferences
+                user_prefs = all_preferences.get(user_id)
+                if not user_prefs:
+                    continue
+
+                # Check if notifications are enabled
+                if not user_prefs.get('enabled', False) or not user_prefs.get('taskDeadlineReminders', False):
+                    continue
+
+                # Get notification channel
+                channel = user_prefs.get('channel', 'both')
+
+                # Get reminder times
+                reminder_times = user_prefs.get('reminderTimes', [])
+                if not reminder_times:
+                    continue
+
+                # Check if we should send notification
+                matched_reminder_day = should_send_notification(subtask_id, user_id, days_until, reminder_times)
+                if matched_reminder_day:
+                    # Mark this notification as sent FIRST to prevent race condition duplicates
+                    # This ensures that even if the scheduler runs multiple times,
+                    # only the first run will pass the should_send_notification check
+                    mark_notification_sent(subtask_id, user_id, matched_reminder_day)
+
+                    # Create in-app notification if channel allows
+                    if channel in ['in-app', 'both']:
+                        notification_id = create_notification(
+                            user_id,
+                            subtask_id,
+                            subtask_data,
+                            days_until,
+                            is_subtask=True,
+                            parent_task_title=parent_task_title
+                        )
+                        if notification_id:
+                            notification_count += 1
+
+                    # Send email if channel allows
+                    if channel in ['email', 'both']:
+                        user_data = all_users.get(user_id)
+                        if user_data and user_data.get('email'):
+                            email_sent = send_email_notification(
+                                user_data['email'],
+                                subtask_data,
+                                days_until,
+                                is_subtask=True,
+                                parent_task_title=parent_task_title
+                            )
+                            if email_sent:
+                                email_count += 1
+
+        logger.info(f"Task and subtask deadline check completed. Created {notification_count} in-app notifications and sent {email_count} emails.")
 
     except Exception as e:
-        logger.error(f"Error during task deadline check: {str(e)}")
+        logger.error(f"Error during task and subtask deadline check: {str(e)}")
 
 # API Endpoints
 
@@ -399,19 +524,19 @@ def start_scheduler():
     """Initialize and start the background scheduler"""
     scheduler = BackgroundScheduler()
 
-    # Schedule the task deadline checker to run every 5 seconds for near real-time notifications
-    # This ensures users get notified immediately when tasks approach their deadlines
+    # Schedule the task and subtask deadline checker to run every 5 seconds for near real-time notifications
+    # This ensures users get notified immediately when tasks or subtasks approach their deadlines
     scheduler.add_job(
         func=check_task_deadlines,
         trigger="interval",
         seconds=5,
         id="task_deadline_checker",
-        name="Check task deadlines and send notifications",
+        name="Check task and subtask deadlines and send notifications",
         replace_existing=True
     )
 
     scheduler.start()
-    logger.info("Scheduler started. Task deadline checker will run every 5 seconds.")
+    logger.info("Scheduler started. Task and subtask deadline checker will run every 5 seconds.")
 
     # Also run once on startup
     check_task_deadlines()

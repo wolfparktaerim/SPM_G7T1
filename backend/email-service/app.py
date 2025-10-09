@@ -48,8 +48,8 @@ def get_time_remaining_text(days_until):
         whole_days = int(days_until)
         return f"{whole_days} day{'s' if whole_days != 1 else ''} left"
 
-def create_email_html(task_title, task_deadline, days_until, task_notes=""):
-    """Create HTML email template for task deadline notification"""
+def create_email_html(task_title, task_deadline, days_until, task_notes="", parent_task_title=None):
+    """Create HTML email template for task or subtask deadline notification"""
     deadline_str = format_deadline(task_deadline)
     time_remaining = get_time_remaining_text(days_until)
 
@@ -103,6 +103,7 @@ def create_email_html(task_title, task_deadline, days_until, task_notes=""):
                         <tr>
                             <td style="padding: 20px 30px;">
                                 <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 20px; font-weight: 600;">{task_title}</h2>
+                                {f'<p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">Part of task: <strong style="color: #111827;">{parent_task_title}</strong></p>' if parent_task_title else ''}
 
                                 <div style="background-color: #f9fafb; border-left: 4px solid {urgency_color}; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
                                     <table role="presentation" style="width: 100%;">
@@ -176,7 +177,7 @@ def send_email(to_email, subject, html_content):
 
 @app.route("/email/send-task-reminder", methods=["POST"])
 def send_task_reminder():
-    """Send task deadline reminder email"""
+    """Send task or subtask deadline reminder email"""
     data = request.get_json()
 
     # Validate required fields
@@ -190,11 +191,17 @@ def send_task_reminder():
     task_deadline = data["taskDeadline"]
     days_until = data["daysUntilDeadline"]
     task_notes = data.get("taskNotes", "")
+    is_subtask = data.get("isSubtask", False)
+    parent_task_title = data.get("parentTaskTitle")
 
     try:
-        # Create email content
-        subject = f"Task Deadline Reminder: {task_title}"
-        html_content = create_email_html(task_title, task_deadline, days_until, task_notes)
+        # Create email content with appropriate subject line
+        if is_subtask:
+            subject = f"Subtask Deadline Reminder: {task_title}"
+        else:
+            subject = f"Task Deadline Reminder: {task_title}"
+
+        html_content = create_email_html(task_title, task_deadline, days_until, task_notes, parent_task_title)
 
         # Send email
         success = send_email(to_email, subject, html_content)
