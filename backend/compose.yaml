@@ -83,3 +83,20 @@ services:
     environment:
       JSON_PATH: "/app/firebase.json"
       DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      EMAIL_SERVICE_URL: "http://email-service:6005"
+    depends_on:
+      - email-service
+
+  email-service:
+    build:
+      context: ./email-service
+      dockerfile: Dockerfile
+    ports:
+      - "6005:6005"
+    environment:
+      SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      FROM_EMAIL: "${FROM_EMAIL}"
+      FROM_NAME: "${FROM_NAME:-Task Management System}"

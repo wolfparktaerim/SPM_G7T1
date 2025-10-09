@@ -9,6 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import os
 import time
 import logging
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -25,6 +26,9 @@ cred = credentials.Certificate(JSON_PATH)
 firebase_admin.initialize_app(cred, {
     "databaseURL": DATABASE_URL
 })
+
+# Email service configuration
+EMAIL_SERVICE_URL = os.getenv("EMAIL_SERVICE_URL", "http://email-service:6005")
 
 # Utility functions
 def current_timestamp():
@@ -135,6 +139,31 @@ def mark_notification_sent(task_id, user_id, matched_reminder_day):
     except Exception as e:
         logger.error(f"Error marking notification as sent: {str(e)}")
 
+def send_email_notification(user_email, task_data, days_until):
+    """Send email notification via email service"""
+    try:
+        response = requests.post(
+            f"{EMAIL_SERVICE_URL}/email/send-task-reminder",
+            json={
+                "toEmail": user_email,
+                "taskTitle": task_data.get('title', 'Untitled'),
+                "taskDeadline": task_data.get('deadline'),
+                "daysUntilDeadline": days_until,
+                "taskNotes": task_data.get('notes', '')
+            },
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            logger.info(f"Email sent successfully to {user_email}")
+            return True
+        else:
+            logger.error(f"Failed to send email to {user_email}: {response.text}")
+            return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error sending email to {user_email}: {str(e)}")
+        return False
+
 def check_task_deadlines():
     """
     Scheduled job to check all tasks and create notifications
@@ -151,7 +180,12 @@ def check_task_deadlines():
         preferences_ref = db.reference("notificationPreferences")
         all_preferences = preferences_ref.get() or {}
 
+        # Get all users (to fetch email addresses)
+        users_ref = db.reference("users")
+        all_users = users_ref.get() or {}
+
         notification_count = 0
+        email_count = 0
 
         for task_id, task_data in all_tasks.items():
             # Skip completed tasks
@@ -177,12 +211,14 @@ def check_task_deadlines():
             if owner_id:
                 users_to_notify.append(owner_id)
 
-            # Add collaborators
+            # Add collaborators (excluding owner to avoid duplicates)
             collaborators = task_data.get('collaborators', [])
             if isinstance(collaborators, list):
-                users_to_notify.extend(collaborators)
+                # Filter out the owner from collaborators to prevent duplicates
+                collaborators_without_owner = [collab for collab in collaborators if collab != owner_id]
+                users_to_notify.extend(collaborators_without_owner)
 
-            # Remove duplicates
+            # Remove any remaining duplicates (defensive programming)
             users_to_notify = list(set(users_to_notify))
 
             # Send notifications to all relevant users
@@ -196,10 +232,8 @@ def check_task_deadlines():
                 if not user_prefs.get('enabled', False) or not user_prefs.get('taskDeadlineReminders', False):
                     continue
 
-                # Check if in-app notifications are enabled
+                # Get notification channel
                 channel = user_prefs.get('channel', 'both')
-                if channel not in ['in-app', 'both']:
-                    continue
 
                 # Get reminder times
                 reminder_times = user_prefs.get('reminderTimes', [])
@@ -209,13 +243,30 @@ def check_task_deadlines():
                 # Check if we should send notification
                 matched_reminder_day = should_send_notification(task_id, user_id, days_until, reminder_times)
                 if matched_reminder_day:
-                    notification_id = create_notification(user_id, task_id, task_data, days_until)
-                    if notification_id:
-                        # Mark this notification as sent to prevent duplicates
-                        mark_notification_sent(task_id, user_id, matched_reminder_day)
-                        notification_count += 1
+                    # Mark this notification as sent FIRST to prevent race condition duplicates
+                    # This ensures that even if the scheduler runs multiple times,
+                    # only the first run will pass the should_send_notification check
+                    mark_notification_sent(task_id, user_id, matched_reminder_day)
 
-        logger.info(f"Task deadline check completed. Created {notification_count} notifications.")
+                    # Create in-app notification if channel allows
+                    if channel in ['in-app', 'both']:
+                        notification_id = create_notification(user_id, task_id, task_data, days_until)
+                        if notification_id:
+                            notification_count += 1
+
+                    # Send email if channel allows
+                    if channel in ['email', 'both']:
+                        user_data = all_users.get(user_id)
+                        if user_data and user_data.get('email'):
+                            email_sent = send_email_notification(
+                                user_data['email'],
+                                task_data,
+                                days_until
+                            )
+                            if email_sent:
+                                email_count += 1
+
+        logger.info(f"Task deadline check completed. Created {notification_count} in-app notifications and sent {email_count} emails.")
 
     except Exception as e:
         logger.error(f"Error during task deadline check: {str(e)}")
