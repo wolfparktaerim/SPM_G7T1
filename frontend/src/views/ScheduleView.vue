@@ -275,163 +275,103 @@
 </template>
 
 <script setup>
-   import { ref, onMounted, computed } from 'vue';
-   import { useRouter } from 'vue-router';
-   import { auth } from '@/firebase/firebaseConfig';
-   import { onAuthStateChanged } from 'firebase/auth';
-   import NavigationBar from '@/components/NavigationBar.vue';
-   import { X, Edit3, Trash2, Calendar, User, Crown, Users } from 'lucide-vue-next';
-   import { usersService } from '@/services/users';
-   
-   // FullCalendar imports
-   import FullCalendar from '@fullcalendar/vue3';
-   import dayGridPlugin from '@fullcalendar/daygrid';
-   import interactionPlugin from '@fullcalendar/interaction';
-   
-   // --- Composables ---
-   const router = useRouter();
-   
-   // --- API Base URL ---
-   const KONG_BASE = import.meta.env.VITE_BACKEND_API || 'http://localhost:8000/';
-   const API_BASE = `${KONG_BASE}tasks`;
-   const PROJECT_API_BASE = `${import.meta.env.VITE_BACKEND_API}project`;
-   
-   // --- Reactive state ---
-   const currentUser = ref(null);
-   const currentRole = ref('');
-   const currentUserDepartment = ref('');
-   const loading = ref(true);
-   const allTasks = ref([]);
-   const filteredTasks = ref([]);
-   
-   // Add modal state
-   const showTaskDetailModal = ref(false);
-   const selectedTaskDetail = ref(null);
-   const allUsers = ref([]);
-   const usersMap = ref({});
-   
-   // --- Sidebar state ---
-   const userProjects = ref([]);
-   const selectedProject = ref(null);
-   const projectCollaborators = ref([]);
-   const selectedCollaborator = ref(null);
-   const viewingUserId = ref(null); // The user whose schedule is being viewed
-   const selectedProjectId = ref(null);
-   
-   // --- Show notification ---
-   const showNotification = ref(false);
-   const notificationMessage = ref('');
-   
-   // --- Computed: Transform filtered tasks into calendar events ---
-   const calendarEvents = computed(() => {
-   return filteredTasks.value.map(task => {
-      // Safety check and convert to Date object
-      let deadlineDate;
-      
-      if (!task.deadline) {
-         console.warn('Task missing deadline:', task);
-         return null;
-      }
-      
-      // Check if deadline is already a Date object
-      if (task.deadline instanceof Date) {
-         deadlineDate = task.deadline;
-      } 
-      // Check if it's a Unix timestamp (number)
-      else if (typeof task.deadline === 'number') {
-         deadlineDate = new Date(task.deadline * 1000);
-      }
-      // Check if it's a string
-      else if (typeof task.deadline === 'string') {
-         deadlineDate = new Date(task.deadline);
-      }
-      else {
-         console.warn('Invalid deadline format:', task.deadline);
-         return null;
-      }
-      
-      // Determine start date (today or task creation date)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      let startDate;
-      if (task.createdAt) {
-         // Use task creation date as start if available
-         const taskCreatedDate = new Date(task.createdAt * 1000);
-         startDate = taskCreatedDate < today ? taskCreatedDate : today;
-      } else {
-         // Default to today if no creation date
-         startDate = today;
-      }
-      
-      // Format dates as YYYY-MM-DD
-      const formatDate = (date) => {
-         const year = date.getFullYear();
-         const month = String(date.getMonth() + 1).padStart(2, '0');
-         const day = String(date.getDate()).padStart(2, '0');
-         return `${year}-${month}-${day}`;
-      };
-      
-      const startString = formatDate(startDate);
-      const endString = formatDate(new Date(deadlineDate.getTime() + 86400000)); // +1 day for inclusive end
-      
-      // Your existing status and color logic
+import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
+import { auth } from '@/firebase/firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
+import NavigationBar from '@/components/NavigationBar.vue';
+import { usersService } from '@/services/users';
+import { X, Edit3, Trash2, Calendar, User, Crown, Users } from 'lucide-vue-next';
+
+// --- FullCalendar imports ---
+import FullCalendar from '@fullcalendar/vue3';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import interactionPlugin from '@fullcalendar/interaction';
+
+// --- Setup ---
+const router = useRouter();
+const KONG_BASE = import.meta.env.VITE_BACKEND_API || 'http://localhost:8000/';
+const API_BASE = `${KONG_BASE}tasks`;
+const PROJECT_API_BASE = `${import.meta.env.VITE_BACKEND_API}project`;
+
+// --- State ---
+const currentUser = ref(null);
+const currentRole = ref('');
+const currentUserDepartment = ref('');
+const loading = ref(true);
+
+const allTasks = ref([]);
+const filteredTasks = ref([]);
+const allUsers = ref([]);
+const usersMap = ref({});
+
+const showTaskDetailModal = ref(false);
+const selectedTaskDetail = ref(null);
+
+const userProjects = ref([]);
+const selectedProject = ref(null);
+const selectedProjectId = ref(null);
+const projectCollaborators = ref([]);
+const selectedCollaborator = ref(null);
+const viewingUserId = ref(null);
+
+const showNotification = ref(false);
+const notificationMessage = ref('');
+
+// --- Status Colors (Unified) ---
 const statusColors = {
-  completed:      '#bbf7d0', // green
-  'in progress':  '#fde68a', // yellow
-  pending:        '#bfdbfe', // blue
-  'under review': '#f59e0b', // orange
-  overdue:        '#fecaca', // red
-  unassigned:     '#d1d5db'  // gray fallback
+  unassigned:    '#d1d5db', // gray
+  ongoing:       '#1945e6', // blue
+  'under review':'#f59e0b', // orange
+  completed:     '#3BB143', // green
+  overdue:       '#ff0009'  // red
 };
 
-      const statusLower = task.status?.toLowerCase() || 'unassigned';
-      const { background: backgroundColor, border: borderColor } =
-  statusColors[statusLower] || statusColors['unassigned'];
-      
-      // Check if current user can view this task
-      const isViewable = canViewTaskDetails(task);
-      
-      // Calculate days until deadline
-      deadlineDate.setHours(0, 0, 0, 0);
-      const daysUntilDeadline = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
-      
-      return {
-         id: task.taskId,
-         title: task.title,
-         start: startString, // ✅ Start date
-         end: endString, // ✅ End date (deadline + 1 day for inclusive)
-         allDay: true,
-         backgroundColor: backgroundColor,
-         borderColor: borderColor,
-         classNames: isViewable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
-         extendedProps: {
-         status: task.status,
-         notes: task.notes,
-         projectId: task.projectId,
-         ownerId: task.ownerId,
-         daysUntilDeadline: daysUntilDeadline,
-         isViewable: isViewable
-         }
-      };
-   }).filter(event => event !== null);
-   });
+// --- Computed: Calendar Events ---
+const calendarEvents = computed(() => {
+  return filteredTasks.value.map(task => {
+    if (!task.deadline) return null;
 
+    // Convert deadline to Date
+    const deadlineDate = typeof task.deadline === 'number'
+      ? new Date(task.deadline * 1000)
+      : new Date(task.deadline);
 
-   
-   // --- Calendar Configuration ---
-  // --- Status-based color mapping ---
+    // Determine start date (today or creation date)
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const startDate = task.createdAt
+      ? new Date(task.createdAt * 1000)
+      : today;
 
-const statusColors = {
-  completed:      '#bbf7d0', // green
-  'in progress':  '#fde68a', // yellow
-  pending:        '#bfdbfe', // blue
-  'under review': '#f59e0b', // orange
-  overdue:        '#fecaca', // red
-  unassigned:     '#d1d5db'  // gray fallback
-};
+    // Format YYYY-MM-DD
+    const formatDate = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// --- Calendar Configuration ---
+    const startStr = formatDate(startDate);
+    const endStr = formatDate(new Date(deadlineDate.getTime() + 86400000));
+
+    const status = (task.status || 'unassigned').toLowerCase();
+    const color = statusColors[status] || statusColors.unassigned;
+    const isViewable = canViewTaskDetails(task);
+
+    // Days until deadline
+    const daysUntilDeadline = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
+
+    return {
+      id: task.taskId,
+      title: task.title,
+      start: startStr,
+      end: endStr,
+      allDay: true,
+      backgroundColor: color,
+      borderColor: color,
+      classNames: isViewable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
+      extendedProps: { ...task, daysUntilDeadline, isViewable }
+    };
+  }).filter(Boolean);
+});
+
+// --- Calendar Config ---
 const calendarOptions = ref({
   plugins: [dayGridPlugin, interactionPlugin],
   initialView: 'dayGridMonth',
@@ -442,407 +382,191 @@ const calendarOptions = ref({
   },
   editable: true,
   selectable: true,
-  selectMirror: true,
   dayMaxEvents: true,
   weekends: true,
-  events: calendarEvents, // your computed or reactive events list
-  //more than 2 tasks
+  events: calendarEvents,
+
   eventContent(info) {
-  const status = info.event.extendedProps.status?.toLowerCase();
-const color = statusColors[status] || statusColors['unassigned'];
+    return {
+      html: `
+        <div style="
+          display: flex; align-items: center; gap: 4px;
+          font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        ">
+          <span>${info.event.title}</span>
+        </div>
+      `
+    };
+  },
 
-
-  // Return a small circle + text (not a pill)
-  return {
-    html: `
-      <div style="
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 11px;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-      ">
-        <span style="
-          display: inline-block;
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background-color: ${color};
-          flex-shrink: 0;
-        "></span>
-        <span>${info.event.title}</span>
-      </div>
-    `
-  };
-},
-
-  // 🔹 Highlight day cells based on event statuses
   dayCellDidMount(info) {
-    // Format cell date
     const cellDate = info.date.toISOString().split('T')[0];
+    const dayEvents = calendarEvents.value?.filter(e => e.start.startsWith(cellDate)) || [];
+    if (!dayEvents.length) return;
 
-    // Find events that match this date
-    const dayEvents = calendarEvents.value?.filter(e => 
-      e.start.startsWith(cellDate)
-    ) || [];
-
-    if (dayEvents.length > 0) {
-      // Optional: Choose one color if multiple events — e.g. priority order
-      const priorityOrder = ['overdue', 'in progress', 'pending', 'completed'];
-      const status = priorityOrder.find(s => 
-        dayEvents.some(e => e.status?.toLowerCase() === s)
-      );
-
-      // Apply background color
-      const color = statusColors[status];
-      if (color) {
-      //   info.el.style.backgroundColor = color;
-      // info.el.style.background = `linear-gradient(${color}99, ${color}99)`; // '99' adds 60% opacity
-info.el.style.borderRadius = '8px';
-
-        info.el.style.transition = 'background-color 0.3s ease';
-        info.el.style.background = `linear-gradient(${color}55, ${color}55)`; // subtle tint
-info.el.style.boxShadow = `inset 0 0 0 2px ${color}`; // colored border
-
-
-      }
+    const priority = ['overdue', 'ongoing', 'under review', 'completed', 'unassigned'];
+    const matchedStatus = priority.find(s =>
+      dayEvents.some(e => e.extendedProps.status?.toLowerCase() === s)
+    );
+    const color = statusColors[matchedStatus];
+    if (color) {
+      info.el.style.borderRadius = '8px';
+      info.el.style.transition = 'background-color 0.3s ease';
+      info.el.style.background = `linear-gradient(${color}55, ${color}55)`;
+      info.el.style.boxShadow = `inset 0 0 0 2px ${color}`;
     }
   },
 
-  // 🔹 Event click handler
   eventClick(info) {
-    const taskId = info.event.id;
-    const task = filteredTasks.value.find(t => t.taskId === taskId);
+    const task = filteredTasks.value.find(t => t.taskId === info.event.id);
     if (!task) return;
-
-    if (!canViewTaskDetails(task)) {
-      showToast('🔒 You do not have permission to view this task');
-      return;
-    }
-
+    if (!canViewTaskDetails(task)) return showToast('🔒 You do not have permission to view this task');
     openTaskDetailModal(task);
-  },
-
-  // 🔹 Date select handler (optional)
-  select(info) {
-    console.log('Date selected:', info.startStr, 'to', info.endStr);
-    // You can add create task logic later
   }
 });
 
-   
-   function showToast(message) {
-      notificationMessage.value = message;
-      showNotification.value = true;
-      
-      // Auto-hide after 3 seconds
-      setTimeout(() => {
-         showNotification.value = false;
-      }, 3000);
-   }
-   
-   // --- Fetch all tasks from backend ---
-   async function fetchAllTasks() {
-     try {
-       const response = await fetch(`${API_BASE}`);
-       if (!response.ok) {
-         throw new Error('Failed to fetch tasks');
-       }
-       const data = await response.json();
-       allTasks.value = data.tasks || [];
-       console.log('All tasks fetched:', allTasks.value.length);
-     } catch (error) {
-       console.error('Error fetching tasks:', error);
-       allTasks.value = [];
-     }
-   }
-   
-   // --- Filter tasks where current user is a collaborator ---
-   function filterTasksByUser(userId) {
-     filteredTasks.value = allTasks.value.filter(task => {
-       // Check if user is in collaborators array
-       const collaborators = task.collaborators || [];
-       return collaborators.includes(userId);
-     });
-     
-     console.log(`Filtered tasks for user ${userId}:`, filteredTasks.value.length);
-   }
-   
-   // --- Fetch all users for display ---
-   async function fetchAllUsers() {
-     try {
-       const users = await usersService.getAllUsers();
-       allUsers.value = users;
-       
-       // Create a map for quick lookup
-       const map = {};
-       users.forEach(user => {
-         map[user.uid] = user;
-       });
-       usersMap.value = map;
-       
-       console.log('Loaded users:', allUsers.value.length);
-     } catch (error) {
-       console.error('Error fetching users:', error);
-     }
-   }
-   
-   // --- Open task detail modal ---
-   function openTaskDetailModal(task) {
-     selectedTaskDetail.value = task;
-     showTaskDetailModal.value = true;
-   }
-   
-   // --- Close task detail modal ---
-   function closeTaskDetailModal() {
-     showTaskDetailModal.value = false;
-     selectedTaskDetail.value = null;
-   }
-   
-   // --- Get user display name ---
-   function getUserDisplayName(userId) {
-     if (!userId) return 'Unassigned';
-     if (userId === currentUser.value) return 'You';
-     const user = usersMap.value[userId];
-     return user ? (user.name || user.displayName || user.email) : 'Unknown User';
-   }
-   
-   // --- Format date for display ---
-   function formatDateDisplay(epochTimestamp) {
-     if (!epochTimestamp) return 'No deadline';
-     const date = new Date(epochTimestamp * 1000);
-     return date.toLocaleDateString('en-US', { 
-       month: 'long', 
-       day: 'numeric', 
-       year: 'numeric',
-       hour: '2-digit',
-       minute: '2-digit'
-     });
-   }
-   
-   // --- Format status ---
-   function formatStatus(status) {
-     const statusMap = {
-       'ongoing': 'Ongoing',
-       'completed': 'Completed',
-       'under review': 'Under Review',
-       'unassigned': 'Unassigned'
-     };
-     return statusMap[status?.toLowerCase()] || status;
-   }
-   
-   // --- Get status badge class ---
-   function getStatusBadgeClass(status) {
-     const statusLower = (status || '').toLowerCase();
-     if (statusLower === 'completed') return 'bg-green-100 text-green-700';
-     if (statusLower === 'ongoing') return 'bg-blue-100 text-blue-700';
-     if (statusLower === 'under review') return 'bg-yellow-100 text-yellow-700';
-     if (statusLower === 'unassigned') return 'bg-gray-100 text-gray-700';
-     return 'bg-gray-100 text-gray-700';
-   }
-   
-   // --- Check if current user is task owner ---
-   function isTaskOwner(task) {
-     return task.ownerId === currentUser.value;
-   }
-   
-   // --- Handle edit task ---
-   function handleEditTask(task) {
-      closeTaskDetailModal();
-      // Navigate to Tasks page with taskId as query parameter
-      router.push({ 
-         name: 'tasks', 
-         query: { 
-            taskId: task.taskId,
-            action: 'edit' // Optional: indicates intent to edit
-         }
-      });
-   }
+// --- Utility Functions ---
+function showToast(msg) {
+  notificationMessage.value = msg;
+  showNotification.value = true;
+  setTimeout(() => (showNotification.value = false), 3000);
+}
 
-    // --- Get due soon badge ---
-    function getDueSoonBadge(task) {
-    // Don't show due soon badge for completed tasks
-    if (task?.status?.toLowerCase() === 'completed') {
-        return null; 
-    }
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const deadlineDate = new Date(task.deadline * 1000);
-    deadlineDate.setHours(0, 0, 0, 0);
-    const daysUntilDeadline = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
-    
-    if (daysUntilDeadline < 0) return { text: 'Overdue', class: 'bg-red-100 text-red-700' };
-    if (daysUntilDeadline === 0) return { text: 'Due Today', class: 'bg-orange-100 text-orange-700' };
-    if (daysUntilDeadline <= 3) return { text: `Due in ${daysUntilDeadline} days`, class: 'bg-orange-100 text-orange-700' };
-    return null;
-    }
-   
-   // --- Fetch user's projects (role-aware) ---
-   async function fetchUserProjects() {
-   if (!currentUser.value) return;
-   
-   try {
-      let response;
-      
-      // Check if user is a director
-      if (currentRole.value?.toLowerCase() === 'director') {
-         // Directors see all projects in their department
-         response = await fetch(`${PROJECT_API_BASE}/department/${currentUserDepartment.value}`);
-      } else {
-         // Non-directors see only projects they're involved in
-         response = await fetch(`${PROJECT_API_BASE}/${currentUser.value}`);
-      }
-      
-      if (!response.ok) {
-         throw new Error('Failed to fetch projects');
-      }
-      
-      const data = await response.json();
-      userProjects.value = data.projects || [];
-      
-      console.log(`Projects loaded for ${currentRole.value}:`, userProjects.value.length);
-   } catch (error) {
-      console.error('Error fetching user projects:', error);
-      userProjects.value = [];
-   }
-   }
-   
-   // --- Handle project selection ---
-   async function onProjectSelect(projectId) {
-   if (!projectId) {
-      selectedProject.value = null;
-      projectCollaborators.value = [];
-      selectedCollaborator.value = null;
-      viewingUserId.value = currentUser.value;
-      filterTasksByUser(currentUser.value);
-      return;
-   }
-   
-   const project = userProjects.value.find(p => p.projectId === projectId);
-   selectedProject.value = project;
-   selectedProjectId.value = projectId;
-   
-   // Get all unique collaborators (owner + collaborators)
-   const collaboratorIds = new Set();
-   
-   // Add project owner
-   if (project.ownerId) {
-      collaboratorIds.add(project.ownerId);
-   }
-   
-   // Add all collaborators
-   if (project.collaborators && Array.isArray(project.collaborators)) {
-      project.collaborators.forEach(id => collaboratorIds.add(id));
-   }
-   
-   // Convert to array and map to user objects
-   projectCollaborators.value = Array.from(collaboratorIds)
-      .map(userId => {
-         const user = usersMap.value[userId];
-         return {
-         uid: userId,
-         name: user ? (user.name || user.displayName || user.email) : 'Unknown User',
-         isCurrentUser: userId === currentUser.value,
-         isOwner: userId === project.ownerId
-         };
-      })
-      .sort((a, b) => {
-         // Sort: current user first, then owner, then alphabetically
-         if (a.isCurrentUser) return -1;
-         if (b.isCurrentUser) return 1;
-         if (a.isOwner) return -1;
-         if (b.isOwner) return 1;
-         return a.name.localeCompare(b.name);
-      });
-   
-   console.log('Project collaborators:', projectCollaborators.value);
-   
-   // Reset collaborator selection
-   selectedCollaborator.value = null;
-   }
-   
-   // --- Handle collaborator selection ---
-   function onCollaboratorSelect(userId) {
-   if (!userId) {
-      selectedCollaborator.value = null;
-      viewingUserId.value = currentUser.value;
-      filterTasksByUser(currentUser.value);
-      return;
-   }
-   
-   selectedCollaborator.value = userId;
-   viewingUserId.value = userId;
-   
-   // Filter tasks for the selected user
-   filterTasksByUser(userId);
-   
-   console.log('Now viewing schedule for:', getUserDisplayName(userId));
-   }
-   
-   // --- Check if current user can view task details ---
-   function canViewTaskDetails(task) {
-   if (!task) return false;
-   
-   // Directors can view all tasks
-   if (currentRole.value?.toLowerCase() === 'director') {
-      return true;
-   }
-   
-   // Non-directors: check if they're a collaborator
-   if (!task.collaborators) return false;
-   return task.collaborators.includes(currentUser.value);
-   }
+function openTaskDetailModal(task) {
+  selectedTaskDetail.value = task;
+  showTaskDetailModal.value = true;
+}
 
-   
-   // --- Reset filters ---
-   function resetFilters() {
-   selectedProject.value = null;
-   selectedProjectId.value = null;
-   projectCollaborators.value = [];
-   selectedCollaborator.value = null;
-   viewingUserId.value = currentUser.value;
-   filterTasksByUser(currentUser.value);
-   }
-   
-   // --- Initialization ---
-   onMounted(() => {
-     onAuthStateChanged(auth, async (user) => {
-       if (user) {
-         currentUser.value = user.uid;
-         viewingUserId.value = user.uid;
-   
-         try {
-           // Fetch user info
-           const userInfo = await usersService.getUserById(user.uid);
-           currentRole.value = userInfo.role;
-           currentUserDepartment.value = userInfo.department || "";
-   
-           // Fetch all tasks
-           await fetchAllTasks();
-           await fetchAllUsers();
-           await fetchUserProjects();
-   
-           // Filter tasks for current user
-           filterTasksByUser(currentUser.value);
-           
-           // Fetch other data if needed
-           fetchAllUsers();
-           
-         } catch (err) {
-           console.error("Failed to fetch user info or tasks:", err);
-         } finally {
-           loading.value = false;
-         }
-   
-       } else {
-         router.push('/authentication');
-       }
-     });
-   });
+function closeTaskDetailModal() {
+  selectedTaskDetail.value = null;
+  showTaskDetailModal.value = false;
+}
+
+function canViewTaskDetails(task) {
+  if (!task) return false;
+  if (currentRole.value?.toLowerCase() === 'director') return true;
+  return task.collaborators?.includes(currentUser.value);
+}
+
+function filterTasksByUser(userId) {
+  filteredTasks.value = allTasks.value.filter(t => t.collaborators?.includes(userId));
+}
+
+function getUserDisplayName(userId) {
+  if (!userId) return 'Unassigned';
+  if (userId === currentUser.value) return 'You';
+  const user = usersMap.value[userId];
+  return user ? (user.name || user.displayName || user.email) : 'Unknown User';
+}
+
+function getDueSoonBadge(task) {
+  if (task?.status?.toLowerCase() === 'completed') return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const deadline = new Date(task.deadline * 1000); deadline.setHours(0, 0, 0, 0);
+  const diff = Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
+  if (diff < 0) return { text: 'Overdue', class: 'bg-red-100 text-red-700' };
+  if (diff === 0) return { text: 'Due Today', class: 'bg-orange-100 text-orange-700' };
+  if (diff <= 3) return { text: `Due in ${diff} days`, class: 'bg-orange-100 text-orange-700' };
+  return null;
+}
+
+// --- Fetching ---
+async function fetchAllTasks() {
+  try {
+    const res = await fetch(API_BASE);
+    if (!res.ok) throw new Error('Failed to fetch tasks');
+    const data = await res.json();
+    allTasks.value = data.tasks || [];
+  } catch (err) {
+    console.error('Error fetching tasks:', err);
+    allTasks.value = [];
+  }
+}
+
+async function fetchAllUsers() {
+  try {
+    const users = await usersService.getAllUsers();
+    allUsers.value = users;
+    usersMap.value = Object.fromEntries(users.map(u => [u.uid, u]));
+  } catch (err) {
+    console.error('Error fetching users:', err);
+  }
+}
+
+async function fetchUserProjects() {
+  if (!currentUser.value) return;
+  try {
+    const url = currentRole.value?.toLowerCase() === 'director'
+      ? `${PROJECT_API_BASE}/department/${currentUserDepartment.value}`
+      : `${PROJECT_API_BASE}/${currentUser.value}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch projects');
+    const data = await res.json();
+    userProjects.value = data.projects || [];
+  } catch (err) {
+    console.error('Error fetching user projects:', err);
+    userProjects.value = [];
+  }
+}
+
+// --- Handlers ---
+async function onProjectSelect(projectId) {
+  if (!projectId) {
+    selectedProject.value = null;
+    projectCollaborators.value = [];
+    selectedCollaborator.value = null;
+    viewingUserId.value = currentUser.value;
+    filterTasksByUser(currentUser.value);
+    return;
+  }
+
+  const project = userProjects.value.find(p => p.projectId === projectId);
+  selectedProject.value = project;
+  selectedProjectId.value = projectId;
+
+  const ids = new Set([project.ownerId, ...(project.collaborators || [])]);
+  projectCollaborators.value = Array.from(ids)
+    .map(uid => {
+      const u = usersMap.value[uid];
+      return {
+        uid,
+        name: u ? (u.name || u.displayName || u.email) : 'Unknown User',
+        isCurrentUser: uid === currentUser.value,
+        isOwner: uid === project.ownerId
+      };
+    })
+    .sort((a, b) => a.isCurrentUser ? -1 : b.isCurrentUser ? 1 :
+                   a.isOwner ? -1 : b.isOwner ? 1 :
+                   a.name.localeCompare(b.name));
+}
+
+function onCollaboratorSelect(uid) {
+  selectedCollaborator.value = uid;
+  viewingUserId.value = uid || currentUser.value;
+  filterTasksByUser(viewingUserId.value);
+}
+
+// --- Lifecycle ---
+onMounted(() => {
+  onAuthStateChanged(auth, async user => {
+    if (!user) return router.push('/authentication');
+    currentUser.value = viewingUserId.value = user.uid;
+
+    try {
+      const info = await usersService.getUserById(user.uid);
+      currentRole.value = info.role;
+      currentUserDepartment.value = info.department || '';
+      await Promise.all([fetchAllUsers(), fetchAllTasks(), fetchUserProjects()]);
+      filterTasksByUser(user.uid);
+    } catch (err) {
+      console.error('Failed to load user info or tasks:', err);
+    } finally {
+      loading.value = false;
+    }
+  });
+});
 </script>
+
 <style scoped>
    /* FullCalendar custom styling */
    :deep(.fc) {
