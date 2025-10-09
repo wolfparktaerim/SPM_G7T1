@@ -1,7 +1,0 @@
-# Email Service Configuration
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=esdgroupone@gmail.com
-SMTP_PASSWORD=yzxq tzwe xdpw ngic
-FROM_EMAIL=esdgroupone@gmail.com
-FROM_NAME=Smart Task Management System
