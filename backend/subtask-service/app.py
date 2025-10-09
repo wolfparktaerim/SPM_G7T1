@@ -1,3 +1,5 @@
+# backend/subtask-service/app.py
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import firebase_admin
@@ -195,9 +197,15 @@ def create_subtask():
         custom_schedule = None
 
 
-    reminder_interval = data.get("reminderInterval", [])
-    if not isinstance(reminder_interval, list) or not all(isinstance(i, int) for i in reminder_interval):
-        return jsonify(error="reminderInterval must be a list of integers"), 400
+    # NEW: Validate reminderTimes and taskDeadLineReminders
+    reminder_times = data.get("reminderTimes", [])
+    if not isinstance(reminder_times, list) or not all(isinstance(i, int) and i > 0 for i in reminder_times):
+        return jsonify(error="reminderTimes must be a list of positive integers"), 400
+
+
+    task_deadline_reminders = data.get("taskDeadLineReminders", False)
+    if not isinstance(task_deadline_reminders, bool):
+        return jsonify(error="taskDeadLineReminders must be a boolean"), 400
 
 
     current_time = current_timestamp()
@@ -230,7 +238,8 @@ def create_subtask():
         "scheduled": bool(scheduled),
         "schedule": schedule,
         "custom_schedule": custom_schedule,
-        "reminderInterval": reminder_interval
+        "reminderTimes": reminder_times,
+        "taskDeadLineReminders": task_deadline_reminders
     }
 
 
@@ -407,11 +416,19 @@ def update_subtask_by_id(subtask_id):
             update_data["start_date"] = start_date
 
 
-        if "reminderInterval" in data:
-            reminder_interval = data["reminderInterval"]
-            if not isinstance(reminder_interval, list) or not all(isinstance(i, int) for i in reminder_interval):
-                return jsonify(error="reminderInterval must be a list of integers"), 400
-            update_data["reminderInterval"] = reminder_interval
+        # NEW: Handle reminderTimes and taskDeadLineReminders
+        if "reminderTimes" in data:
+            reminder_times = data["reminderTimes"]
+            if not isinstance(reminder_times, list) or not all(isinstance(i, int) and i > 0 for i in reminder_times):
+                return jsonify(error="reminderTimes must be a list of positive integers"), 400
+            update_data["reminderTimes"] = reminder_times
+
+
+        if "taskDeadLineReminders" in data:
+            task_deadline_reminders = data["taskDeadLineReminders"]
+            if not isinstance(task_deadline_reminders, bool):
+                return jsonify(error="taskDeadLineReminders must be a boolean"), 400
+            update_data["taskDeadLineReminders"] = task_deadline_reminders
 
 
         update_data["updatedAt"] = current_timestamp()

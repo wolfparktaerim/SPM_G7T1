@@ -75,8 +75,9 @@
                 <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
                 <select v-model="filters.sortBy"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                  <option value="priority">Priority (High to Low)</option>
+
                   <option value="createdAt">Creation Date</option>
+                  <option value="priority">Priority (High to Low)</option>
                   <option value="deadline">Deadline</option>
                   <option value="title">Title</option>
                 </select>
@@ -145,11 +146,10 @@ const allUsers = ref([])
 
 // Filter state
 const showFilters = ref(false)
-// Update the default filters to use priority as default sort:
 const filters = ref({
   search: '',
   project: '',
-  sortBy: 'priority' // Changed from 'createdAt' to 'priority'
+  sortBy: 'createdAt' // Default sort by creation date
 })
 
 // Modal state
@@ -682,7 +682,7 @@ function clearFilters() {
   filters.value = {
     search: '',
     project: '',
-    sortBy: 'priority' // Changed from 'createdAt' to 'priority'
+    sortBy: 'createdAt'
   }
 }
 

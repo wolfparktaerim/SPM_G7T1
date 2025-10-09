@@ -140,7 +140,9 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
             "ownerId": "user123",
             "attachments": [],
             "collaborators": ["user123"],
-            "priority": 1
+            "priority": 1,
+            "reminderTimes": [1, 3, 7],
+            "taskDeadLineReminders": True
         }
         
         response = self.client.post('/subtasks', 
@@ -153,6 +155,8 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
         self.assertIn('subtask', data)
         self.assertEqual(data['subtask']['title'], 'Test Subtask')
         self.assertEqual(data['subtask']['subTaskId'], 'test-subtask-id')
+        self.assertEqual(data['subtask']['reminderTimes'], [1, 3, 7])
+        self.assertTrue(data['subtask']['taskDeadLineReminders'])
     
     def test_create_subtask_missing_required_fields(self):
         """Test subtask creation with missing required fields"""
@@ -250,6 +254,125 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
         data = response.get_json()
         self.assertIn('Priority', data['error'])
     
+    def test_create_subtask_invalid_reminder_times_not_list(self):
+        """Test subtask creation with invalid reminderTimes (not a list)"""
+        mock_task_ref = MagicMock()
+        mock_task_ref.get.return_value = {"taskId": "task123"}
+        self.mock_db.reference.return_value = mock_task_ref
+        
+        subtask_data = {
+            "title": "Test Subtask",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "taskId": "task123",
+            "reminderTimes": "not-a-list"
+        }
+        
+        response = self.client.post('/subtasks',
+                                   json=subtask_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_create_subtask_invalid_reminder_times_negative(self):
+        """Test subtask creation with invalid reminderTimes (negative values)"""
+        mock_task_ref = MagicMock()
+        mock_task_ref.get.return_value = {"taskId": "task123"}
+        self.mock_db.reference.return_value = mock_task_ref
+        
+        subtask_data = {
+            "title": "Test Subtask",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "taskId": "task123",
+            "reminderTimes": [1, -3, 7]
+        }
+        
+        response = self.client.post('/subtasks',
+                                   json=subtask_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_create_subtask_invalid_reminder_times_zero(self):
+        """Test subtask creation with invalid reminderTimes (zero values)"""
+        mock_task_ref = MagicMock()
+        mock_task_ref.get.return_value = {"taskId": "task123"}
+        self.mock_db.reference.return_value = mock_task_ref
+        
+        subtask_data = {
+            "title": "Test Subtask",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "taskId": "task123",
+            "reminderTimes": [0, 3, 7]
+        }
+        
+        response = self.client.post('/subtasks',
+                                   json=subtask_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_create_subtask_invalid_task_deadline_reminders_not_bool(self):
+        """Test subtask creation with invalid taskDeadLineReminders (not boolean)"""
+        mock_task_ref = MagicMock()
+        mock_task_ref.get.return_value = {"taskId": "task123"}
+        self.mock_db.reference.return_value = mock_task_ref
+        
+        subtask_data = {
+            "title": "Test Subtask",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "taskId": "task123",
+            "taskDeadLineReminders": "yes"
+        }
+        
+        response = self.client.post('/subtasks',
+                                   json=subtask_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('taskDeadLineReminders', data['error'])
+    
+    def test_create_subtask_with_default_reminder_values(self):
+        """Test subtask creation with default reminder values"""
+        mock_task_ref = MagicMock()
+        mock_task_ref.get.return_value = {"taskId": "task123"}
+        
+        mock_subtask_ref = MagicMock()
+        mock_subtask_ref.push.return_value.key = "subtask-defaults"
+        
+        def mock_reference(path):
+            if 'tasks/' in path:
+                return mock_task_ref
+            return mock_subtask_ref
+        
+        self.mock_db.reference.side_effect = mock_reference
+        
+        subtask_data = {
+            "title": "Test Subtask",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "taskId": "task123"
+        }
+        
+        response = self.client.post('/subtasks',
+                                   json=subtask_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertEqual(data['subtask']['reminderTimes'], [])
+        self.assertFalse(data['subtask']['taskDeadLineReminders'])
+    
     def test_create_subtask_invalid_attachments(self):
         """Test subtask creation with invalid attachments format"""
         mock_task_ref = MagicMock()
@@ -303,14 +426,18 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
                 "title": "Subtask 1",
                 "status": "ongoing",
                 "start_date": current_timestamp() - 1000,
-                "active": False
+                "active": False,
+                "reminderTimes": [1, 3],
+                "taskDeadLineReminders": True
             },
             "subtask2": {
                 "subTaskId": "subtask2",
                 "title": "Subtask 2",
                 "status": "completed",
                 "start_date": current_timestamp() + 1000,
-                "active": True
+                "active": True,
+                "reminderTimes": [],
+                "taskDeadLineReminders": False
             }
         }
         self.mock_db.reference.return_value = mock_ref
@@ -345,7 +472,9 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
             "title": "Test Subtask",
             "status": "ongoing",
             "start_date": current_timestamp() - 1000,
-            "active": False
+            "active": False,
+            "reminderTimes": [1, 7],
+            "taskDeadLineReminders": True
         }
         self.mock_db.reference.return_value = mock_ref
         
@@ -378,13 +507,17 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
             "status": "ongoing",
             "deadline": 1735689600,
             "taskId": "task123",
-            "creatorId": "user123"
+            "creatorId": "user123",
+            "reminderTimes": [1],
+            "taskDeadLineReminders": False
         }
         self.mock_db.reference.return_value = mock_ref
         
         update_data = {
             "title": "New Title",
-            "status": "completed"
+            "status": "completed",
+            "reminderTimes": [1, 3, 7],
+            "taskDeadLineReminders": True
         }
         
         response = self.client.put('/subtasks/subtask123',
@@ -395,6 +528,11 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
         data = response.get_json()
         self.assertIn('message', data)
         mock_ref.update.assert_called_once()
+        
+        # Check that the update included the new reminder values
+        call_args = mock_ref.update.call_args[0][0]
+        self.assertEqual(call_args['reminderTimes'], [1, 3, 7])
+        self.assertTrue(call_args['taskDeadLineReminders'])
     
     def test_update_subtask_not_found(self):
         """Test updating non-existent subtask"""
@@ -427,6 +565,46 @@ class TestSubtaskServiceEndpoints(unittest.TestCase):
                                   content_type='application/json')
         
         self.assertEqual(response.status_code, 400)
+    
+    def test_update_subtask_invalid_reminder_times(self):
+        """Test updating subtask with invalid reminderTimes"""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value = {
+            "subTaskId": "subtask123",
+            "title": "Test Subtask",
+            "status": "ongoing"
+        }
+        self.mock_db.reference.return_value = mock_ref
+        
+        update_data = {"reminderTimes": [1, -5, 7]}
+        
+        response = self.client.put('/subtasks/subtask123',
+                                  json=update_data,
+                                  content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_update_subtask_invalid_task_deadline_reminders(self):
+        """Test updating subtask with invalid taskDeadLineReminders"""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value = {
+            "subTaskId": "subtask123",
+            "title": "Test Subtask",
+            "status": "ongoing"
+        }
+        self.mock_db.reference.return_value = mock_ref
+        
+        update_data = {"taskDeadLineReminders": "invalid"}
+        
+        response = self.client.put('/subtasks/subtask123',
+                                  json=update_data,
+                                  content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('taskDeadLineReminders', data['error'])
     
     def test_update_subtask_invalid_parent_task(self):
         """Test updating subtask with non-existent parent task"""
@@ -581,7 +759,9 @@ class TestSubtaskScheduling(unittest.TestCase):
             "scheduled": True,
             "schedule": "daily",
             "start_date": current_timestamp(),
-            "deadline": current_timestamp() + 86400
+            "deadline": current_timestamp() + 86400,
+            "reminderTimes": [1, 3],
+            "taskDeadLineReminders": True
         }
         self.mock_db.reference.return_value = mock_ref
         
@@ -616,7 +796,9 @@ class TestSubtaskScheduling(unittest.TestCase):
             "taskId": "task123",
             "scheduled": True,
             "schedule": "custom",
-            "custom_schedule": 3
+            "custom_schedule": 3,
+            "reminderTimes": [1],
+            "taskDeadLineReminders": False
         }
         
         response = self.client.post('/subtasks',
@@ -720,6 +902,41 @@ class TestSubtaskScheduling(unittest.TestCase):
         # Should succeed but custom_schedule not added since schedule != custom
         # Or may fail depending on implementation
         self.assertIn(response.status_code, [200, 400])
+    
+    def test_create_scheduled_subtask_with_reminders(self):
+        """Test creating scheduled subtask with reminder configurations"""
+        mock_task_ref = MagicMock()
+        mock_task_ref.get.return_value = {"taskId": "task123"}
+        
+        mock_subtask_ref = MagicMock()
+        mock_subtask_ref.push.return_value.key = "subtask-scheduled-reminders"
+        
+        def mock_reference(path):
+            if 'tasks/' in path:
+                return mock_task_ref
+            return mock_subtask_ref
+        
+        self.mock_db.reference.side_effect = mock_reference
+        
+        subtask_data = {
+            "title": "Scheduled Subtask with Reminders",
+            "creatorId": "user123",
+            "deadline": current_timestamp() + 86400,
+            "taskId": "task123",
+            "scheduled": True,
+            "schedule": "weekly",
+            "reminderTimes": [1, 3, 7, 14],
+            "taskDeadLineReminders": True
+        }
+        
+        response = self.client.post('/subtasks',
+                                   json=subtask_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertEqual(data['subtask']['reminderTimes'], [1, 3, 7, 14])
+        self.assertTrue(data['subtask']['taskDeadLineReminders'])
 
 
 class TestSubtaskEdgeCases(unittest.TestCase):

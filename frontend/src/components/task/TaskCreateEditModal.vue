@@ -1,3 +1,5 @@
+<!-- frontend/src/components/task/TaskCreateEditModal.vue -->
+
 <template>
   <div v-if="show" class="modal-overlay" @click="handleBackdropClick">
     <div class="modal" @click.stop>
@@ -60,6 +62,95 @@
             <span class="legend-item legend-critical">10: Critical</span>
           </div>
         </div>
+
+        <!-- NEW: Deadline Reminders Section -->
+        <div class="form-group">
+          <label class="form-label">
+            <input v-model="formData.taskDeadLineReminders" type="checkbox" class="checkbox-input" />
+            <span class="checkbox-label">Enable deadline reminders</span>
+          </label>
+          <p class="form-hint">
+            Get notified before the deadline to help you stay on track
+          </p>
+        </div>
+
+        <!-- NEW: Reminder Times Configuration (shown when reminders enabled) -->
+        <transition name="slide-down">
+          <div v-if="formData.taskDeadLineReminders" class="reminder-options">
+            <div class="form-group">
+              <label class="form-label">Reminder Schedule</label>
+
+              <!-- Quick Add Buttons -->
+              <div class="reminder-quick-add">
+                <button type="button" @click="addReminderTime(1)" :disabled="formData.reminderTimes.includes(1)"
+                  class="quick-reminder-btn">
+                  1 day
+                </button>
+                <button type="button" @click="addReminderTime(3)" :disabled="formData.reminderTimes.includes(3)"
+                  class="quick-reminder-btn">
+                  3 days
+                </button>
+                <button type="button" @click="addReminderTime(7)" :disabled="formData.reminderTimes.includes(7)"
+                  class="quick-reminder-btn">
+                  1 week
+                </button>
+                <button type="button" @click="addReminderTime(14)" :disabled="formData.reminderTimes.includes(14)"
+                  class="quick-reminder-btn">
+                  2 weeks
+                </button>
+              </div>
+
+              <!-- Custom Reminder Input -->
+              <div class="custom-reminder-input">
+                <input v-model.number="customReminderDays" type="number" min="1" max="365" placeholder="Custom days..."
+                  class="form-input reminder-custom-input" @keypress.enter.prevent="addCustomReminder" />
+                <button type="button" @click="addCustomReminder" class="add-reminder-btn">
+                  Add
+                </button>
+              </div>
+
+              <span v-if="errors.reminderTimes" class="error-message">{{ errors.reminderTimes }}</span>
+
+              <!-- Reminder Times List -->
+              <div v-if="formData.reminderTimes.length > 0" class="reminder-times-list">
+                <div class="reminder-times-header">
+                  <span class="list-title">Active Reminders ({{ formData.reminderTimes.length }})</span>
+                  <button type="button" @click="clearAllReminders" class="clear-all-btn">
+                    Clear All
+                  </button>
+                </div>
+                <div class="reminder-chips">
+                  <div v-for="days in sortedReminderTimes" :key="days" class="reminder-chip">
+                    <span class="chip-icon">🔔</span>
+                    <span class="chip-text">{{ formatReminderDays(days) }}</span>
+                    <button type="button" @click="removeReminderTime(days)" class="chip-remove">
+                      <X class="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="no-reminders-message">
+                <span class="message-icon">📅</span>
+                <span class="message-text">No reminders set. Add reminders using the buttons above.</span>
+              </div>
+
+              <!-- Reminder Info Box -->
+              <div class="reminder-info-box">
+                <div class="info-icon">ℹ️</div>
+                <div class="info-content">
+                  <div class="info-title">How Reminders Work</div>
+                  <ul class="info-list">
+                    <li>You'll receive notifications on the days you specify before the deadline</li>
+                    <li>All collaborators will receive the reminders</li>
+                    <li>Reminders are sent at 9:00 AM in your local timezone</li>
+                    <li>You can add multiple reminder times (e.g., 1, 3, and 7 days before)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
 
         <!-- Recurring Options -->
         <div class="form-group">
@@ -124,9 +215,8 @@
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
             <option value="unassigned">Unassigned</option>
             <option value="ongoing">Ongoing</option>
-            <option value="under_review ">Under Review</option>
+            <option value="under_review">Under Review</option>
             <option value="completed">Completed</option>
-
           </select>
           <span v-if="errors.status" class="error-message">{{ errors.status }}</span>
           <p class="form-hint">Update the current status of this subtask</p>
@@ -152,13 +242,12 @@
             </span>
           </p>
         </div>
-        <!-- Status is automatically managed based on user role and assignments -->
 
         <!-- Owner Assignment (Managers/Directors only) -->
         <div v-if="canAssignOwner" class="form-group">
           <label class="form-label">Assign Owner</label>
           <select v-model="formData.ownerId" @change="handleOwnerChange" class="form-input">
-            <option value="">Yourself</option>
+            <option :value="currentUser?.uid">Yourself</option>
             <option v-for="user in subordinateUsers" :key="user.uid" :value="user.uid">
               {{ getUserDisplayName(user) }} ({{ formatRole(user.role) }})
             </option>
@@ -192,12 +281,11 @@
 
           <!-- No collaborators message -->
           <div v-if="availableCollaborators.length === 0" class="no-collaborators-message">
-            <div class="message-icon">ðŸ‘¥</div>
+            <div class="message-icon">👥</div>
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
               <div class="message-text">There are no other users in your department ({{ currentUser?.department }}) to
-                add as
-                collaborators.</div>
+                add as collaborators.</div>
             </div>
           </div>
 
@@ -369,16 +457,24 @@ const deadlineInput = ref('')
 const newAttachments = ref([])
 const existingAttachments = ref([])
 const errors = ref({})
+const customReminderDays = ref(null)
 
 // Form data
 const formData = ref({
   title: '',
   deadline: 0,
-  status: 'unassigned', // Will be set properly in resetForm based on user role
+  status: 'unassigned',
   notes: '',
   projectId: '',
   ownerId: '',
-  collaborators: []
+  collaborators: [],
+  priority: 5,
+  scheduled: false,
+  schedule: 'daily',
+  custom_schedule: null,
+  start_date: Math.floor(Date.now() / 1000),
+  reminderTimes: [],
+  taskDeadLineReminders: false
 })
 
 // Computed properties
@@ -389,17 +485,13 @@ const canAssignOwner = computed(() => {
   return userRole === 'manager' || userRole === 'director'
 })
 
-// Check if current user can manage collaborators (only owners can)
 const canManageCollaborators = computed(() => {
   if (!props.isEditing) {
-    // During creation, creator can manage collaborators
     return true
   }
-  // During editing, only owner can manage collaborators
   return props.taskData?.ownerId === currentUser.value?.uid
 })
 
-// UPDATED: Filter subordinate users by same department only
 const subordinateUsers = computed(() => {
   const currentUserRole = currentUser.value?.role
   const currentUserDept = currentUser.value?.department
@@ -407,7 +499,6 @@ const subordinateUsers = computed(() => {
   if (!currentUserRole || !currentUserDept) return []
 
   return props.allUsers.filter(user => {
-    // Must be in same department
     if (user.department !== currentUserDept) return false
 
     if (currentUserRole === 'director') {
@@ -419,7 +510,6 @@ const subordinateUsers = computed(() => {
   })
 })
 
-// UPDATED: Filter collaborators by same department only (regardless of role)
 const availableCollaborators = computed(() => {
   const currentUserDept = currentUser.value?.department
   if (!currentUserDept) return []
@@ -431,14 +521,11 @@ const availableCollaborators = computed(() => {
   )
 })
 
-// UPDATED: Display collaborators excluding the owner (for UI purposes)
 const displayCollaborators = computed(() => {
   if (!props.isEditing) {
-    // During creation, show all collaborators except current user
     return formData.value.collaborators.filter(id => id !== currentUser.value?.uid)
   }
 
-  // During editing, exclude the owner from display
   const ownerId = formData.value.ownerId || currentUser.value?.uid
   return formData.value.collaborators.filter(id => id !== ownerId)
 })
@@ -448,6 +535,10 @@ const availableProjects = computed(() => {
     project.ownerUid === currentUser.value?.uid ||
     project.collaborators?.includes(currentUser.value?.uid)
   )
+})
+
+const sortedReminderTimes = computed(() => {
+  return [...formData.value.reminderTimes].sort((a, b) => a - b)
 })
 
 const isFormValid = computed(() => {
@@ -462,16 +553,11 @@ async function fetchProjects() {
 
   loadingProjects.value = true
   try {
-    console.log('Fetching projects for user:', currentUser.value.uid)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUser.value.uid}`)
     projects.value = response.data.projects || []
-    console.log(`Loaded ${projects.value.length} projects`)
   } catch (error) {
     console.error('Error fetching projects:', error)
-    if (error.response?.status === 404) {
-      // No projects found is acceptable
-      projects.value = []
-    } else {
+    if (error.response?.status !== 404) {
       toast.error('Failed to load projects')
     }
   } finally {
@@ -495,42 +581,70 @@ function getPriorityDisplayClass(priority) {
   return 'priority-display-low'
 }
 
+// NEW: Reminder management functions
+function addReminderTime(days) {
+  if (!formData.value.reminderTimes.includes(days)) {
+    formData.value.reminderTimes.push(days)
+  }
+}
 
-// UPDATED: Handle owner change with new status rules
+function removeReminderTime(days) {
+  const index = formData.value.reminderTimes.indexOf(days)
+  if (index > -1) {
+    formData.value.reminderTimes.splice(index, 1)
+  }
+}
+
+function addCustomReminder() {
+  if (customReminderDays.value && customReminderDays.value > 0 && customReminderDays.value <= 365) {
+    if (!formData.value.reminderTimes.includes(customReminderDays.value)) {
+      formData.value.reminderTimes.push(customReminderDays.value)
+      customReminderDays.value = null
+    } else {
+      toast.warning('This reminder time is already added')
+    }
+  } else {
+    toast.error('Please enter a valid number of days (1-365)')
+  }
+}
+
+function clearAllReminders() {
+  formData.value.reminderTimes = []
+}
+
+function formatReminderDays(days) {
+  if (days === 1) return '1 day before'
+  if (days === 7) return '1 week before'
+  if (days === 14) return '2 weeks before'
+  if (days === 30) return '1 month before'
+  return `${days} days before`
+}
+
 function handleOwnerChange() {
   const currentUserRole = currentUser.value?.role
   const assignedUser = props.allUsers.find(u => u.uid === formData.value.ownerId)
   const assignedUserRole = assignedUser?.role
   const currentStatus = formData.value.status
 
-  // RULE 1 & 2: Staff users always have 'ongoing' status and cannot change it
   if (currentUserRole === 'staff') {
     formData.value.status = 'ongoing'
     return
   }
 
-  // Only change status if current status is "unassigned"
   if (currentStatus !== 'unassigned') {
-    // Keep current status if it's not unassigned during editing
     return
   }
 
-  // RULE 2: For Directors/Managers during creation or when editing unassigned tasks
   if (formData.value.ownerId) {
-    // Someone is assigned as owner
     if (assignedUserRole === 'staff') {
-      // Assigning to staff = ongoing
       formData.value.status = 'ongoing'
     } else {
-      // Director assigning to manager, or manager to manager = unassigned
       formData.value.status = 'unassigned'
     }
   } else {
-    // No owner assigned = unassigned for directors/managers
     formData.value.status = 'unassigned'
   }
 }
-
 
 function getModalTitle() {
   if (props.isEditing) {
@@ -549,11 +663,9 @@ function getModalSubtitle() {
 
 function getUserDisplayName(userOrId) {
   if (typeof userOrId === 'string') {
-    // It's a user ID
     const user = props.allUsers.find(u => u.uid === userOrId)
     return user ? (user.name || user.displayName || user.email || 'Unknown User') : 'Unknown User'
   } else {
-    // It's a user object
     return userOrId.name || userOrId.displayName || userOrId.email || 'Unknown User'
   }
 }
@@ -594,7 +706,6 @@ function addCollaborator() {
   }
 }
 
-// UPDATED: Remove collaborator by ID instead of index
 function removeCollaborator(collaboratorId) {
   const index = formData.value.collaborators.findIndex(id => id === collaboratorId)
   if (index > -1) {
@@ -605,28 +716,17 @@ function removeCollaborator(collaboratorId) {
 function epochToDateTime(epoch) {
   if (!epoch) return ''
   const date = new Date(epoch * 1000)
-
-  // Get the local timezone offset in minutes
   const timezoneOffset = date.getTimezoneOffset()
-
-  // Adjust for local timezone
   const localDate = new Date(date.getTime() - (timezoneOffset * 60 * 1000))
-
-  // Return in the format expected by datetime-local
   return localDate.toISOString().slice(0, 16)
 }
 
 function dateTimeToEpoch(dateTimeLocal) {
   if (!dateTimeLocal) return 0
-
-  // Create date object from the datetime-local string
-  // Replace dashes and T to ensure it's interpreted as local time
   const localDateString = dateTimeLocal.replace(/-/g, '/').replace('T', ' ')
   const date = new Date(localDateString)
-
   return Math.floor(date.getTime() / 1000)
 }
-
 
 async function handleFileUpload(event) {
   const files = Array.from(event.target.files)
@@ -647,12 +747,11 @@ async function handleFileUpload(event) {
     }
   }
 
-  // Reset input
   event.target.value = ''
 }
 
 function validateFile(file) {
-  const maxSize = 2 * 1024 * 1024 // 2MB
+  const maxSize = 2 * 1024 * 1024
   if (file.size > maxSize) {
     toast.error(`File "${file.name}" is too large. Maximum size is 2MB.`)
     return false
@@ -686,15 +785,12 @@ function formatFileSize(bytes) {
 }
 
 function getAttachmentName(attachment, index) {
-  // Try to detect file type from base64 data and generate a meaningful name
   const header = attachment.slice(0, 10).toLowerCase()
-
   if (header.includes('ivbor')) return `Image_${index + 1}.png`
   if (header.includes('/9j/')) return `Image_${index + 1}.jpg`
   if (header.includes('jvber')) return `Document_${index + 1}.pdf`
   if (header.includes('uesdb')) return `Document_${index + 1}.docx`
   if (header.includes('pk')) return `Spreadsheet_${index + 1}.xlsx`
-
   return `Attachment_${index + 1}`
 }
 
@@ -727,6 +823,11 @@ function validateForm() {
     }
   }
 
+  // NEW: Validate reminder times
+  if (formData.value.taskDeadLineReminders && formData.value.reminderTimes.length === 0) {
+    errors.value.reminderTimes = 'Please add at least one reminder time or disable reminders'
+  }
+
   return Object.keys(errors.value).length === 0
 }
 
@@ -738,7 +839,6 @@ async function handleSubmit() {
   try {
     const submitData = { ...formData.value }
 
-    // Handle attachments
     const allAttachments = [
       ...existingAttachments.value,
       ...newAttachments.value.map(file => file.base64)
@@ -748,54 +848,41 @@ async function handleSubmit() {
       submitData.attachments = allAttachments
     }
 
-    // UPDATED: Enhanced status and ownership logic
     const currentUserRole = currentUser.value?.role
-
-    // Only apply status logic during creation OR during editing if current status is 'unassigned'
     const shouldUpdateStatus = !props.isEditing || submitData.status === 'unassigned'
 
     if (!submitData.ownerId) {
-      // No specific owner assigned - current user becomes owner
       submitData.ownerId = currentUser.value.uid
 
-      // Set status based on user role (only if we should update status)
       if (shouldUpdateStatus) {
         if (currentUserRole === 'staff') {
           submitData.status = 'ongoing'
         } else {
-          // Director/Manager creating unassigned task for themselves
           submitData.status = 'unassigned'
         }
       }
     } else if (shouldUpdateStatus) {
-      // Owner is assigned - only update status if we should
       const assignedUser = props.allUsers.find(u => u.uid === submitData.ownerId)
       const assignedUserRole = assignedUser?.role
 
       if (currentUserRole === 'staff') {
-        // Staff always have ongoing status
         submitData.status = 'ongoing'
       } else if (assignedUserRole === 'staff') {
-        // Assigning to staff = ongoing
         submitData.status = 'ongoing'
       } else {
-        // Assigning to manager/director = unassigned
         submitData.status = 'unassigned'
       }
     }
 
-    // Always ensure owner is in collaborators (but hidden in UI)
     const ownerId = submitData.ownerId || currentUser.value.uid
     if (!submitData.collaborators.includes(ownerId)) {
       submitData.collaborators.push(ownerId)
     }
 
-    // Also ensure creator is in collaborators
     if (!submitData.collaborators.includes(currentUser.value.uid)) {
       submitData.collaborators.push(currentUser.value.uid)
     }
 
-    // Add a small delay for better UX (shows loading state)
     await new Promise(resolve => setTimeout(resolve, 500))
 
     emit('save', submitData)
@@ -826,16 +913,19 @@ function resetForm() {
     projectId: '',
     ownerId: '',
     collaborators: [],
-    priority: 5, // NEW: Default priority
-    scheduled: false, // NEW: Recurring disabled by default
-    schedule: 'daily', // NEW: Default schedule
-    custom_schedule: null, // NEW: Custom days
-    start_date: Math.floor(Date.now() / 1000) // NEW: Current timestamp
+    priority: 5,
+    scheduled: false,
+    schedule: 'daily',
+    custom_schedule: null,
+    start_date: Math.floor(Date.now() / 1000),
+    reminderTimes: [],
+    taskDeadLineReminders: false
   }
   deadlineInput.value = ''
   newAttachments.value = []
   existingAttachments.value = []
   selectedCollaborator.value = ''
+  customReminderDays.value = null
   errors.value = {}
 }
 
@@ -851,11 +941,13 @@ watch(() => props.show, (newVal) => {
         projectId: props.taskData.projectId || '',
         ownerId: props.taskData.ownerId || '',
         collaborators: [...(props.taskData.collaborators || [])],
-        priority: props.taskData.priority || 5, // NEW
-        scheduled: props.taskData.scheduled || false, // NEW
-        schedule: props.taskData.schedule || 'daily', // NEW
-        custom_schedule: props.taskData.custom_schedule || null, // NEW
-        start_date: props.taskData.start_date || Math.floor(Date.now() / 1000) // NEW
+        priority: props.taskData.priority || 5,
+        scheduled: props.taskData.scheduled || false,
+        schedule: props.taskData.schedule || 'daily',
+        custom_schedule: props.taskData.custom_schedule || null,
+        start_date: props.taskData.start_date || Math.floor(Date.now() / 1000),
+        reminderTimes: [...(props.taskData.reminderTimes || [])],
+        taskDeadLineReminders: props.taskData.taskDeadLineReminders || false
       }
       deadlineInput.value = epochToDateTime(props.taskData.deadline)
       existingAttachments.value = props.taskData.attachments || []
@@ -877,7 +969,6 @@ watch(deadlineInput, (newVal) => {
 
 // Initialize users and projects
 onMounted(async () => {
-  // Load users if not passed as prop
   if (props.allUsers.length === 0) {
     try {
       const users = await usersService.getAllUsers()
@@ -890,12 +981,183 @@ onMounted(async () => {
     allUsers.value = props.allUsers
   }
 
-  // Load projects
   await fetchProjects()
 })
 </script>
 
 <style scoped>
+/* NEW: Reminder Options Styles */
+.reminder-options {
+  padding: 1.5rem;
+  background-color: #fef3c7;
+  border: 2px solid #fbbf24;
+  border-radius: 0.75rem;
+  margin-top: 1rem;
+}
+
+.reminder-quick-add {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.quick-reminder-btn {
+  padding: 0.5rem 1rem;
+  background-color: white;
+  border: 2px solid #d97706;
+  color: #92400e;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.quick-reminder-btn:hover:not(:disabled) {
+  background-color: #fbbf24;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.quick-reminder-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+  color: #9ca3af;
+}
+
+.custom-reminder-input {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.reminder-custom-input {
+  flex: 1;
+}
+
+.add-reminder-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: #f59e0b;
+  color: white;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.add-reminder-btn:hover {
+  background-color: #d97706;
+  transform: translateY(-1px);
+}
+
+.reminder-times-list {
+  margin-top: 1rem;
+}
+
+.reminder-times-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.list-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.clear-all-btn {
+  font-size: 0.75rem;
+  color: #dc2626;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.clear-all-btn:hover {
+  background-color: #fee2e2;
+}
+
+.reminder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.reminder-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background-color: white;
+  border: 2px solid #f59e0b;
+  border-radius: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #92400e;
+  transition: all 0.2s ease;
+}
+
+.reminder-chip:hover {
+  background-color: #fffbeb;
+  transform: translateY(-1px);
+}
+
+.chip-icon {
+  font-size: 1rem;
+}
+
+.chip-text {
+  font-weight: 600;
+}
+
+.chip-remove {
+  padding: 0.125rem;
+  color: #dc2626;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.chip-remove:hover {
+  background-color: #fee2e2;
+}
+
+.no-reminders-message {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: white;
+  border: 2px dashed #d97706;
+  border-radius: 0.5rem;
+  color: #92400e;
+}
+
+.message-icon {
+  font-size: 1.5rem;
+}
+
+.message-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.reminder-info-box {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+}
+
 /* Priority Selector Styles */
 .priority-selector {
   display: flex;
@@ -1120,7 +1382,7 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-/* Slide down animation for recurring options */
+/* Slide down animation */
 .slide-down-enter-active,
 .slide-down-leave-active {
   transition: all 0.3s ease;
@@ -1140,7 +1402,6 @@ onMounted(async () => {
   transform: translateY(0);
   max-height: 500px;
 }
-
 
 .modal-overlay {
   position: fixed;
@@ -1165,7 +1426,6 @@ onMounted(async () => {
   position: relative;
 }
 
-/* Loading overlay styles */
 .loading-overlay {
   position: absolute;
   top: 0;

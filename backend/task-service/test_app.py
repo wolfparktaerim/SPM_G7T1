@@ -121,7 +121,9 @@ class TestTaskServiceEndpoints(unittest.TestCase):
             "projectId": "project123",
             "attachments": [],
             "collaborators": ["user123"],
-            "priority": 1
+            "priority": 1,
+            "reminderTimes": [1, 3, 7],
+            "taskDeadLineReminders": True
         }
         
         response = self.client.post('/tasks', 
@@ -134,6 +136,8 @@ class TestTaskServiceEndpoints(unittest.TestCase):
         self.assertIn('task', data)
         self.assertEqual(data['task']['title'], 'Test Task')
         self.assertEqual(data['task']['taskId'], 'test-task-id')
+        self.assertEqual(data['task']['reminderTimes'], [1, 3, 7])
+        self.assertTrue(data['task']['taskDeadLineReminders'])
     
     def test_create_task_missing_required_fields(self):
         """Test task creation with missing required fields"""
@@ -201,6 +205,95 @@ class TestTaskServiceEndpoints(unittest.TestCase):
         data = response.get_json()
         self.assertIn('Priority', data['error'])
     
+    def test_create_task_invalid_reminder_times_not_list(self):
+        """Test task creation with invalid reminderTimes (not a list)"""
+        task_data = {
+            "title": "Test Task",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "reminderTimes": "not-a-list"
+        }
+        
+        response = self.client.post('/tasks',
+                                   json=task_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_create_task_invalid_reminder_times_negative(self):
+        """Test task creation with invalid reminderTimes (negative values)"""
+        task_data = {
+            "title": "Test Task",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "reminderTimes": [1, -3, 7]
+        }
+        
+        response = self.client.post('/tasks',
+                                   json=task_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_create_task_invalid_reminder_times_non_integer(self):
+        """Test task creation with invalid reminderTimes (non-integer values)"""
+        task_data = {
+            "title": "Test Task",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "reminderTimes": [1, "three", 7]
+        }
+        
+        response = self.client.post('/tasks',
+                                   json=task_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_create_task_invalid_task_deadline_reminders_not_bool(self):
+        """Test task creation with invalid taskDeadLineReminders (not boolean)"""
+        task_data = {
+            "title": "Test Task",
+            "creatorId": "user123",
+            "deadline": 1735689600,
+            "taskDeadLineReminders": "yes"
+        }
+        
+        response = self.client.post('/tasks',
+                                   json=task_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('taskDeadLineReminders', data['error'])
+    
+    def test_create_task_with_default_reminder_values(self):
+        """Test task creation with default reminder values"""
+        mock_ref = MagicMock()
+        mock_ref.push.return_value.key = "test-task-id"
+        self.mock_db.reference.return_value = mock_ref
+        
+        task_data = {
+            "title": "Test Task",
+            "creatorId": "user123",
+            "deadline": 1735689600
+        }
+        
+        response = self.client.post('/tasks',
+                                   json=task_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertEqual(data['task']['reminderTimes'], [])
+        self.assertFalse(data['task']['taskDeadLineReminders'])
+    
     def test_get_all_tasks_success(self):
         """Test retrieving all tasks"""
         mock_ref = MagicMock()
@@ -210,14 +303,18 @@ class TestTaskServiceEndpoints(unittest.TestCase):
                 "title": "Task 1",
                 "status": "ongoing",
                 "start_date": current_timestamp() - 1000,
-                "active": False
+                "active": False,
+                "reminderTimes": [1, 3],
+                "taskDeadLineReminders": True
             },
             "task2": {
                 "taskId": "task2",
                 "title": "Task 2",
                 "status": "completed",
                 "start_date": current_timestamp() + 1000,
-                "active": True
+                "active": True,
+                "reminderTimes": [],
+                "taskDeadLineReminders": False
             }
         }
         self.mock_db.reference.return_value = mock_ref
@@ -252,7 +349,9 @@ class TestTaskServiceEndpoints(unittest.TestCase):
             "title": "Test Task",
             "status": "ongoing",
             "start_date": current_timestamp() - 1000,
-            "active": False
+            "active": False,
+            "reminderTimes": [1, 7],
+            "taskDeadLineReminders": True
         }
         self.mock_db.reference.return_value = mock_ref
         
@@ -284,13 +383,17 @@ class TestTaskServiceEndpoints(unittest.TestCase):
             "title": "Old Title",
             "status": "ongoing",
             "deadline": 1735689600,
-            "creatorId": "user123"
+            "creatorId": "user123",
+            "reminderTimes": [1],
+            "taskDeadLineReminders": False
         }
         self.mock_db.reference.return_value = mock_ref
         
         update_data = {
             "title": "New Title",
-            "status": "completed"
+            "status": "completed",
+            "reminderTimes": [1, 3, 7],
+            "taskDeadLineReminders": True
         }
         
         response = self.client.put('/tasks/task123',
@@ -301,6 +404,11 @@ class TestTaskServiceEndpoints(unittest.TestCase):
         data = response.get_json()
         self.assertIn('message', data)
         mock_ref.update.assert_called_once()
+        
+        # Check that the update included the new reminder values
+        call_args = mock_ref.update.call_args[0][0]
+        self.assertEqual(call_args['reminderTimes'], [1, 3, 7])
+        self.assertTrue(call_args['taskDeadLineReminders'])
     
     def test_update_task_not_found(self):
         """Test updating non-existent task"""
@@ -333,6 +441,46 @@ class TestTaskServiceEndpoints(unittest.TestCase):
                                   content_type='application/json')
         
         self.assertEqual(response.status_code, 400)
+    
+    def test_update_task_invalid_reminder_times(self):
+        """Test updating task with invalid reminderTimes"""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value = {
+            "taskId": "task123",
+            "title": "Test Task",
+            "status": "ongoing"
+        }
+        self.mock_db.reference.return_value = mock_ref
+        
+        update_data = {"reminderTimes": [1, -5, 7]}
+        
+        response = self.client.put('/tasks/task123',
+                                  json=update_data,
+                                  content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('reminderTimes', data['error'])
+    
+    def test_update_task_invalid_task_deadline_reminders(self):
+        """Test updating task with invalid taskDeadLineReminders"""
+        mock_ref = MagicMock()
+        mock_ref.get.return_value = {
+            "taskId": "task123",
+            "title": "Test Task",
+            "status": "ongoing"
+        }
+        self.mock_db.reference.return_value = mock_ref
+        
+        update_data = {"taskDeadLineReminders": "invalid"}
+        
+        response = self.client.put('/tasks/task123',
+                                  json=update_data,
+                                  content_type='application/json')
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn('taskDeadLineReminders', data['error'])
     
     def test_update_task_no_fields(self):
         """Test updating task with no valid fields"""
@@ -469,7 +617,9 @@ class TestTaskScheduling(unittest.TestCase):
             "scheduled": True,
             "schedule": "daily",
             "start_date": current_timestamp(),
-            "deadline": current_timestamp() + 86400
+            "deadline": current_timestamp() + 86400,
+            "reminderTimes": [1, 3],
+            "taskDeadLineReminders": True
         }
         self.mock_db.reference.return_value = mock_ref
         
@@ -494,7 +644,9 @@ class TestTaskScheduling(unittest.TestCase):
             "deadline": current_timestamp() + 86400,
             "scheduled": True,
             "schedule": "custom",
-            "custom_schedule": 3
+            "custom_schedule": 3,
+            "reminderTimes": [1],
+            "taskDeadLineReminders": False
         }
         
         response = self.client.post('/tasks',
@@ -523,6 +675,31 @@ class TestTaskScheduling(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertIn('custom_schedule', data['error'])
+    
+    def test_create_scheduled_task_with_reminders(self):
+        """Test creating scheduled task with reminder configurations"""
+        mock_ref = MagicMock()
+        mock_ref.push.return_value.key = "task-scheduled-reminders"
+        self.mock_db.reference.return_value = mock_ref
+        
+        task_data = {
+            "title": "Scheduled Task with Reminders",
+            "creatorId": "user123",
+            "deadline": current_timestamp() + 86400,
+            "scheduled": True,
+            "schedule": "weekly",
+            "reminderTimes": [1, 3, 7, 14],
+            "taskDeadLineReminders": True
+        }
+        
+        response = self.client.post('/tasks',
+                                   json=task_data,
+                                   content_type='application/json')
+        
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertEqual(data['task']['reminderTimes'], [1, 3, 7, 14])
+        self.assertTrue(data['task']['taskDeadLineReminders'])
 
 
 if __name__ == '__main__':
