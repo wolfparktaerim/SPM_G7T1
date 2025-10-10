@@ -1,0 +1,388 @@
+# subtask-service/swagger.yaml
+
+openapi: 3.0.3
+info:
+  title: SubTask Management API
+  description: RESTful API for managing subtasks with CRUD operations
+  version: 2.0.0
+servers:
+  - url: http://localhost:6003
+    description: Local development server
+
+components:
+  schemas:
+    SubTask:
+      type: object
+      properties:
+        subTaskId:
+          type: string
+          description: Auto-generated subtask ID by Firebase
+          example: "subtask_xyz789"
+        title:
+          type: string
+          description: Title of the subtask
+          example: "Design login form"
+        creatorId:
+          type: string
+          description: ID of the user who created the subtask
+          example: "user_123"
+        deadline:
+          type: number
+          format: int64
+          description: Deadline in epoch timestamp format
+          example: 1735689600
+        status:
+          type: string
+          enum: [ongoing, unassigned, under_review, completed]
+          description: Current status of the subtask
+          example: "ongoing"
+        notes:
+          type: string
+          description: Optional notes for the subtask
+          example: "Use Material-UI components"
+        attachments:
+          type: array
+          items:
+            type: string
+          description: Array of base64 encoded attachments
+          example: ["iVBORw0KGgoAAAANSUhEUgAA..."]
+        collaborators:
+          type: array
+          items:
+            type: string
+          description: Array of collaborator user IDs
+          example: ["user_456", "user_789"]
+        taskId:
+          type: string
+          description: ID of the parent task
+          example: "task_abc123"
+        ownerId:
+          type: string
+          description: ID of the subtask owner (defaults to creator)
+          example: "user_123"
+        createdAt:
+          type: number
+          format: int64
+          description: Epoch timestamp of creation
+          example: 1727092800
+        updatedAt:
+          type: number
+          format: int64
+          description: Epoch timestamp of last update
+          example: 1727109800
+
+    CreateSubTaskRequest:
+      type: object
+      required:
+        - title
+        - creatorId
+        - deadline
+        - taskId
+      properties:
+        title:
+          type: string
+          description: Title of the subtask
+          example: "Design login form"
+        creatorId:
+          type: string
+          description: ID of the user creating the subtask
+          example: "user_123"
+        deadline:
+          type: number
+          format: int64
+          description: Deadline in epoch timestamp format
+          example: 1735689600
+        taskId:
+          type: string
+          description: ID of the parent task
+          example: "task_abc123"
+        status:
+          type: string
+          enum: [ongoing, unassigned, under_review, completed]
+          description: Initial status (defaults to 'ongoing')
+          example: "ongoing"
+        notes:
+          type: string
+          description: Optional notes
+          example: "Initial subtask notes"
+        attachments:
+          type: array
+          items:
+            type: string
+          description: Array of base64 encoded attachments
+        collaborators:
+          type: array
+          items:
+            type: string
+          description: Array of collaborator user IDs
+        ownerId:
+          type: string
+          description: Subtask owner ID (defaults to creatorId)
+
+    UpdateSubTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        deadline:
+          type: number
+          format: int64
+        status:
+          type: string
+          enum: [ongoing, unassigned, under_review, completed]
+        notes:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+        collaborators:
+          type: array
+          items:
+            type: string
+        taskId:
+          type: string
+        ownerId:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Subtask not found"
+
+paths:
+  /subtasks:
+    post:
+      summary: Create a new subtask
+      description: Creates a new subtask with the provided data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubTaskRequest"
+      responses:
+        "201":
+          description: Subtask created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Subtask created successfully"
+                  subtask:
+                    $ref: "#/components/schemas/SubTask"
+        "400":
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Parent task not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      summary: Get all subtasks
+      description: Retrieves all subtasks from the database
+      responses:
+        "200":
+          description: Subtasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subtasks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SubTask"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /subtasks/{subtaskId}:
+    get:
+      summary: Get a subtask by ID
+      description: Retrieves a specific subtask by its ID
+      parameters:
+        - name: subtaskId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The subtask ID
+          example: "subtask_xyz789"
+      responses:
+        "200":
+          description: Subtask retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subtask:
+                    $ref: "#/components/schemas/SubTask"
+        "404":
+          description: Subtask not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      summary: Update a subtask by ID
+      description: Updates an existing subtask with the provided data
+      parameters:
+        - name: subtaskId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The subtask ID
+          example: "subtask_xyz789"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubTaskRequest"
+      responses:
+        "200":
+          description: Subtask updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Subtask updated successfully"
+                  subtask:
+                    $ref: "#/components/schemas/SubTask"
+        "400":
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subtask not found or parent task not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      summary: Delete a subtask by ID
+      description: Deletes a specific subtask by its ID
+      parameters:
+        - name: subtaskId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The subtask ID
+          example: "subtask_xyz789"
+      responses:
+        "200":
+          description: Subtask deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Subtask deleted successfully"
+        "404":
+          description: Subtask not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /subtasks/task/{taskId}:
+    get:
+      summary: Get subtasks by task ID
+      description: Retrieves all subtasks that belong to a specific task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The parent task ID
+          example: "task_abc123"
+      responses:
+        "200":
+          description: Subtasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subtasks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SubTask"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /health:
+    get:
+      summary: Health check
+      description: Returns the health status of the service
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  service:
+                    type: string
+                    example: "subtask-service"

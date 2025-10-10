@@ -1,0 +1,15 @@
+# subtask-service/compose.yaml
+version: "3.9"
+
+services:
+  subtask-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "6003:6003"
+    volumes:
+      - ../firebase-cred.json:/app/firebase.json
+    environment:
+      JSON_PATH: "/app/firebase.json"
+      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
