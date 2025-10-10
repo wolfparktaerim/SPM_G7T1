@@ -1,25 +1,33 @@
 <template>
-  <div class="task-card" :class="[
-    getTaskCardClass(),
-    { 'dragging': isDragging }
-  ]" draggable="true" @dragstart="handleDragStart" @dragend="handleDragEnd">
+  <div class="task-card" :class="getCardColorClass()" draggable="true" @dragstart="handleDragStart"
+    @dragend="handleDragEnd">
     <!-- Main Task Content -->
     <div class="task-content">
       <!-- Task Header -->
       <div class="task-header">
         <div class="task-title-section">
-          <h4 class="task-title" :title="task.title">{{ task.title }}</h4>
+          <div class="title-row">
+            <h4 class="task-title" :title="task.title">{{ task.title }}</h4>
+            <!-- Priority Badge -->
+            <div class="priority-badge" :class="getPriorityClass(task.priority)"
+              :title="`Priority: ${task.priority || 5}`">
+              <span class="priority-icon">⭐</span>
+              <span class="priority-value">{{ task.priority || 5 }}</span>
+            </div>
+          </div>
           <div class="task-meta">
             <span class="project-badge">{{ projectDisplayName }}</span>
-            <!-- Ownership indicator - Clear and prominent -->
-            <span v-if="isOwnedByYou" class="ownership-indicator-you" title="You are the owner">
-              👑 You Own This
+            <!-- Ownership indicator -->
+            <span v-if="isOwnedByYou" class="ownership-indicator" title="You are the owner">
+              👑 Owner
             </span>
-            <span v-else-if="isCollaboratedByYou" class="ownership-indicator-collab" title="You are a collaborator">
-              🤝 Collaborating
+            <span v-else-if="isCollaboratedByYou" class="collaborator-indicator" title="You are a collaborator">
+              🤝 Collaborator
             </span>
-            <span v-else class="ownership-indicator-other" title="Owned by another user">
-              👤 Others' Task
+            <!-- Recurring indicator -->
+            <span v-if="task.scheduled" class="recurring-indicator"
+              :title="`Recurring: ${formatSchedule(task.schedule, task.custom_schedule)}`">
+              🔁 {{ formatSchedule(task.schedule, task.custom_schedule) }}
             </span>
           </div>
         </div>
@@ -37,9 +45,8 @@
         <Calendar class="w-4 h-4" />
         <span class="deadline-text">Deadline:</span>
         <span class="deadline-text">{{ formatDeadline(task.deadline) }}</span>
-        <span v-if="task.status === 'completed'" class="status-badge-completed">✓ Completed</span>
-        <span v-else-if="isOverdue" class="status-badge-overdue">⚠ Overdue</span>
-        <span v-else-if="isDueSoon" class="status-badge-due-soon">⏰ Due Soon</span>
+        <span v-if="isOverdue" class="overdue-badge">Overdue</span>
+        <span v-else-if="isDueSoon" class="due-soon-badge">Due Soon</span>
       </div>
 
       <!-- Owner -->
@@ -87,12 +94,19 @@
 
         <div class="subtasks-list">
           <div v-for="subtask in task.subtasks" :key="subtask.subTaskId" class="subtask-item"
-            :class="getSubtaskCardClass(subtask)" @click="$emit('view-subtask', subtask)">
+            :class="getSubtaskColorClass(subtask)" @click="$emit('view-subtask', subtask)">
             <div class="subtask-content">
               <div class="subtask-header">
-                <span class="subtask-title">{{ subtask.title }}</span>
-                <div class="subtask-status">
-                  <div class="status-dot" :class="getStatusDotClass(subtask.status)"></div>
+                <div class="subtask-title-row">
+                  <span class="subtask-title">{{ subtask.title }}</span>
+                  <!-- Subtask Priority Badge -->
+                  <div class="subtask-priority-badge" :class="getPriorityClass(subtask.priority)"
+                    :title="`Priority: ${subtask.priority || 5}`">
+                    ⭐{{ subtask.priority || 5 }}
+                  </div>
+                </div>
+                <div class="subtask-status" :class="getStatusDotClass(subtask.status)">
+                  <div class="status-dot"></div>
                   <span class="status-text">{{ formatStatus(subtask.status) }}</span>
                 </div>
               </div>
@@ -101,20 +115,24 @@
                 <div class="subtask-deadline">
                   <Calendar class="w-3 h-3" />
                   <span>{{ formatDeadline(subtask.deadline) }}</span>
-                  <span v-if="subtask.status === 'completed'" class="subtask-status-badge-completed">✓</span>
-                  <span v-else-if="isSubtaskOverdue(subtask)" class="subtask-status-badge-overdue">⚠</span>
-                  <span v-else-if="isSubtaskDueSoon(subtask)" class="subtask-status-badge-due-soon">⏰</span>
+                  <span v-if="isSubtaskOverdue(subtask)" class="subtask-overdue-badge">Overdue</span>
+                  <span v-else-if="isSubtaskDueSoon(subtask)" class="subtask-due-soon-badge">Due Soon</span>
                 </div>
                 <div class="subtask-owner">
                   <User class="w-3 h-3" />
                   <span>{{ formatOwner(subtask.ownerId) }}</span>
                 </div>
                 <!-- Subtask ownership indicators -->
-                <div v-if="subtask.ownerId === currentUserId" class="subtask-ownership-badge-you">
-                  👑 You
+                <div v-if="subtask.ownerId === currentUserId" class="subtask-ownership-badge">
+                  👑 You own
                 </div>
-                <div v-else-if="subtask.collaborators?.includes(currentUserId)" class="subtask-ownership-badge-collab">
-                  🤝 Collab
+                <div v-else-if="subtask.collaborators?.includes(currentUserId)" class="subtask-collaboration-badge">
+                  🤝 You collaborate
+                </div>
+                <!-- Subtask recurring indicator -->
+                <div v-if="subtask.scheduled" class="subtask-recurring-badge"
+                  :title="`Recurring: ${formatSchedule(subtask.schedule, subtask.custom_schedule)}`">
+                  🔁 {{ formatSchedule(subtask.schedule, subtask.custom_schedule) }}
                 </div>
               </div>
             </div>
@@ -188,7 +206,7 @@ const toast = useToast()
 const showSubtasks = ref(false)
 const isDragging = ref(false)
 
-// Ownership computed properties
+// Enhanced computed properties for ownership and collaboration
 const isOwnedByYou = computed(() => {
   return props.task.ownerId === props.currentUserId
 })
@@ -197,12 +215,8 @@ const isCollaboratedByYou = computed(() => {
   return props.task.collaborators?.includes(props.currentUserId) || false
 })
 
-const canEdit = computed(() => {
-  return props.task.ownerId === props.currentUserId
-})
-
-const canDelete = computed(() => {
-  return props.task.ownerId === props.currentUserId
+const isCompleted = computed(() => {
+  return props.task.status?.toLowerCase() === 'completed'
 })
 
 const isOverdue = computed(() => {
@@ -216,60 +230,81 @@ const isDueSoon = computed(() => {
   return daysUntilDue <= 7
 })
 
-// NEW: Get task card class based on priority: completed > overdue > due soon > ownership
-function getTaskCardClass() {
-  // Priority 1: Completed status
-  if (props.task.status === 'completed') {
-    return 'task-completed'
+// NEW: Priority-based card color class
+const getCardColorClass = () => {
+  // Priority 1: Completed (Green)
+  if (isCompleted.value) {
+    return 'card-completed'
   }
 
-  // Priority 2: Overdue
+  // Priority 2: Overdue (Red)
   if (isOverdue.value) {
-    return 'task-overdue'
+    return 'card-overdue'
   }
 
-  // Priority 3: Due soon
+  // Priority 3: Due Soon (Orange)
   if (isDueSoon.value) {
-    return 'task-due-soon'
+    return 'card-due-soon'
   }
 
-  // Default: White background with ownership border
+  // Priority 4: Ownership indicators (only when no status colors apply)
   if (isOwnedByYou.value) {
-    return 'task-owned-by-you'
-  } else if (isCollaboratedByYou.value) {
-    return 'task-collaborated'
+    return 'card-owned-by-you'
   }
 
-  return 'task-default'
+  if (isCollaboratedByYou.value) {
+    return 'card-collaborated-by-you'
+  }
+
+  // Default: Others' task
+  return 'card-default'
 }
 
-// NEW: Get subtask card class with same priority logic
-function getSubtaskCardClass(subtask) {
-  const classes = [getSubtaskStatusClass(subtask.status)]
+// NEW: Subtask color class with same priority logic
+const getSubtaskColorClass = (subtask) => {
+  const classes = []
+
+  // Add status border class
+  classes.push(getSubtaskStatusClass(subtask.status))
 
   // Priority 1: Completed
-  if (subtask.status === 'completed') {
+  if (subtask.status?.toLowerCase() === 'completed') {
     classes.push('subtask-completed')
-  }
-  // Priority 2: Overdue
-  else if (isSubtaskOverdue(subtask)) {
-    classes.push('subtask-overdue')
-  }
-  // Priority 3: Due soon
-  else if (isSubtaskDueSoon(subtask)) {
-    classes.push('subtask-due-soon')
-  }
-  // Default: White with ownership indicator
-  else {
-    if (subtask.ownerId === props.currentUserId) {
-      classes.push('subtask-owned-by-you')
-    } else if (subtask.collaborators?.includes(props.currentUserId)) {
-      classes.push('subtask-collaborated')
-    }
+    return classes.join(' ')
   }
 
-  return classes
+  // Priority 2: Overdue
+  const subtaskOverdue = subtask.deadline && subtask.deadline * 1000 < Date.now()
+  if (subtaskOverdue) {
+    classes.push('subtask-overdue')
+    return classes.join(' ')
+  }
+
+  // Priority 3: Due Soon
+  const daysUntilDue = subtask.deadline ? (subtask.deadline * 1000 - Date.now()) / (1000 * 60 * 60 * 24) : Infinity
+  if (daysUntilDue <= 7 && daysUntilDue > 0) {
+    classes.push('subtask-due-soon')
+    return classes.join(' ')
+  }
+
+  // Priority 4: Ownership
+  if (subtask.ownerId === props.currentUserId) {
+    classes.push('subtask-owned')
+  } else if (subtask.collaborators?.includes(props.currentUserId)) {
+    classes.push('subtask-collaborated')
+  }
+
+  return classes.join(' ')
 }
+
+// Existing computed properties
+const canEdit = computed(() => {
+  return props.task.ownerId === props.currentUserId
+})
+
+const canDelete = computed(() => {
+  return props.task.ownerId === props.currentUserId
+})
 
 const projectName = ref('')
 
@@ -309,6 +344,7 @@ watch(showSubtasks, (expanded) => {
   emit('subtask-expanded', expanded)
 })
 
+// Methods
 function toggleSubtasks() {
   showSubtasks.value = !showSubtasks.value
 }
@@ -319,6 +355,22 @@ function canEditSubtask(subtask) {
 
 function canDeleteSubtask(subtask) {
   return subtask.ownerId === props.currentUserId
+}
+
+function getPriorityClass(priority) {
+  const p = priority || 5
+  if (p >= 8) return 'priority-critical'
+  if (p >= 6) return 'priority-high'
+  if (p >= 4) return 'priority-medium'
+  return 'priority-low'
+}
+
+function formatSchedule(schedule, customSchedule) {
+  if (!schedule) return ''
+  if (schedule === 'custom' && customSchedule) {
+    return `Every ${customSchedule} days`
+  }
+  return schedule.charAt(0).toUpperCase() + schedule.slice(1)
 }
 
 function isSubtaskOverdue(subtask) {
@@ -367,10 +419,10 @@ function formatStatus(status) {
 
 function getStatusDotClass(status) {
   const classMap = {
-    'unassigned': 'bg-amber-400',
-    'ongoing': 'bg-blue-400',
-    'under_review': 'bg-purple-400',
-    'completed': 'bg-green-400'
+    'unassigned': 'status-unassigned',
+    'ongoing': 'status-ongoing',
+    'under_review': 'status-under-review',
+    'completed': 'status-completed'
   }
   return classMap[status] || 'bg-gray-400'
 }
@@ -404,11 +456,10 @@ function handleDragEnd() {
 </script>
 
 <style scoped>
-/* Base task card - WHITE background */
 .task-card {
   background-color: white;
   border-radius: 0.75rem;
-  border: 2px solid #e5e7eb;
+  border: 1px solid #e5e7eb;
   padding: 1.25rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -417,11 +468,87 @@ function handleDragEnd() {
   margin-bottom: 0.75rem;
 }
 
-.task-card:hover {
-  cursor: grab;
-  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
+/* ========================================
+   PRIORITY-BASED CARD COLORING SYSTEM
+   ======================================== */
+
+/* Priority 1: Completed (Green) - Highest Priority */
+.task-card.card-completed {
+  background-color: #d1fae5;
+  border: 2px solid #10b981;
 }
 
+.task-card.card-completed:hover {
+  background-color: #a7f3d0;
+  border-color: #059669;
+  box-shadow: 0 4px 12px 0 rgba(16, 185, 129, 0.2);
+}
+
+/* Priority 2: Overdue (Red) - Second Priority */
+.task-card.card-overdue {
+  background-color: #fee2e2;
+  border: 2px solid #dc2626;
+}
+
+.task-card.card-overdue:hover {
+  background-color: #fecaca;
+  border-color: #b91c1c;
+  box-shadow: 0 4px 12px 0 rgba(220, 38, 38, 0.2);
+}
+
+/* Priority 3: Due Soon (Orange) - Third Priority */
+.task-card.card-due-soon {
+  background-color: #fef3c7;
+  border: 2px solid #f59e0b;
+}
+
+.task-card.card-due-soon:hover {
+  background-color: #fde68a;
+  border-color: #d97706;
+  box-shadow: 0 4px 12px 0 rgba(245, 158, 11, 0.2);
+}
+
+/* Priority 4a: You Own This (Blue Left Border) - Fourth Priority */
+.task-card.card-owned-by-you {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 5px solid #3b82f6;
+}
+
+.task-card.card-owned-by-you:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  border-left-color: #2563eb;
+  box-shadow: 0 4px 12px 0 rgba(59, 130, 246, 0.15);
+}
+
+/* Priority 4b: Collaborating (Gray Left Border) */
+.task-card.card-collaborated-by-you {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #9ca3af;
+}
+
+.task-card.card-collaborated-by-you:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  border-left-color: #6b7280;
+  box-shadow: 0 4px 12px 0 rgba(156, 163, 175, 0.15);
+}
+
+/* Priority 4c: Default (Others' Task) - Lowest Priority */
+.task-card.card-default {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.task-card.card-default:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px 0 rgba(156, 163, 175, 0.1);
+}
+
+/* Dragging state */
 .task-card:active {
   cursor: grabbing;
 }
@@ -434,83 +561,100 @@ function handleDragEnd() {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
-/* PRIORITY 1: Completed Status - GREEN */
-.task-card.task-completed {
-  background-color: #d1fae5;
-  border-color: #10b981;
-  border-width: 2px;
+/* ========================================
+   SUBTASK PRIORITY-BASED COLORING
+   ======================================== */
+
+.subtask-item {
+  background-color: #f8fafc;
+  border-radius: 0.5rem;
+  padding: 0.875rem;
+  border-left: 4px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid #e2e8f0;
 }
 
-.task-card.task-completed:hover {
+/* Priority 1: Completed Subtask (Green) */
+.subtask-item.subtask-completed {
+  background-color: #d1fae5;
+  border: 1px solid #10b981;
+  border-left: 4px solid #10b981;
+}
+
+.subtask-item.subtask-completed:hover {
   background-color: #a7f3d0;
   border-color: #059669;
-  box-shadow: 0 4px 12px 0 rgba(16, 185, 129, 0.3);
 }
 
-/* PRIORITY 2: Overdue - RED */
-.task-card.task-overdue {
+/* Priority 2: Overdue Subtask (Red) */
+.subtask-item.subtask-overdue {
   background-color: #fee2e2;
-  border-color: #dc2626;
-  border-width: 2px;
+  border: 1px solid #dc2626;
+  border-left: 4px solid #dc2626;
 }
 
-.task-card.task-overdue:hover {
+.subtask-item.subtask-overdue:hover {
   background-color: #fecaca;
   border-color: #b91c1c;
-  box-shadow: 0 4px 12px 0 rgba(220, 38, 38, 0.3);
 }
 
-/* PRIORITY 3: Due Soon - ORANGE */
-.task-card.task-due-soon {
+.subtask-item.subtask-overdue .subtask-title {
+  color: #7f1d1d;
+  font-weight: 600;
+}
+
+/* Priority 3: Due Soon Subtask (Orange) */
+.subtask-item.subtask-due-soon {
   background-color: #fef3c7;
-  border-color: #f59e0b;
-  border-width: 2px;
+  border: 1px solid #f59e0b;
+  border-left: 4px solid #f59e0b;
 }
 
-.task-card.task-due-soon:hover {
+.subtask-item.subtask-due-soon:hover {
   background-color: #fde68a;
   border-color: #d97706;
-  box-shadow: 0 4px 12px 0 rgba(245, 158, 11, 0.3);
 }
 
-/* PRIORITY 4: Ownership indicators - WHITE background with colored BORDER */
-.task-card.task-owned-by-you {
-  background-color: white;
-  border-color: #3b82f6;
-  border-width: 3px;
-  border-left-width: 6px;
+/* Priority 4a: You Own This Subtask (Blue Left Border) */
+.subtask-item.subtask-owned {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #3b82f6;
 }
 
-.task-card.task-owned-by-you:hover {
-  background-color: white;
-  border-color: #2563eb;
-  box-shadow: 0 4px 12px 0 rgba(59, 130, 246, 0.2);
+.subtask-item.subtask-owned:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  border-left-color: #2563eb;
 }
 
-.task-card.task-collaborated {
-  background-color: white;
-  border-color: #6b7280;
-  border-width: 2px;
-  border-left-width: 4px;
+/* Priority 4b: Collaborating Subtask (Gray Left Border) */
+.subtask-item.subtask-collaborated {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #9ca3af;
 }
 
-.task-card.task-collaborated:hover {
-  background-color: white;
-  border-color: #4b5563;
-  box-shadow: 0 4px 12px 0 rgba(107, 114, 128, 0.2);
+.subtask-item.subtask-collaborated:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
 }
 
-.task-card.task-default {
-  background-color: white;
-  border-color: #e5e7eb;
+/* Default subtask hover */
+.subtask-item:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
-.task-card.task-default:hover {
-  background-color: white;
-  border-color: #d1d5db;
+/* ========================================
+   REST OF THE STYLES (UNCHANGED)
+   ======================================== */
+
+.task-card:hover {
+  cursor: grab;
 }
 
-/* Task content */
 .task-content {
   display: flex;
   flex-direction: column;
@@ -529,16 +673,67 @@ function handleDragEnd() {
   min-width: 0;
 }
 
+.title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
 .task-title {
   font-weight: 600;
   color: #111827;
   font-size: 0.95rem;
   line-height: 1.3;
-  margin-bottom: 0.5rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  flex: 1;
+}
+
+.priority-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 2px solid;
+}
+
+.priority-icon {
+  font-size: 0.875rem;
+}
+
+.priority-value {
+  font-size: 0.75rem;
+}
+
+.priority-critical {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #991b1b;
+  border-color: #dc2626;
+}
+
+.priority-high {
+  background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+  color: #9a3412;
+  border-color: #f97316;
+}
+
+.priority-medium {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.priority-low {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  color: #1e40af;
+  border-color: #3b82f6;
 }
 
 .task-meta {
@@ -557,66 +752,40 @@ function handleDragEnd() {
   font-weight: 500;
 }
 
-/* UPDATED: Clear ownership indicators */
-.ownership-indicator-you {
-  background-color: #dbeafe;
-  color: #1e40af;
-  padding: 0.25rem 0.625rem;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  border: 1.5px solid #3b82f6;
-}
-
-.ownership-indicator-collab {
-  background-color: #f3f4f6;
-  color: #374151;
-  padding: 0.25rem 0.625rem;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  border: 1.5px solid #6b7280;
-}
-
-.ownership-indicator-other {
+.ownership-indicator {
   background-color: #fef3c7;
   color: #92400e;
-  padding: 0.25rem 0.625rem;
+  padding: 0.25rem 0.5rem;
   border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  border: 1px solid #fbbf24;
+  font-size: 0.65rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-/* Status badges */
-.status-badge-completed {
-  font-size: 0.75rem;
-  background-color: #d1fae5;
-  color: #065f46;
-  padding: 0.125rem 0.5rem;
+.collaborator-indicator {
+  background-color: #ede9fe;
+  color: #6b21a8;
+  padding: 0.25rem 0.5rem;
   border-radius: 12px;
+  font-size: 0.65rem;
   font-weight: 600;
-  border: 1px solid #10b981;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-.status-badge-overdue {
-  font-size: 0.75rem;
-  background-color: #fee2e2;
-  color: #b91c1c;
-  padding: 0.125rem 0.5rem;
+.recurring-indicator {
+  background-color: #e0e7ff;
+  color: #4338ca;
+  padding: 0.25rem 0.5rem;
   border-radius: 12px;
+  font-size: 0.65rem;
   font-weight: 600;
-  border: 1px solid #dc2626;
-}
-
-.status-badge-due-soon {
-  font-size: 0.75rem;
-  background-color: #fef3c7;
-  color: #d97706;
-  padding: 0.125rem 0.5rem;
-  border-radius: 12px;
-  font-weight: 600;
-  border: 1px solid #f59e0b;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .expand-button {
@@ -673,6 +842,24 @@ function handleDragEnd() {
   font-weight: 500;
 }
 
+.overdue-badge {
+  font-size: 0.75rem;
+  background-color: #fee2e2;
+  color: #b91c1c;
+  padding: 0.125rem 0.5rem;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.due-soon-badge {
+  font-size: 0.75rem;
+  background-color: #fef3c7;
+  color: #d97706;
+  padding: 0.125rem 0.5rem;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
 .action-buttons {
   display: flex;
   align-items: center;
@@ -719,7 +906,6 @@ function handleDragEnd() {
   border-color: #fecaca;
 }
 
-/* Subtasks */
 .subtasks-container {
   margin-top: 1rem;
   padding-top: 1rem;
@@ -742,72 +928,29 @@ function handleDragEnd() {
   gap: 0.625rem;
 }
 
-/* Subtask items - WHITE background by default */
-.subtask-item {
-  background-color: white;
-  border-radius: 0.5rem;
-  padding: 0.875rem;
-  border-left: 4px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid #e2e8f0;
+.subtask-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
 }
 
-.subtask-item:hover {
-  background-color: #fafbff;
-  border-color: #cbd5e1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.subtask-priority-badge {
+  padding: 0.125rem 0.375rem;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 1.5px solid;
 }
 
-/* PRIORITY 1: Completed subtasks - GREEN */
-.subtask-item.subtask-completed {
-  background-color: #d1fae5;
-  border-left-color: #10b981;
-  border-color: #10b981;
-}
-
-.subtask-item.subtask-completed:hover {
-  background-color: #a7f3d0;
-}
-
-/* PRIORITY 2: Overdue subtasks - RED */
-.subtask-item.subtask-overdue {
-  background-color: #fee2e2;
-  border-left-color: #dc2626;
-  border-color: #dc2626;
-}
-
-.subtask-item.subtask-overdue:hover {
-  background-color: #fecaca;
-}
-
-.subtask-item.subtask-overdue .subtask-title {
-  color: #7f1d1d;
+.subtask-recurring-badge {
+  font-size: 0.65rem;
+  background-color: #e0e7ff;
+  color: #4338ca;
+  padding: 0.125rem 0.375rem;
+  border-radius: 8px;
   font-weight: 600;
-}
-
-/* PRIORITY 3: Due soon subtasks - ORANGE */
-.subtask-item.subtask-due-soon {
-  background-color: #fef3c7;
-  border-left-color: #f59e0b;
-  border-color: #f59e0b;
-}
-
-.subtask-item.subtask-due-soon:hover {
-  background-color: #fde68a;
-}
-
-/* PRIORITY 4: Ownership - WHITE with border */
-.subtask-item.subtask-owned-by-you {
-  background-color: white;
-  border-left-color: #3b82f6;
-  border-left-width: 4px;
-}
-
-.subtask-item.subtask-collaborated {
-  background-color: white;
-  border-left-color: #6b7280;
-  border-left-width: 3px;
 }
 
 .subtask-content {
@@ -844,6 +987,22 @@ function handleDragEnd() {
   border-radius: 50%;
 }
 
+.status-unassigned .status-dot {
+  background-color: #f59e0b;
+}
+
+.status-ongoing .status-dot {
+  background-color: #3b82f6;
+}
+
+.status-under-review .status-dot {
+  background-color: #8b5cf6;
+}
+
+.status-completed .status-dot {
+  background-color: #10b981;
+}
+
 .status-text {
   font-size: 0.75rem;
   color: #4b5563;
@@ -866,18 +1025,7 @@ function handleDragEnd() {
   gap: 0.375rem;
 }
 
-/* Subtask status badges - smaller versions */
-.subtask-status-badge-completed {
-  font-size: 0.65rem;
-  background-color: #d1fae5;
-  color: #065f46;
-  padding: 0.125rem 0.375rem;
-  border-radius: 8px;
-  font-weight: 600;
-  margin-left: 0.375rem;
-}
-
-.subtask-status-badge-overdue {
+.subtask-overdue-badge {
   font-size: 0.65rem;
   background-color: #fee2e2;
   color: #b91c1c;
@@ -887,7 +1035,7 @@ function handleDragEnd() {
   margin-left: 0.375rem;
 }
 
-.subtask-status-badge-due-soon {
+.subtask-due-soon-badge {
   font-size: 0.65rem;
   background-color: #fef3c7;
   color: #d97706;
@@ -897,25 +1045,25 @@ function handleDragEnd() {
   margin-left: 0.375rem;
 }
 
-/* Subtask ownership badges - clear indicators */
-.subtask-ownership-badge-you {
-  font-size: 0.65rem;
-  padding: 0.125rem 0.375rem;
-  border-radius: 8px;
-  font-weight: 700;
-  background-color: #dbeafe;
-  color: #1e40af;
-  border: 1px solid #3b82f6;
-}
-
-.subtask-ownership-badge-collab {
+.subtask-ownership-badge,
+.subtask-collaboration-badge {
   font-size: 0.65rem;
   padding: 0.125rem 0.375rem;
   border-radius: 8px;
   font-weight: 600;
-  background-color: #f3f4f6;
-  color: #374151;
-  border: 1px solid #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.subtask-ownership-badge {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.subtask-collaboration-badge {
+  background-color: #ede9fe;
+  color: #6b21a8;
 }
 
 .subtask-actions {
