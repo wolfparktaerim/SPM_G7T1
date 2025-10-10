@@ -392,7 +392,7 @@ const notificationMessage = ref('');
 const statusColors = {
   unassigned:    '#d1d5db', // gray
   ongoing:       '#1945e6', // blue
-  'under review':'#f59e0b', // orange
+  'under_review':'#f59e0b', // orange
   completed:     '#3BB143', // green
   overdue:       '#ff0009'  // red
 };
@@ -582,7 +582,7 @@ function getStatusBadgeClass(status) {
   const statusLower = (status || '').toLowerCase();
   if (statusLower === 'completed') return 'bg-green-100 text-green-700';
   if (statusLower === 'ongoing') return 'bg-blue-100 text-blue-700';
-  if (statusLower === 'under review') return 'bg-yellow-100 text-yellow-700';
+  if (statusLower === 'under_review') return 'bg-yellow-100 text-yellow-700';
   if (statusLower === 'unassigned') return 'bg-gray-100 text-gray-700';
   return 'bg-gray-100 text-gray-700';
 }
