@@ -12,12 +12,6 @@
       'hover:shadow-md'
     ]"
   >
-    <!-- Unread indicator dot -->
-    <div
-      v-if="notification.isUnread()"
-      class="absolute top-4 right-4 w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse"
-    ></div>
-
     <!-- Notification content -->
     <div class="flex items-start space-x-3">
       <!-- Icon based on urgency -->
@@ -204,19 +198,5 @@ const getUrgencyBadgeClasses = () => {
 /* Smooth transitions */
 * {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Pulse animation for unread indicator */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 </style>
