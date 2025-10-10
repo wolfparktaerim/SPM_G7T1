@@ -698,7 +698,7 @@ function startAutoRefresh() {
       isManualRefresh.value = false // Silent refresh
       refreshTasks()
     }
-  }, 30000) // 30 seconds
+  }, 60000 * 15) //  15 minutes
 
   autoRefreshCountdownInterval.value = setInterval(() => {
     if (!autoRefreshPaused.value) {
@@ -800,27 +800,27 @@ function handleProjectFilterFromNavigation() {
 // --- Handle task navigation from Schedule ---
 async function handleTaskFromSchedule(taskId) {
   console.log('📍 Navigated from Schedule to edit task:', taskId)
-  
+
   // Wait for DOM to fully render
   await nextTick()
-  
+
   // Find the task in your task list
   const task = tasks.value.find(t => t.taskId === taskId)
-  
+
   if (task) {
     console.log('✅ Task found, opening edit modal')
-    
+
     // Open the edit modal for this task
     // Replace 'openEditTaskModal' with your actual function name
     handleEditTask(task) // ⚠️ Use your actual edit modal function here
-    
+
     // Optional: Show a toast notification
     toast.info(`Editing task: ${task.title}`)
   } else {
     console.warn('⚠️ Task not found:', taskId)
     toast.warning('Task not found or you do not have access to it')
   }
-  
+
   // Clean up the URL (remove query parameters)
   router.replace({ name: 'tasks' })
 }
