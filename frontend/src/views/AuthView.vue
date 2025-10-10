@@ -1,4 +1,4 @@
-<!-- src/views/AuthenticationView.vue -->
+<!-- src/views/AuthView.vue -->
 
 <template>
   <div
@@ -348,7 +348,6 @@ import { useToast } from 'vue-toastification'
 import {
   Building,
   Building2,
-  Briefcase,
   Crown,
   User,
   Mail,
