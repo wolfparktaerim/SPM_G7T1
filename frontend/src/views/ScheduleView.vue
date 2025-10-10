@@ -38,8 +38,8 @@
 
             <!-- 🏢 Department (Directors only) -->
             <div v-if="isDirector" class="pt-2 border-t border-blue-200">
-              <p class="text-xs text-gray-600 mb-1">Department:</p>
-              <p class="text-xs font-semibold text-blue-700">
+              <p class="text-sm font-medium text-gray-600 mb-1">Department:</p>
+              <p class="text-sm font-semibold text-blue-700">
                 {{ currentUserDepartment || 'N/A' }}
               </p>
             </div>
@@ -52,7 +52,7 @@
                 @change="onProjectSelect($event.target.value)"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
-                <option :value="null">All Projects</option>
+                <option :value="null">Select Project</option>
                 <option v-for="p in userProjects" :key="p.projectId" :value="p.projectId">
                   {{ p.title }}
                 </option>
@@ -132,10 +132,10 @@
                   <div class="flex items-center gap-2 flex-wrap">
                     <span
                       v-if="selectedTaskDetail?.status"
-                      :class="getStatusBadgeClass(selectedTaskDetail.status)"
+                      :class="getStatusBadgeClass(selectedTaskDetail.status)" 
                       class="px-3 py-1 rounded-full text-xs font-semibold"
-                    >
-                      ● {{ formatStatus(selectedTaskDetail.status) }}
+                      >
+                      ● {{ selectedTaskDetail.status}}
                     </span>
                     <span
                       v-if="isTaskOwner(selectedTaskDetail)"
@@ -350,7 +350,11 @@ const calendarEvents = computed(() => {
     const startStr = formatDate(startDate);
     const endStr = formatDate(new Date(deadlineDate.getTime() + 86400000));
 
-    const status = (task.status || 'unassigned').toLowerCase();
+    const deadlineOnly = new Date(deadlineDate);
+    deadlineOnly.setHours(0, 0, 0, 0);
+    const isOverdue = deadlineOnly < today && task.status?.toLowerCase() !== 'completed';
+
+    const status = isOverdue ? 'overdue' : (task.status || 'unassigned').toLowerCase();
     const color = statusColors[status] || statusColors.unassigned;
     const isViewable = canViewTaskDetails(task);
 
@@ -369,6 +373,10 @@ const calendarEvents = computed(() => {
       extendedProps: { ...task, daysUntilDeadline, isViewable }
     };
   }).filter(Boolean);
+});
+
+const isDirector = computed(() => {
+  return currentRole.value?.toLowerCase() === 'director';
 });
 
 // --- Calendar Config ---
@@ -469,6 +477,53 @@ function getDueSoonBadge(task) {
   if (diff <= 3) return { text: `Due in ${diff} days`, class: 'bg-orange-100 text-orange-700' };
   return null;
 }
+
+function isTaskOwner(task) {
+  return task.ownerId === currentUser.value;
+}
+
+function formatDateDisplay(epochTimestamp) {
+  if (!epochTimestamp) return 'No deadline';
+  const date = new Date(epochTimestamp * 1000);
+  return date.toLocaleDateString('en-US', { 
+    month: 'long', 
+    day: 'numeric', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function resetFilters() {
+selectedProject.value = null;
+selectedProjectId.value = null;
+projectCollaborators.value = [];
+selectedCollaborator.value = null;
+viewingUserId.value = currentUser.value;
+filterTasksByUser(currentUser.value);
+}
+
+function getStatusBadgeClass(status) {
+  const statusLower = (status || '').toLowerCase();
+  if (statusLower === 'completed') return 'bg-green-100 text-green-700';
+  if (statusLower === 'ongoing') return 'bg-blue-100 text-blue-700';
+  if (statusLower === 'under review') return 'bg-yellow-100 text-yellow-700';
+  if (statusLower === 'unassigned') return 'bg-gray-100 text-gray-700';
+  return 'bg-gray-100 text-gray-700';
+}
+
+function handleEditTask(task) {
+  closeTaskDetailModal();
+  // Navigate to Tasks page with taskId as query parameter
+  router.push({ 
+      name: 'tasks', 
+      query: { 
+        taskId: task.taskId,
+        action: 'edit' // Optional: indicates intent to edit
+      }
+  });
+}
+
 
 // --- Fetching ---
 async function fetchAllTasks() {
