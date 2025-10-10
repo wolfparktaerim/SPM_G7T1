@@ -47,7 +47,7 @@ services:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "https://spm-g7t1-2-default-rtdb.asia-southeast1.firebasedatabase.app/"
   task-service:
     build:
       context: ./task-service
@@ -58,7 +58,7 @@ services:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "https://spm-g7t1-2-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
   subtask-service:
     build:
@@ -70,7 +70,7 @@ services:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "https://spm-g7t1-2-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
   notification-service:
     build:
@@ -82,7 +82,7 @@ services:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "https://spm-g7t1-2-default-rtdb.asia-southeast1.firebasedatabase.app/"
       EMAIL_SERVICE_URL: "http://email-service:6005"
     depends_on:
       - email-service

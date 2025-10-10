@@ -467,10 +467,10 @@ const startUnreadCountRefresh = () => {
   // Fetch immediately on start
   fetchUnreadCount()
 
-  // Refresh every 5 seconds to sync with backend scheduler
+  // Refresh every 15 minutes to sync with backend scheduler
   unreadCountInterval = setInterval(() => {
     fetchUnreadCount()
-  }, 5000)
+  }, 900000)
 }
 
 // Stop auto-refresh

@@ -193,7 +193,7 @@ def send_email_notification(user_email, task_data, days_until, is_subtask=False,
 def check_task_deadlines():
     """
     Scheduled job to check all tasks and subtasks and create notifications
-    This runs periodically (every 5 seconds by default)
+    This runs periodically (every 15 minutes by default)
     """
     logger.info("Starting task and subtask deadline check...")
 
@@ -524,19 +524,19 @@ def start_scheduler():
     """Initialize and start the background scheduler"""
     scheduler = BackgroundScheduler()
 
-    # Schedule the task and subtask deadline checker to run every 5 seconds for near real-time notifications
-    # This ensures users get notified immediately when tasks or subtasks approach their deadlines
+    # Schedule the task and subtask deadline checker to run every 15 minutes
+    # This ensures users get notified when tasks or subtasks approach their deadlines
     scheduler.add_job(
         func=check_task_deadlines,
         trigger="interval",
-        seconds=5,
+        seconds=900,
         id="task_deadline_checker",
         name="Check task and subtask deadlines and send notifications",
         replace_existing=True
     )
 
     scheduler.start()
-    logger.info("Scheduler started. Task and subtask deadline checker will run every 5 seconds.")
+    logger.info("Scheduler started. Task and subtask deadline checker will run every 15 minutes.")
 
     # Also run once on startup
     check_task_deadlines()
