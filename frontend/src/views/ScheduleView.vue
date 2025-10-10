@@ -242,6 +242,75 @@
                     {{ selectedTaskDetail.notes }}
                   </p>
                 </div>
+
+                <!-- ✅ NEW: Subtasks Section -->
+                <div v-if="selectedTaskDetail?.subtasks && selectedTaskDetail.subtasks.length > 0">
+                  <h4 class="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <ListChecks class="w-4 h-4" />
+                    Subtasks ({{ selectedTaskDetail.subtasks.length }})
+                  </h4>
+                  <div class="space-y-2">
+                    <div
+                      v-for="subtask in selectedTaskDetail.subtasks"
+                      :key="subtask.subTaskId"
+                      class="group bg-gray-50 hover:bg-white border border-gray-200 hover:border-blue-300 rounded-lg p-3 transition-all"
+                    >
+                      <div class="flex items-start justify-between gap-3">
+                        <!-- Subtask Info -->
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center gap-2 mb-2">
+                            <h5 class="text-sm font-medium text-gray-900 truncate">{{ subtask.title }}</h5>
+                            
+                            <!-- Status Badge -->
+                            <span 
+                              :class="getStatusBadgeClass(subtask.status)" 
+                              class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
+                            >
+                              ● {{ subtask.status }}
+                            </span>
+                          </div>
+                          
+                          <!-- Subtask Meta Info -->
+                          <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                            <!-- Owner -->
+                            <div class="flex items-center gap-1">
+                              <User class="w-3 h-3" />
+                              <span>{{ getUserDisplayName(subtask.ownerId) }}</span>
+                              <span 
+                                v-if="subtask.ownerId === currentUser" 
+                                class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                              >
+                                You
+                              </span>
+                            </div>
+                            
+                            <!-- Deadline -->
+                            <div class="flex items-center gap-1">
+                              <Calendar class="w-3 h-3" />
+                              <span>{{ formatDateDisplay(subtask.deadline) }}</span>
+                            </div>
+                            
+                            <!-- Due Soon Badge -->
+                            <span 
+                              v-if="getDueSoonBadge(subtask)" 
+                              :class="getDueSoonBadge(subtask).class"
+                              class="px-2 py-0.5 rounded-full text-xs font-semibold"
+                            >
+                              {{ getDueSoonBadge(subtask).text }}
+                            </span>
+                          </div>
+                        </div>
+
+                        <!-- Owner Badge for Subtask -->
+                        <div v-if="isTaskOwner(subtask)" class="flex-shrink-0">
+                          <span class="px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                            <Crown class="w-3 h-3 inline-block" /> Owner
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- Footer -->
@@ -281,7 +350,7 @@ import { auth } from '@/firebase/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import NavigationBar from '@/components/NavigationBar.vue';
 import { usersService } from '@/services/users';
-import { X, Edit3, Trash2, Calendar, User, Crown, Users } from 'lucide-vue-next';
+import { X, Edit3, Trash2, Calendar, User, Crown, Users, ListChecks } from 'lucide-vue-next';
 
 // --- FullCalendar imports ---
 import FullCalendar from '@fullcalendar/vue3';
@@ -293,6 +362,7 @@ const router = useRouter();
 const KONG_BASE = import.meta.env.VITE_BACKEND_API || 'http://localhost:8000/';
 const API_BASE = `${KONG_BASE}tasks`;
 const PROJECT_API_BASE = `${import.meta.env.VITE_BACKEND_API}project`;
+const SUBTASKAPI = `${KONG_BASE}subtasks`
 
 // --- State ---
 const currentUser = ref(null);
@@ -440,9 +510,14 @@ function showToast(msg) {
   setTimeout(() => (showNotification.value = false), 3000);
 }
 
-function openTaskDetailModal(task) {
-  selectedTaskDetail.value = task;
-  showTaskDetailModal.value = true;
+async function openTaskDetailModal(task) {
+  // Load subtasks for the task
+  const subtasks = await fetchTaskSubtasks(task.taskId)
+  selectedTaskDetail.value = {
+    ...task,
+    subtasks
+  }
+  showTaskDetailModal.value = true
 }
 
 function closeTaskDetailModal() {
@@ -561,6 +636,18 @@ async function fetchUserProjects() {
   } catch (err) {
     console.error('Error fetching user projects:', err);
     userProjects.value = [];
+  }
+}
+
+async function fetchTaskSubtasks(taskId) {
+  try {
+    const res = await fetch(`${SUBTASKAPI}/task/${taskId}`)
+    if (!res.ok) throw new Error('Failed to fetch subtasks')
+    const data = await res.json()
+    return data.subtasks || []
+  } catch (err) {
+    console.error('Error fetching subtasks:', err)
+    return []
   }
 }
 
