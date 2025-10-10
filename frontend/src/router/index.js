@@ -74,12 +74,6 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
-      path: '/testcm',
-      name: 'TestConfirmationModal',
-      component: TestConfirmationModal,
-      meta: { requiresAuth: false },
-    },
-    {
       path: '/schedule',
       name: 'schedule',
       component: ScheduleView,
