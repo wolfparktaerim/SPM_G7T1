@@ -11,14 +11,14 @@
   >
     <div
       v-if="show"
-      class="absolute right-0 mt-3 w-96 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 overflow-hidden z-50 origin-top-right"
+      class="absolute right-0 mt-3 mb-3 w-96 max-h-[calc(100vh-6rem)] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 z-50 origin-top-right flex flex-col"
     >
       <!-- Header -->
-      <div class="p-6 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-600">
+      <div class="p-6 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-600 rounded-t-2xl flex-shrink-0">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-lg font-bold text-white">Notifications</h3>
           <button
-            v-if="hasUnreadNotifications"
+            v-if="hasUnreadNotifications && currentView === 'unread'"
             @click="handleMarkAllAsRead"
             :disabled="loading"
             class="text-xs font-medium text-white/90 hover:text-white bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-all duration-200 disabled:opacity-50"
@@ -64,7 +64,7 @@
       </div>
 
       <!-- Notification List -->
-      <div class="max-h-[500px] overflow-y-auto">
+      <div class="overflow-y-auto rounded-b-2xl flex-1 min-h-0">
         <!-- Loading state -->
         <div v-if="loading" class="p-8 text-center">
           <div class="animate-spin mx-auto w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
