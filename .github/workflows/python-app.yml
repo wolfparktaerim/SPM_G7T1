@@ -46,32 +46,20 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ matrix.service }}-${{ hashFiles(format('{0}/requirements.txt', matrix.service)) }}
+        key: ${{ runner.os }}-pip-${{ matrix.service }}-${{ hashFiles(format('backend/{0}/requirements.txt', matrix.service)) }}
         restore-keys: |
           ${{ runner.os }}-pip-${{ matrix.service }}-
           ${{ runner.os }}-pip-
 
-    - name: Check if service exists
-      id: check_service
-      run: |
-        if [ -d "${{ matrix.service }}" ]; then
-          echo "service_path=${{ matrix.service }}" >> $GITHUB_OUTPUT
-        elif [ -d "backend/${{ matrix.service }}" ]; then
-          echo "service_path=backend/${{ matrix.service }}" >> $GITHUB_OUTPUT
-        else
-          echo "Error: Cannot find ${{ matrix.service }}"
-          exit 1
-        fi
-
     - name: Install dependencies for ${{ matrix.service }}
-      working-directory: ${{ steps.check_service.outputs.service_path }}
+      working-directory: backend/${{ matrix.service }}
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-cov pytest-mock
 
     - name: Run tests for ${{ matrix.service }}
-      working-directory: ${{ steps.check_service.outputs.service_path }}
+      working-directory: backend/${{ matrix.service }}
       env:
         PYTHONPATH: ${{ github.workspace }}/backend
       run: |
@@ -80,7 +68,7 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: ${{ steps.check_service.outputs.service_path }}/coverage.xml
+        file: backend/${{ matrix.service }}/coverage.xml
         flags: ${{ matrix.service }}
         name: ${{ matrix.service }}-coverage
         fail_ci_if_error: false
@@ -102,16 +90,19 @@ jobs:
         pip install flake8 black isort pylint
 
     - name: Run Black (format check)
+      working-directory: backend
       run: |
         black --check --diff .
       continue-on-error: true
 
     - name: Run isort (import sorting check)
+      working-directory: backend
       run: |
         isort --check-only --diff .
       continue-on-error: true
 
     - name: Run Flake8 (linting)
+      working-directory: backend
       run: |
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
@@ -141,11 +132,13 @@ jobs:
         EOF
 
     - name: Run Bandit (security linting)
+      working-directory: backend
       run: |
-        bandit -r . -c .bandit -f json -o bandit-report.json || true
-        bandit -r . -c .bandit --severity-level medium || true
+        bandit -r . -c ../.bandit -f json -o bandit-report.json || true
+        bandit -r . -c ../.bandit --severity-level medium || true
 
     - name: Run Safety (dependency vulnerability check)
+      working-directory: backend
       run: |
         for service in email-service notification-service project-service task-service subtask-service; do
           echo "Checking $service dependencies..."
@@ -174,7 +167,7 @@ jobs:
 
     - name: Build Docker image for ${{ matrix.service }}
       run: |
-        docker build -f ${{ matrix.service }}/Dockerfile -t ${{ matrix.service }}:${{ github.sha }} .
+        docker build -f backend/${{ matrix.service }}/Dockerfile -t ${{ matrix.service }}:${{ github.sha }} ./backend
 
     - name: Test Docker image
       run: |
