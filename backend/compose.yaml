@@ -1,4 +1,5 @@
-# root compose.yaml file
+# backend/compose.yaml
+
 services:
 
   kong-config-generator:
@@ -10,8 +11,7 @@ services:
       - PROJECT_SERVICE_URL=http://project-service:6001
       - TASK_SERVICE_URL=http://task-service:6002
       - SUBTASK_SERVICE_URL=http://subtask-service:6003
-
-
+      - NOTIFICATION_SERVICE_URL=http://notification-service:6004
     command: >
       sh -c "
         apk add --no-cache gettext &&
@@ -36,37 +36,68 @@ services:
       KONG_ADMIN_LISTEN: "0.0.0.0:8001, 0.0.0.0:8444 ssl"
     volumes:
       - ./kong/config:/config
+
   project-service:
     build:
-      context: ./project-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: project-service/Dockerfile
     ports:
       - "6001:6001"
     volumes:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "${DATABASE_URL}"
+
   task-service:
     build:
-      context: ./task-service
-      dockerfile: Dockerfile
+      context: .  
+      dockerfile: task-service/Dockerfile
     ports:
       - "6002:6002"
     volumes:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "${DATABASE_URL}"
 
   subtask-service:
     build:
-      context: ./subtask-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: subtask-service/Dockerfile
     ports:
       - "6003:6003"
     volumes:
       - ./firebase-cred.json:/app/firebase.json:ro
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "${DATABASE_URL}"
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    ports:
+      - "6004:6004"
+    volumes:
+      - ./firebase-cred.json:/app/firebase.json:ro
+    environment:
+      JSON_PATH: "/app/firebase.json"
+      DATABASE_URL: "${DATABASE_URL}"
+      EMAIL_SERVICE_URL: "http://email-service:6005"
+    depends_on:
+      - email-service
+
+  email-service:
+    build:
+      context: .
+      dockerfile: email-service/Dockerfile
+    ports:
+      - "6005:6005"
+    environment:
+      SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      FROM_EMAIL: "${FROM_EMAIL}"
+      FROM_NAME: "${FROM_NAME:-Task Management System}"

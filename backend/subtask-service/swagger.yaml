@@ -1,5 +1,3 @@
-# subtask-service/swagger.yaml
-
 openapi: 3.0.3
 info:
   title: SubTask Management API
@@ -60,6 +58,10 @@ components:
           type: string
           description: ID of the subtask owner (defaults to creator)
           example: "user_123"
+        priority:
+          type: integer
+          description: Priority level of the subtask
+          example: 3
         createdAt:
           type: number
           format: int64
@@ -70,6 +72,35 @@ components:
           format: int64
           description: Epoch timestamp of last update
           example: 1727109800
+        active:
+          type: boolean
+          description: Whether the subtask is active, default true at creation unless specified
+          example: true
+        scheduled:
+          type: boolean
+          description: Whether the subtask is scheduled for repetition, default false unless specified
+          example: false
+        schedule:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+          description: Schedule frequency option for scheduled subtasks
+          example: "weekly"
+        custom_schedule:
+          type: integer
+          nullable: true
+          description: Custom schedule timing in days, used only if schedule is 'custom'
+          example: 10
+        start_date:
+          type: number
+          format: int64
+          description: Start date of the subtask in epoch timestamp, defaults to creation date unless specified
+          example: 1727092800
+        reminderInterval:
+          type: array
+          items:
+            type: integer
+          description: List of reminder intervals in days for the subtask
+          example: [1, 3, 7]
 
     CreateSubTaskRequest:
       type: object
@@ -118,6 +149,39 @@ components:
         ownerId:
           type: string
           description: Subtask owner ID (defaults to creatorId)
+        priority:
+          type: integer
+          description: Priority level of the subtask
+          example: 3
+        active:
+          type: boolean
+          description: Whether the subtask is active, default true unless specified
+          example: true
+        scheduled:
+          type: boolean
+          description: Whether the subtask is scheduled, default false unless specified
+          example: false
+        schedule:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+          description: Schedule frequency for scheduled subtasks
+          example: "weekly"
+        custom_schedule:
+          type: integer
+          nullable: true
+          description: Custom schedule duration in days, only if schedule is 'custom'
+          example: 10
+        start_date:
+          type: number
+          format: int64
+          description: Start date in epoch timestamp, defaults to creation date if omitted
+          example: 1727092800
+        reminderInterval:
+          type: array
+          items:
+            type: integer
+          description: List of reminder intervals in days for the subtask
+          example: [1, 3, 7]
 
     UpdateSubTaskRequest:
       type: object
@@ -144,6 +208,39 @@ components:
           type: string
         ownerId:
           type: string
+        priority:
+          type: integer
+          description: Priority level of the subtask
+          example: 3
+        active:
+          type: boolean
+          description: Set whether the subtask is active
+          example: true
+        scheduled:
+          type: boolean
+          description: Set whether the subtask is scheduled for repetition
+          example: false
+        schedule:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+          description: Schedule frequency for scheduled subtasks
+          example: "weekly"
+        custom_schedule:
+          type: integer
+          nullable: true
+          description: Custom schedule duration in days, only if schedule is 'custom'
+          example: 10
+        start_date:
+          type: number
+          format: int64
+          description: Start date in epoch timestamp
+          example: 1727092800
+        reminderInterval:
+          type: array
+          items:
+            type: integer
+          description: List of reminder intervals in days for the subtask
+          example: [1, 3, 7]
 
     ErrorResponse:
       type: object
@@ -198,7 +295,7 @@ paths:
 
     get:
       summary: Get all subtasks
-      description: Retrieves all subtasks from the database
+      description: Retrieves all subtasks from the database and updates their active state based on current time and start_date
       responses:
         "200":
           description: Subtasks retrieved successfully
@@ -221,7 +318,7 @@ paths:
   /subtasks/{subtaskId}:
     get:
       summary: Get a subtask by ID
-      description: Retrieves a specific subtask by its ID
+      description: Retrieves a specific subtask by its ID and updates its active state based on current time and start_date
       parameters:
         - name: subtaskId
           in: path
@@ -255,7 +352,7 @@ paths:
 
     put:
       summary: Update a subtask by ID
-      description: Updates an existing subtask with the provided data
+      description: Updates an existing subtask with the provided data. If the status changes to completed and the subtask is scheduled, a new subtask is created with updated start_date.
       parameters:
         - name: subtaskId
           in: path
@@ -340,7 +437,7 @@ paths:
   /subtasks/task/{taskId}:
     get:
       summary: Get subtasks by task ID
-      description: Retrieves all subtasks that belong to a specific task
+      description: Retrieves all subtasks that belong to a specific task and updates their active state based on current time and start_date
       parameters:
         - name: taskId
           in: path

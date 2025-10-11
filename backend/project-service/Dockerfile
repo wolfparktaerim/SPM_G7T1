@@ -1,3 +1,5 @@
+# backend/project-service/Dockerfile
+
 # Use an official Python runtime as base image
 FROM python:3.12-slim
 
@@ -5,8 +7,12 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Copy requirements and install dependencies
-COPY . /app
+COPY shared /app/shared     
+COPY project-service/requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY project-service/ .
 
 # Copy the application code
 COPY . .

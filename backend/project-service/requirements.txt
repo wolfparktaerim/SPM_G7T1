@@ -1,4 +1,8 @@
+# backend/project-service/requirements.txt
+
 flask
 flask_cors
 requests
 firebase_admin
+pytest
+pytest-mock

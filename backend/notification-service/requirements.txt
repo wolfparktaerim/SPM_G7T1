@@ -1,0 +1,9 @@
+# backend/notification-service/requirements.txt
+
+flask
+flask_cors
+requests
+firebase_admin
+apscheduler
+pytest
+pytest-mock

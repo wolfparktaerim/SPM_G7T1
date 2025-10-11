@@ -11,6 +11,15 @@
                 <div class="status-dot"></div>
                 {{ formatStatus(taskData?.status) }}
               </div>
+              <!-- Priority Badge (Tasks only) -->
+              <div v-if="!isSubtask && taskData?.priority" class="priority-badge" :class="getPriorityClass()">
+                <span class="priority-icon">⚡</span>
+                <span class="priority-value">{{ taskData.priority }}</span>
+              </div>
+              <!-- Recurring Badge -->
+              <div v-if="!isSubtask && taskData?.scheduled" class="recurring-badge">
+                🔄 {{ formatSchedule(taskData.schedule) }}
+              </div>
               <!-- Enhanced ownership indicators -->
               <div v-if="isOwner" class="ownership-badge">
                 👑 Owner
@@ -73,6 +82,37 @@
               </div>
             </div>
 
+            <!-- Priority Display (Tasks only) -->
+            <div v-if="!isSubtask && taskData?.priority" class="info-item">
+              <label class="info-label">
+                <Zap class="w-4 h-4" />
+                Priority
+              </label>
+              <div class="info-value">
+                <div class="priority-display-inline" :class="getPriorityClass()">
+                  <span class="priority-icon">⚡</span>
+                  <span class="priority-value">{{ taskData.priority }}</span>
+                  <span class="priority-label">{{ getPriorityLabel() }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recurring Info (Tasks only) -->
+            <div v-if="!isSubtask && taskData?.scheduled" class="info-item">
+              <label class="info-label">
+                <Repeat class="w-4 h-4" />
+                Recurrence
+              </label>
+              <div class="info-value">
+                <span class="recurring-display">
+                  🔄 {{ formatSchedule(taskData.schedule) }}
+                  <span v-if="taskData.schedule === 'custom' && taskData.custom_schedule">
+                    (every {{ taskData.custom_schedule }} days)
+                  </span>
+                </span>
+              </div>
+            </div>
+
             <div class="info-item">
               <label class="info-label">
                 <User class="w-4 h-4" />
@@ -132,7 +172,6 @@
           <h3 class="section-title">
             <Users class="w-5 h-5" />
             Collaborators ({{ taskData.collaborators.length }})
-            <!-- Show management hint for owners -->
             <span v-if="isOwner" class="management-hint" title="You can manage collaborators in the edit modal">
               ⚙️
             </span>
@@ -145,10 +184,8 @@
               <div class="collaborator-info">
                 <span class="collaborator-name">{{ formatOwner(collaboratorId) }}</span>
                 <span class="collaborator-role">{{ getUserRole(collaboratorId) }}</span>
-                <!-- Enhanced collaborator indicators -->
                 <span class="collaborator-dept">{{ getUserDepartment(collaboratorId) }}</span>
               </div>
-              <!-- Show relationship indicators -->
               <div class="collaborator-indicators">
                 <div v-if="collaboratorId === taskData.ownerId" class="owner-indicator" title="Task Owner">
                   👑
@@ -226,7 +263,6 @@
                     <User class="w-3 h-3" />
                     {{ formatOwner(subtask.ownerId) }}
                   </span>
-                  <!-- Enhanced subtask ownership indicators -->
                   <span v-if="subtask.ownerId === currentUserId" class="subtask-ownership">
                     👑 You own this
                   </span>
@@ -255,9 +291,8 @@
       <!-- Modal Footer -->
       <div class="modal-footer">
         <div class="footer-info">
-          <!-- Enhanced permissions info with department context -->
           <span v-if="isOwner" class="permission-text">
-            🔑 You have full access to this {{ isSubtask ? 'subtask' : 'task' }}
+            🔓 You have full access to this {{ isSubtask ? 'subtask' : 'task' }}
             <span class="dept-context">({{ currentUserDepartment }})</span>
           </span>
           <span v-else-if="isCollaborator" class="permission-text">
@@ -301,7 +336,9 @@ import {
   List,
   ChevronRight,
   AlertCircle,
-  Folder
+  Folder,
+  Zap,
+  Repeat
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -333,7 +370,6 @@ const toast = useToast()
 const currentUserId = computed(() => authStore.user?.uid)
 const currentUserDepartment = computed(() => authStore.user?.department || 'Unknown Dept')
 
-// Enhanced permission checks
 const isOwner = computed(() => {
   return props.taskData?.ownerId === currentUserId.value
 })
@@ -342,7 +378,6 @@ const isCollaborator = computed(() => {
   return props.taskData?.collaborators?.includes(currentUserId.value) || false
 })
 
-// NEW: Check if current user is the creator
 const isCreator = computed(() => {
   return props.taskData?.creatorId === currentUserId.value
 })
@@ -371,11 +406,38 @@ function handleBackdropClick() {
   emit('close')
 }
 
-// NEW: Get user's access type for display
 function getAccessType() {
   if (isCollaborator.value) return 'a collaborator on'
   if (isCreator.value) return 'the creator of'
   return 'viewing'
+}
+
+// Priority methods
+function getPriorityClass() {
+  const priority = props.taskData?.priority || 0
+  if (priority >= 8) return 'priority-critical'
+  if (priority >= 6) return 'priority-high'
+  if (priority >= 4) return 'priority-medium'
+  return 'priority-low'
+}
+
+function getPriorityLabel() {
+  const priority = props.taskData?.priority || 0
+  if (priority >= 8) return 'Critical'
+  if (priority >= 6) return 'High'
+  if (priority >= 4) return 'Medium'
+  return 'Low'
+}
+
+function formatSchedule(schedule) {
+  if (!schedule) return ''
+  const scheduleMap = {
+    'daily': 'Daily',
+    'weekly': 'Weekly',
+    'monthly': 'Monthly',
+    'custom': 'Custom'
+  }
+  return scheduleMap[schedule] || schedule
 }
 
 function formatStatus(status) {
@@ -394,7 +456,6 @@ watch(() => props.taskData?.projectId, async (newProjectId) => {
   if (newProjectId) {
     try {
       const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUserId.value}`)
-      console.log(response.data)
       for (const project of response.data.projects) {
         if (project.projectId === newProjectId) {
           projectName.value = project.title || 'Unknown Project'
@@ -408,6 +469,7 @@ watch(() => props.taskData?.projectId, async (newProjectId) => {
     projectName.value = ''
   }
 })
+
 function getStatusClass(status) {
   const classMap = {
     'unassigned': 'status-unassigned',
@@ -460,7 +522,6 @@ function getUserRole(userId) {
   return user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : ''
 }
 
-// NEW: Get user department for enhanced display
 function getUserDepartment(userId) {
   if (!userId) return ''
   const user = props.allUsers.find(u => u.uid === userId)
@@ -493,10 +554,8 @@ function getDeadlineClass() {
 }
 
 function getAttachmentName(attachment, index) {
-  // Try to extract filename if it's a data URL with filename
   const type = getAttachmentType(attachment)
 
-  // Generate a meaningful name based on type
   if (type.includes('Image')) return `Image_${index + 1}`
   if (type.includes('PDF')) return `Document_${index + 1}.pdf`
   if (type.includes('Word')) return `Document_${index + 1}.docx`
@@ -506,7 +565,6 @@ function getAttachmentName(attachment, index) {
 }
 
 function getAttachmentType(attachment) {
-  // Try to detect file type from base64 data
   if (!attachment) return 'Unknown'
 
   const header = attachment.slice(0, 10).toLowerCase()
@@ -521,7 +579,6 @@ function getAttachmentType(attachment) {
 
 function downloadAttachment(attachment, index) {
   try {
-    // Create download link
     const byteCharacters = atob(attachment)
     const byteNumbers = new Array(byteCharacters.length)
 
@@ -532,7 +589,6 @@ function downloadAttachment(attachment, index) {
     const byteArray = new Uint8Array(byteNumbers)
     const blob = new Blob([byteArray])
 
-    // Determine filename and type
     const type = getAttachmentType(attachment)
     let extension = 'bin'
 
@@ -544,7 +600,6 @@ function downloadAttachment(attachment, index) {
 
     const filename = getAttachmentName(attachment, index) + (extension !== 'bin' ? '' : `.${extension}`)
 
-    // Create and trigger download
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -563,13 +618,85 @@ function downloadAttachment(attachment, index) {
 }
 
 function viewSubtask(subtask) {
-  // Close current modal and emit event to open subtask detail
   emit('close')
   emit('view-subtask', subtask)
 }
 </script>
 
 <style scoped>
+/* Priority display styles */
+.priority-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.priority-icon {
+  font-size: 0.875rem;
+}
+
+.priority-value {
+  min-width: 16px;
+  text-align: center;
+}
+
+.priority-critical {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.priority-high {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.priority-medium {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.priority-low {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  color: white;
+}
+
+.priority-display-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.priority-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.recurring-badge {
+  background-color: #e0e7ff;
+  color: #4338ca;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.recurring-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 500;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -676,7 +803,6 @@ function viewSubtask(subtask) {
   background-color: #10b981;
 }
 
-/* Enhanced ownership and collaboration badges */
 .ownership-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 12px;
@@ -775,7 +901,6 @@ function viewSubtask(subtask) {
   gap: 1.5rem;
 }
 
-/* Access notice styles */
 .access-notice {
   display: flex;
   gap: 12px;
@@ -823,7 +948,6 @@ function viewSubtask(subtask) {
   margin-bottom: 1rem;
 }
 
-/* Management hint for owners */
 .management-hint {
   color: #6b7280;
   font-size: 0.875rem;
@@ -971,7 +1095,6 @@ function viewSubtask(subtask) {
   white-space: nowrap;
 }
 
-/* Enhanced collaborator indicators */
 .collaborator-indicators {
   display: flex;
   align-items: center;
@@ -1139,7 +1262,6 @@ function viewSubtask(subtask) {
   gap: 0.25rem;
 }
 
-/* Enhanced subtask ownership indicators */
 .subtask-ownership,
 .subtask-collaboration,
 .subtask-creation {
@@ -1192,7 +1314,6 @@ function viewSubtask(subtask) {
   justify-content: space-between;
 }
 
-/* Enhanced footer info section */
 .footer-info {
   flex: 1;
 }
@@ -1224,7 +1345,6 @@ function viewSubtask(subtask) {
   background-color: #e5e7eb;
 }
 
-/* Responsive adjustments */
 @media (max-width: 768px) {
   .modal {
     margin: 0 0.5rem;

@@ -15,7 +15,7 @@
             <div v-if="!autoRefreshPaused"
               class="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
               <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              Auto-refresh {{ autoRefreshCountdown }}s
+              Auto-refresh {{ formatCountdown(autoRefreshCountdown) }}
             </div>
             <div v-else
               class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-medium">
@@ -75,7 +75,9 @@
                 <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
                 <select v-model="filters.sortBy"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+
                   <option value="createdAt">Creation Date</option>
+                  <option value="priority">Priority (High to Low)</option>
                   <option value="deadline">Deadline</option>
                   <option value="title">Title</option>
                 </select>
@@ -105,8 +107,8 @@
 
     <!-- Modals -->
     <TaskCreateEditModal :show="showCreateEditModal" :task-data="selectedTask" :is-editing="isEditing"
-      :is-subtask="isSubtask" :parent-task-id="parentTaskId" :parent-task="parentTask" :all-users="allUsers"
-      @close="closeCreateEditModal" @save="handleSaveTask" />
+      :is-subtask="isSubtask" :parent-task-id="parentTaskId" :all-users="allUsers" @close="closeCreateEditModal"
+      @save="handleSaveTask" />
 
     <TaskDetailModal :show="showDetailModal" :task-data="selectedTask" :is-subtask="isSubtask" :all-users="allUsers"
       @close="closeDetailModal" @edit="handleEditFromDetail" @delete="handleDeleteFromDetail"
@@ -148,7 +150,7 @@ const showFilters = ref(false)
 const filters = ref({
   search: '',
   project: '',
-  sortBy: 'createdAt'
+  sortBy: 'createdAt' // Default sort by creation date
 })
 
 // Modal state
@@ -159,7 +161,6 @@ const selectedTask = ref(null)
 const isEditing = ref(false)
 const isSubtask = ref(false)
 const parentTaskId = ref(null)
-const parentTask = ref(null)
 
 // Initialize router and route
 const route = useRoute()
@@ -167,7 +168,7 @@ const router = useRouter()
 
 // Auto refresh state
 const autoRefreshInterval = ref(null)
-const autoRefreshCountdown = ref(30)
+const autoRefreshCountdown = ref(900)
 const autoRefreshCountdownInterval = ref(null)
 const autoRefreshPaused = ref(false)
 const lastRefreshTime = ref(Date.now())
@@ -211,13 +212,11 @@ const filteredTasks = computed(() => {
     )
   }
 
-  // Project filter - improved to handle project names
+  // Project filter
   if (filters.value.project) {
     if (filters.value.project === 'no-project') {
-      // Filter tasks without projects (empty string or null projectId)
       filtered = filtered.filter(task => !task.projectId || task.projectId.trim() === '')
     } else {
-      // Filter by specific project ID
       filtered = filtered.filter(task => task.projectId === filters.value.project)
     }
   }
@@ -225,20 +224,25 @@ const filteredTasks = computed(() => {
   // Sort
   const sortBy = filters.value.sortBy
   filtered.sort((a, b) => {
-    if (sortBy === 'deadline') {
-      return a.deadline - b.deadline
+    if (sortBy === 'priority') {
+      // Sort by priority (highest first), then by creation date for ties
+      const priorityDiff = (b.priority || 5) - (a.priority || 5)
+      if (priorityDiff !== 0) return priorityDiff
+      return b.createdAt - a.createdAt
+    } else if (sortBy === 'deadline') {
+      // Sort by deadline (earliest first)
+      return (a.deadline || Infinity) - (b.deadline || Infinity)
     } else if (sortBy === 'title') {
-      return a.title?.localeCompare(b.title)
-    } else if (sortBy === 'status') {
-      return a.status?.localeCompare(b.status)
+      // Sort alphabetically by title
+      return (a.title || '').localeCompare(b.title || '')
     } else {
+      // Default: sort by creation date (newest first)
       return b.createdAt - a.createdAt
     }
   })
 
   return filtered
 })
-
 
 // API functions
 async function fetchTasks() {
@@ -247,63 +251,15 @@ async function fetchTasks() {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
     const data = response.data
 
+    // UPDATED: Filter tasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
-    const currentUserRole = authStore.user?.role
-
-    // Get all tasks first
-    let allTasks = data.tasks || []
-
-    // STAFF: Can only view tasks they own or collaborate in
-    if (currentUserRole === 'staff') {
-      tasks.value = allTasks.filter(task => {
-        return task.ownerId === currentUserId ||
-          task.collaborators?.includes(currentUserId) ||
-          task.creatorId === currentUserId
-      })
-      console.log(`[STAFF] Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
-      return
-    }
-
-    // MANAGER/DIRECTOR: Can view tasks they own/collaborate in + tasks from their projects
-    if (currentUserRole === 'manager' || currentUserRole === 'director') {
-      // Get user's project IDs (projects they own or collaborate in)
-      const userProjectIds = new Set()
-
-      if (projects.value && projects.value.length > 0) {
-        projects.value.forEach(project => {
-          if (project.ownerId === currentUserId ||
-            project.collaborators?.includes(currentUserId)) {
-            userProjectIds.add(project.projectId)
-          }
-        })
-      }
-
-      console.log(`[${currentUserRole.toUpperCase()}] User's project IDs:`, Array.from(userProjectIds))
-
-      tasks.value = allTasks.filter(task => {
-        // Include if user is directly involved
-        const isDirectlyInvolved = task.ownerId === currentUserId ||
-          task.collaborators?.includes(currentUserId) ||
-          task.creatorId === currentUserId
-
-        // Include if task belongs to user's project
-        const isInUserProject = task.projectId && userProjectIds.has(task.projectId)
-
-        return isDirectlyInvolved || isInUserProject
-      })
-
-      console.log(`[${currentUserRole.toUpperCase()}] Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
-      return
-    }
-
-    // Fallback: if role is not recognized, show only directly involved tasks
-    tasks.value = allTasks.filter(task => {
+    tasks.value = data.tasks?.filter(task => {
       return task.ownerId === currentUserId ||
         task.collaborators?.includes(currentUserId) ||
         task.creatorId === currentUserId
-    })
+    }) || []
 
-    console.log(`[FALLBACK] Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
+    console.log(`Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
 
   } catch (error) {
     console.error('Error fetching tasks:', error.response?.status, error.response?.data)
@@ -324,6 +280,11 @@ async function fetchTasks() {
   }
 }
 
+function formatCountdown(seconds) {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}m ${secs}s`
+}
 
 
 function openCreateTaskModal() {
@@ -339,80 +300,21 @@ function openCreateTaskModal() {
     // Pass the project ID as a prop or emit an event to set the initial project
   }
 }
-// Also update fetchSubtasks with the same logic
 async function fetchSubtasks() {
   try {
     console.log('Fetching subtasks from:', `${import.meta.env.VITE_BACKEND_API}subtasks`)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
     const data = response.data
 
+    // UPDATED: Filter subtasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
-    const currentUserRole = authStore.user?.role
-
-    // Get all subtasks first
-    let allSubtasks = data.subtasks || []
-
-    // STAFF: Can only view subtasks they own or collaborate in
-    if (currentUserRole === 'staff') {
-      subtasks.value = allSubtasks.filter(subtask => {
-        return subtask.ownerId === currentUserId ||
-          subtask.collaborators?.includes(currentUserId) ||
-          subtask.creatorId === currentUserId
-      })
-      console.log(`[STAFF] Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
-      return
-    }
-
-    // MANAGER/DIRECTOR: Can view subtasks they own/collaborate in + subtasks from their project tasks
-    if (currentUserRole === 'manager' || currentUserRole === 'director') {
-      // Get user's project IDs (projects they own or collaborate in)
-      const userProjectIds = new Set()
-
-      if (projects.value && projects.value.length > 0) {
-        projects.value.forEach(project => {
-          if (project.ownerId === currentUserId ||
-            project.collaborators?.includes(currentUserId)) {
-            userProjectIds.add(project.projectId)
-          }
-        })
-      }
-
-      // Get task IDs that belong to user's projects
-      const projectTaskIds = new Set()
-      if (tasks.value && tasks.value.length > 0) {
-        tasks.value.forEach(task => {
-          if (task.projectId && userProjectIds.has(task.projectId)) {
-            projectTaskIds.add(task.taskId)
-          }
-        })
-      }
-
-      console.log(`[${currentUserRole.toUpperCase()}] Project task IDs:`, Array.from(projectTaskIds))
-
-      subtasks.value = allSubtasks.filter(subtask => {
-        // Include if user is directly involved
-        const isDirectlyInvolved = subtask.ownerId === currentUserId ||
-          subtask.collaborators?.includes(currentUserId) ||
-          subtask.creatorId === currentUserId
-
-        // Include if subtask belongs to a task in user's project
-        const isInProjectTask = subtask.taskId && projectTaskIds.has(subtask.taskId)
-
-        return isDirectlyInvolved || isInProjectTask
-      })
-
-      console.log(`[${currentUserRole.toUpperCase()}] Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
-      return
-    }
-
-    // Fallback: if role is not recognized, show only directly involved subtasks
-    subtasks.value = allSubtasks.filter(subtask => {
+    subtasks.value = data.subtasks?.filter(subtask => {
       return subtask.ownerId === currentUserId ||
         subtask.collaborators?.includes(currentUserId) ||
         subtask.creatorId === currentUserId
-    })
+    }) || []
 
-    console.log(`[FALLBACK] Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
+    console.log(`Loaded ${subtasks.value.length} subtasks for user ${currentUserId}`)
 
   } catch (error) {
     console.error('Error fetching subtasks:', error.response?.status, error.response?.data)
@@ -492,7 +394,6 @@ function closeCreateEditModal() {
   isEditing.value = false
   isSubtask.value = false
   parentTaskId.value = null
-  parentTask.value = null // NEW: Clear parent task reference
 }
 
 function closeDetailModal() {
@@ -552,14 +453,10 @@ function handleDeleteTask(task) {
 }
 
 function handleCreateSubtask(taskId) {
-  // Find the parent task
-  const task = tasks.value.find(t => t.taskId === taskId)
-
   selectedTask.value = null
   isEditing.value = false
   isSubtask.value = true
   parentTaskId.value = taskId
-  parentTask.value = task // NEW: Store parent task reference
   showCreateEditModal.value = true
 }
 
@@ -807,13 +704,13 @@ function startAutoRefresh() {
       isManualRefresh.value = false // Silent refresh
       refreshTasks()
     }
-  }, 30000) // 30 seconds
+  }, 60000 * 15) //  15 minutes
 
   autoRefreshCountdownInterval.value = setInterval(() => {
     if (!autoRefreshPaused.value) {
       autoRefreshCountdown.value--
       if (autoRefreshCountdown.value <= 0) {
-        autoRefreshCountdown.value = 30
+        autoRefreshCountdown.value = 900
       }
     }
   }, 1000)
@@ -909,35 +806,42 @@ function handleProjectFilterFromNavigation() {
 // --- Handle task navigation from Schedule ---
 async function handleTaskFromSchedule(taskId) {
   console.log('📍 Navigated from Schedule to edit task:', taskId)
-  
+
   // Wait for DOM to fully render
   await nextTick()
-  
+
   // Find the task in your task list
   const task = tasks.value.find(t => t.taskId === taskId)
-  
+
   if (task) {
     console.log('✅ Task found, opening edit modal')
-    
+
     // Open the edit modal for this task
     // Replace 'openEditTaskModal' with your actual function name
     handleEditTask(task) // ⚠️ Use your actual edit modal function here
-    
+
     // Optional: Show a toast notification
     toast.info(`Editing task: ${task.title}`)
   } else {
     console.warn('⚠️ Task not found:', taskId)
     toast.warning('Task not found or you do not have access to it')
   }
-  
+
   // Clean up the URL (remove query parameters)
   router.replace({ name: 'tasks' })
 }
 
 // Watch for filters changes
 watch(filters, () => {
-  autoRefreshCountdown.value = 30
+  autoRefreshCountdown.value = 900
 }, { deep: true })
+// Watch for modals opening/closing to pause auto-refresh
+watch(anyModalOpen, (isOpen) => {
+  autoRefreshPaused.value = isOpen
+  if (!isOpen) {
+    autoRefreshCountdown.value = 900
+  }
+})
 
 // Lifecycle
 onMounted(async () => {
@@ -946,22 +850,11 @@ onMounted(async () => {
   loading.value = true
   try {
     console.log('📊 Loading initial data...')
-
-    // Load in the correct order:
-    // 1. Users first (needed for display names)
-    await fetchUsers()
-
-    // 2. Projects second (needed for filtering tasks/subtasks)
-    await fetchProjects()
-
-    // 3. Tasks third (needed before subtasks for project-based filtering)
-    await fetchTasks()
-
-    // 4. Subtasks last (can now check against tasks for project filtering)
-    await fetchSubtasks()
-
-    // 5. Associate subtasks with tasks
-    associateSubtasksWithTasks()
+    await fetchUsers() // Load users first
+    await fetchProjects() // Load projects
+    await fetchTasks() // Then tasks
+    await fetchSubtasks() // Then subtasks
+    associateSubtasksWithTasks() // Finally associate them
 
     // Check for project filter from navigation
     handleProjectFilterFromNavigation()
@@ -983,7 +876,6 @@ onMounted(async () => {
     loading.value = false
   }
 })
-
 
 onUnmounted(() => {
   stopAutoRefresh()

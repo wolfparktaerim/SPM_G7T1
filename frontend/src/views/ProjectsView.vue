@@ -118,10 +118,10 @@
             </div>
             <select v-model="filterOption"
               class="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 min-w-48">
-              <option value="">All Projects</option>
-              <option value="deadline">Sort by Deadline</option>
-              <option value="owner">My Projects Only</option>
+              <!-- <option value="">All Projects</option> -->
               <option value="createdAt">Sort by Creation Date</option>
+              <option value="deadline">Sort by Deadline</option>
+              <option value="title">Sort by A-Z</option>
             </select>
           </div>
         </div>
@@ -621,9 +621,21 @@ function getProjectTasks(projectId) {
 }
 
 // --- Computed: filter projects based on role ---
+const filterOption = ref('createdAt') // default sort
 const projectsToShow = computed(() => {
-  return projects.value;
-});
+  return [...projects.value].sort((a, b) => {
+    if (filterOption.value === 'createdAt') {
+      return new Date(a.createdAt) - new Date(b.createdAt)
+    }
+    if (filterOption.value === 'deadline') {
+      return new Date(a.deadline) - new Date(b.deadline)
+    }
+    if (filterOption.value === 'title') {
+      return a.title.localeCompare(b.title)
+    }
+    return 0
+  })
+})
 
 async function fetchAllUsers() {
   try {

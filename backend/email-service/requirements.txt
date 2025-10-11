@@ -1,0 +1,7 @@
+# backend/email-service/requirements.txt
+flask
+flask_cors
+requests
+pytest
+pytest-mock
+firebase_admin

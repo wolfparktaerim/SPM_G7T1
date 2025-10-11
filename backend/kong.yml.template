@@ -21,6 +21,12 @@ services:
       - name: subtask-route
         paths: [/subtask]
         strip_path: false
+  - name: notification-service
+    url: ${NOTIFICATION_SERVICE_URL}
+    routes:
+      - name: notification-route
+        paths: [/notification]
+        strip_path: true
 
 
 plugins:
