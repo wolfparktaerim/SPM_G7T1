@@ -1,3 +1,5 @@
+# backend/email-service/Dockerfile
+
 # Use official Python runtime as base image
 FROM python:3.12-slim
 
@@ -5,8 +7,13 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Copy requirements and install dependencies
-COPY . /app
+COPY shared /app/shared     
+
+COPY email-service/requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY email-service/ .
 
 # Copy application code
 COPY . .
