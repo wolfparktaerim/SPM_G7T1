@@ -122,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
 import { usersService } from '@/services/users'
@@ -133,6 +133,7 @@ import TaskCreateEditModal from '@/components/task/TaskCreateEditModal.vue'
 import TaskDetailModal from '@/components/task/TaskDetailModal.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 import { RefreshCw, Filter, Plus } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router';
 
 // Composables
 const toast = useToast()
@@ -160,6 +161,10 @@ const selectedTask = ref(null)
 const isEditing = ref(false)
 const isSubtask = ref(false)
 const parentTaskId = ref(null)
+
+// Initialize router and route
+const route = useRoute()
+const router = useRouter()
 
 // Auto refresh state
 const autoRefreshInterval = ref(null)
@@ -693,7 +698,7 @@ function startAutoRefresh() {
       isManualRefresh.value = false // Silent refresh
       refreshTasks()
     }
-  }, 30000) // 30 seconds
+  }, 60000 * 15) //  15 minutes
 
   autoRefreshCountdownInterval.value = setInterval(() => {
     if (!autoRefreshPaused.value) {
@@ -792,6 +797,38 @@ function handleProjectFilterFromNavigation() {
   }
 }
 
+// --- Handle task navigation from Schedule ---
+async function handleTaskFromSchedule(taskId) {
+  console.log('📍 Navigated from Schedule to edit task:', taskId)
+
+  // Wait for DOM to fully render
+  await nextTick()
+
+  // Find the task in your task list
+  const task = tasks.value.find(t => t.taskId === taskId)
+
+  if (task) {
+    console.log('✅ Task found, opening edit modal')
+
+    // Open the edit modal for this task
+    // Replace 'openEditTaskModal' with your actual function name
+    handleEditTask(task) // ⚠️ Use your actual edit modal function here
+
+    // Optional: Show a toast notification
+    toast.info(`Editing task: ${task.title}`)
+  } else {
+    console.warn('⚠️ Task not found:', taskId)
+    toast.warning('Task not found or you do not have access to it')
+  }
+
+  // Clean up the URL (remove query parameters)
+  router.replace({ name: 'tasks' })
+}
+
+// Watch for filters changes
+watch(filters, () => {
+  autoRefreshCountdown.value = 30
+}, { deep: true })
 // Watch for modals opening/closing to pause auto-refresh
 watch(anyModalOpen, (isOpen) => {
   autoRefreshPaused.value = isOpen
@@ -815,6 +852,11 @@ onMounted(async () => {
 
     // Check for project filter from navigation
     handleProjectFilterFromNavigation()
+
+    // Handle task navigation from ScheduleView
+    if (route.query.taskId) {
+      await handleTaskFromSchedule(route.query.taskId)
+    }
 
     startAutoRefresh()
     console.log('✅ Initial data loaded successfully')

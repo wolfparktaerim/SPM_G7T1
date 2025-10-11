@@ -12,4 +12,4 @@ services:
       - ../firebase-cred.json:/app/firebase.json
     environment:
       JSON_PATH: "/app/firebase.json"
-      DATABASE_URL: "https://spm-g7t1-default-rtdb.asia-southeast1.firebasedatabase.app/"
+      DATABASE_URL: "https://spm-g7t1-2-default-rtdb.asia-southeast1.firebasedatabase.app/"

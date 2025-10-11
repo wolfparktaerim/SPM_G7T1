@@ -151,6 +151,7 @@
                         @keyup.enter="addReminderTime"
                         min="1"
                         max="365"
+                        step="1"
                         placeholder="Enter days"
                         class="block w-32 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
                         :class="{ 'border-red-300 focus:ring-red-500 focus:border-red-500': addReminderError }"
@@ -261,6 +262,7 @@ const getChannelClass = (value) => {
  */
 const isAddButtonDisabled = computed(() => {
   if (!newReminderDays.value) return true
+  if (!Number.isInteger(newReminderDays.value)) return true
   if (newReminderDays.value < 1 || newReminderDays.value > 365) return true
   if (preferences.reminderTimes.includes(newReminderDays.value)) return true
   return false
@@ -271,6 +273,10 @@ const isAddButtonDisabled = computed(() => {
  */
 const addReminderError = computed(() => {
   if (!newReminderDays.value) return null
+
+  if (!Number.isInteger(newReminderDays.value)) {
+    return 'Value must be a whole number'
+  }
 
   if (newReminderDays.value < 1) {
     return 'Value must be at least 1 day'
@@ -291,7 +297,7 @@ const addReminderError = computed(() => {
  * Add a new reminder time
  */
 const addReminderTime = () => {
-  if (newReminderDays.value && newReminderDays.value >= 1 && newReminderDays.value <= 365 && !preferences.reminderTimes.includes(newReminderDays.value)) {
+  if (newReminderDays.value && Number.isInteger(newReminderDays.value) && newReminderDays.value >= 1 && newReminderDays.value <= 365 && !preferences.reminderTimes.includes(newReminderDays.value)) {
     // Add the new time and let the model validate and sort
     preferences.reminderTimes = [...preferences.reminderTimes, newReminderDays.value]
     preferences.reminderTimes = preferences.validateReminderTimes(preferences.reminderTimes)

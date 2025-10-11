@@ -297,7 +297,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   CheckSquare, User, Settings, LogOut, ChevronDown, ChevronRight,
-  Home, FolderOpen, ListChecks, UserCircle, Bell
+  Home, FolderOpen, ListChecks, UserCircle, Calendar, Bell
 } from 'lucide-vue-next'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 import NotificationCard from '@/components/NotificationCard.vue'
@@ -329,6 +329,7 @@ const navigationItems = [
   { name: 'Dashboard', label: 'Dashboard', route: '/dashboard' },
   { name: 'Projects', label: 'Projects', route: '/projects' },
   { name: 'Tasks', label: 'Tasks', route: '/tasks' },
+  { name: 'Schedule', label: 'Schedule', route: '/schedule' },
 ]
 
 // Get navigation icon component
@@ -337,6 +338,7 @@ const getNavIcon = (itemName) => {
     'Dashboard': Home,
     'Projects': FolderOpen,
     'Tasks': ListChecks,
+    'Schedule': Calendar,
   }
   return iconMap[itemName] || Home
 }
@@ -465,10 +467,10 @@ const startUnreadCountRefresh = () => {
   // Fetch immediately on start
   fetchUnreadCount()
 
-  // Refresh every 5 seconds to sync with backend scheduler
+  // Refresh every 15 minutes to sync with backend scheduler
   unreadCountInterval = setInterval(() => {
     fetchUnreadCount()
-  }, 5000)
+  }, 900000)
 }
 
 // Stop auto-refresh
