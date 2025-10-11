@@ -177,7 +177,8 @@
               {{ formData.projectId ? '🎯 Project Team' : `👥 ${currentUser?.department || 'Department'}` }}
             </span>
             <span class="dept-text">
-              {{ formData.projectId ? 'Showing collaborators from selected project' : 'Showing users from your department' }}
+              {{ formData.projectId ? 'Showing collaborators from selected project'
+                : 'Showing users from your department' }}
             </span>
           </div>
           <div class="collaborators-input">
@@ -185,7 +186,8 @@
               :disabled="availableCollaborators.length === 0">
               <option value="">
                 <span v-if="availableCollaborators.length === 0">
-                  {{ formData.projectId ? 'No more project collaborators available' : 'No available collaborators in your department' }}
+                  {{ formData.projectId ? 'No more project collaborators available'
+                    : 'No available collaborators in yourdepartment' }}
                 </span>
                 <span v-else>
                   {{ formData.projectId ? 'Select a project collaborator...' : 'Select a department collaborator...' }}
@@ -203,9 +205,9 @@
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
               <div class="message-text">
-                {{ formData.projectId 
-                  ? 'All project collaborators have been added, or you are the only member.' 
-                  : `There are no other users in your department (${currentUser?.department}) to add as collaborators.` 
+                {{ formData.projectId
+                  ? 'All project collaborators have been added, or you are the only member.'
+                  : `There are no other users in your department (${currentUser?.department}) to add as collaborators.`
                 }}
               </div>
             </div>
@@ -378,7 +380,6 @@ const deadlineInput = ref('')
 const newAttachments = ref([])
 const existingAttachments = ref([])
 const errors = ref({})
-const customReminderDays = ref(null)
 const loading = ref(false)
 
 // NEW: Store for preloaded project collaborators
@@ -398,8 +399,6 @@ const formData = ref({
   schedule: 'daily',
   custom_schedule: null,
   start_date: Math.floor(Date.now() / 1000),
-  reminderTimes: [],
-  taskDeadLineReminders: false
 })
 
 // Computed properties
@@ -439,15 +438,15 @@ const subordinateUsers = computed(() => {
 const availableCollaborators = computed(() => {
   const currentUserDept = currentUser.value?.department
   const currentUserId = currentUser.value?.uid
-  
+
   if (!currentUserDept || !currentUserId) return []
 
   // If a project is selected, use project collaborators
   if (formData.value.projectId) {
     const projectCollabs = projectCollaboratorsCache.value[formData.value.projectId] || []
-    
+
     console.log(`🔍 Using project collaborators for ${formData.value.projectId}:`, projectCollabs)
-    
+
     // Filter out current user and already-added collaborators
     return props.allUsers.filter(user =>
       projectCollabs.includes(user.uid) &&
@@ -481,10 +480,6 @@ const availableProjects = computed(() => {
   )
 })
 
-const sortedReminderTimes = computed(() => {
-  return [...formData.value.reminderTimes].sort((a, b) => a - b)
-})
-
 const isFormValid = computed(() => {
   return formData.value.title.trim() &&
     formData.value.deadline > 0 &&
@@ -495,17 +490,17 @@ const isFormValid = computed(() => {
 async function preloadProjectCollaborators() {
   try {
     console.log('🔄 Preloading project collaborators...')
-    
+
     for (const project of projects.value) {
       // Store collaborators for each project (owner + collaborators)
       projectCollaboratorsCache.value[project.projectId] = [
         project.ownerUid,
         ...(project.collaborators || [])
       ]
-      
+
       console.log(`✅ Cached ${projectCollaboratorsCache.value[project.projectId].length} collaborators for project: ${project.title}`)
     }
-    
+
     console.log('✅ Project collaborators preloaded:', projectCollaboratorsCache.value)
   } catch (error) {
     console.error('⚠️ Error preloading project collaborators:', error)
@@ -520,7 +515,7 @@ async function fetchProjects() {
   try {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUser.value.uid}`)
     projects.value = response.data.projects || []
-    
+
     // NEW: Preload collaborators after fetching projects
     await preloadProjectCollaborators()
   } catch (error) {
@@ -752,10 +747,6 @@ function validateForm() {
     }
   }
 
-  if (formData.value.taskDeadLineReminders && formData.value.reminderTimes.length === 0) {
-    errors.value.reminderTimes = 'Please add at least one reminder time or disable reminders'
-  }
-
   return Object.keys(errors.value).length === 0
 }
 
@@ -846,14 +837,11 @@ function resetForm() {
     schedule: 'daily',
     custom_schedule: null,
     start_date: Math.floor(Date.now() / 1000),
-    reminderTimes: [],
-    taskDeadLineReminders: false
   }
   deadlineInput.value = ''
   newAttachments.value = []
   existingAttachments.value = []
   selectedCollaborator.value = ''
-  customReminderDays.value = null
   errors.value = {}
 }
 
@@ -898,7 +886,7 @@ watch(() => formData.value.projectId, (newProjectId, oldProjectId) => {
   if (newProjectId !== oldProjectId) {
     console.log(`🔄 Project changed from ${oldProjectId || 'none'} to ${newProjectId || 'none'}`)
     console.log(`📋 Available collaborators updated: ${availableCollaborators.value.length} users`)
-    
+
     // Optional: Clear selected collaborator when project changes
     selectedCollaborator.value = ''
   }
@@ -942,30 +930,6 @@ onMounted(async () => {
   background-color: #fee2e2;
 }
 
-.reminder-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.reminder-chip {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 0.75rem;
-  background-color: white;
-  border: 2px solid #f59e0b;
-  border-radius: 1.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #92400e;
-  transition: all 0.2s ease;
-}
-
-.reminder-chip:hover {
-  background-color: #fffbeb;
-  transform: translateY(-1px);
-}
 
 .chip-icon {
   font-size: 1rem;
@@ -987,17 +951,6 @@ onMounted(async () => {
   background-color: #fee2e2;
 }
 
-.no-reminders-message {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  background-color: white;
-  border: 2px dashed #d97706;
-  border-radius: 0.5rem;
-  color: #92400e;
-}
-
 .message-icon {
   font-size: 1.5rem;
 }
@@ -1005,16 +958,6 @@ onMounted(async () => {
 .message-text {
   font-size: 0.875rem;
   font-weight: 500;
-}
-
-.reminder-info-box {
-  display: flex;
-  gap: 0.75rem;
-  padding: 1rem;
-  background-color: #fffbeb;
-  border: 1px solid #fcd34d;
-  border-radius: 0.5rem;
-  margin-top: 1rem;
 }
 
 /* Priority Selector Styles */
@@ -1731,4 +1674,3 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 </style>
-
