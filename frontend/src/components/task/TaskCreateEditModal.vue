@@ -63,7 +63,7 @@
           </div>
         </div>
 
-        <!-- NEW: Deadline Reminders Section -->
+        <!-- Deadline Reminders Section -->
         <div class="form-group">
           <label class="form-label">
             <input v-model="formData.taskDeadLineReminders" type="checkbox" class="checkbox-input" />
@@ -74,7 +74,7 @@
           </p>
         </div>
 
-        <!-- NEW: Reminder Times Configuration (shown when reminders enabled) -->
+        <!-- Reminder Times Configuration -->
         <transition name="slide-down">
           <div v-if="formData.taskDeadLineReminders" class="reminder-options">
             <div class="form-group">
@@ -164,7 +164,7 @@
           </p>
         </div>
 
-        <!-- Schedule Type (shown when recurring is enabled) -->
+        <!-- Schedule Type -->
         <transition name="slide-down">
           <div v-if="formData.scheduled" class="recurring-options">
             <div class="form-group">
@@ -209,7 +209,7 @@
           </div>
         </transition>
 
-        <!-- Status Field -->
+        <!-- Status Field (Subtasks only) -->
         <div v-if="isSubtask && isEditing" class="form-group">
           <label class="form-label required">Status</label>
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
@@ -261,17 +261,25 @@
         <!-- Collaborators Field (Only for owners) -->
         <div v-if="canManageCollaborators" class="form-group">
           <label class="form-label">Collaborators</label>
-          <!-- Department info -->
+          <!-- Department/Project Info -->
           <div class="dept-info">
-            <span class="dept-badge">{{ currentUser?.department || 'Unknown Department' }}</span>
-            <span class="dept-text">You can only add collaborators from your department</span>
+            <span class="dept-badge">
+              {{ formData.projectId ? '🎯 Project Team' : `👥 ${currentUser?.department || 'Department'}` }}
+            </span>
+            <span class="dept-text">
+              {{ formData.projectId ? 'Showing collaborators from selected project' : 'Showing users from your department' }}
+            </span>
           </div>
           <div class="collaborators-input">
             <select v-model="selectedCollaborator" @change="addCollaborator" class="form-input"
               :disabled="availableCollaborators.length === 0">
               <option value="">
-                <span v-if="availableCollaborators.length === 0">No available collaborators in your department</span>
-                <span v-else>Select a collaborator from your department...</span>
+                <span v-if="availableCollaborators.length === 0">
+                  {{ formData.projectId ? 'No more project collaborators available' : 'No available collaborators in your department' }}
+                </span>
+                <span v-else>
+                  {{ formData.projectId ? 'Select a project collaborator...' : 'Select a department collaborator...' }}
+                </span>
               </option>
               <option v-for="user in availableCollaborators" :key="user.uid" :value="user.uid">
                 {{ getUserDisplayName(user) }} ({{ formatRole(user.role) }})
@@ -284,8 +292,12 @@
             <div class="message-icon">👥</div>
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
-              <div class="message-text">There are no other users in your department ({{ currentUser?.department }}) to
-                add as collaborators.</div>
+              <div class="message-text">
+                {{ formData.projectId 
+                  ? 'All project collaborators have been added, or you are the only member.' 
+                  : `There are no other users in your department (${currentUser?.department}) to add as collaborators.` 
+                }}
+              </div>
             </div>
           </div>
 
@@ -319,7 +331,7 @@
             </div>
           </div>
           <p class="form-hint">
-            Only the task owner can modify collaborators. Collaborators must be from the same department.
+            Only the task owner can modify collaborators.
           </p>
         </div>
 
@@ -448,7 +460,6 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 // Reactive data
-const loading = ref(false)
 const allUsers = ref([])
 const projects = ref([])
 const loadingProjects = ref(false)
@@ -458,6 +469,10 @@ const newAttachments = ref([])
 const existingAttachments = ref([])
 const errors = ref({})
 const customReminderDays = ref(null)
+const loading = ref(false)
+
+// NEW: Store for preloaded project collaborators
+const projectCollaboratorsCache = ref({})
 
 // Form data
 const formData = ref({
@@ -510,12 +525,31 @@ const subordinateUsers = computed(() => {
   })
 })
 
+// NEW: Dynamic collaborator list based on project selection
 const availableCollaborators = computed(() => {
   const currentUserDept = currentUser.value?.department
-  if (!currentUserDept) return []
+  const currentUserId = currentUser.value?.uid
+  
+  if (!currentUserDept || !currentUserId) return []
 
+  // If a project is selected, use project collaborators
+  if (formData.value.projectId) {
+    const projectCollabs = projectCollaboratorsCache.value[formData.value.projectId] || []
+    
+    console.log(`🔍 Using project collaborators for ${formData.value.projectId}:`, projectCollabs)
+    
+    // Filter out current user and already-added collaborators
+    return props.allUsers.filter(user =>
+      projectCollabs.includes(user.uid) &&
+      user.uid !== currentUserId &&
+      !formData.value.collaborators.includes(user.uid)
+    )
+  }
+
+  // Otherwise, use department users
+  console.log(`🔍 Using department collaborators for ${currentUserDept}`)
   return props.allUsers.filter(user =>
-    user.uid !== currentUser.value?.uid &&
+    user.uid !== currentUserId &&
     user.department === currentUserDept &&
     !formData.value.collaborators.includes(user.uid)
   )
@@ -547,6 +581,27 @@ const isFormValid = computed(() => {
     !Object.keys(errors.value).length
 })
 
+// NEW: Preload project collaborators for all projects
+async function preloadProjectCollaborators() {
+  try {
+    console.log('🔄 Preloading project collaborators...')
+    
+    for (const project of projects.value) {
+      // Store collaborators for each project (owner + collaborators)
+      projectCollaboratorsCache.value[project.projectId] = [
+        project.ownerUid,
+        ...(project.collaborators || [])
+      ]
+      
+      console.log(`✅ Cached ${projectCollaboratorsCache.value[project.projectId].length} collaborators for project: ${project.title}`)
+    }
+    
+    console.log('✅ Project collaborators preloaded:', projectCollaboratorsCache.value)
+  } catch (error) {
+    console.error('⚠️ Error preloading project collaborators:', error)
+  }
+}
+
 // Methods
 async function fetchProjects() {
   if (!currentUser.value?.uid) return
@@ -555,6 +610,9 @@ async function fetchProjects() {
   try {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUser.value.uid}`)
     projects.value = response.data.projects || []
+    
+    // NEW: Preload collaborators after fetching projects
+    await preloadProjectCollaborators()
   } catch (error) {
     console.error('Error fetching projects:', error)
     if (error.response?.status !== 404) {
@@ -581,7 +639,7 @@ function getPriorityDisplayClass(priority) {
   return 'priority-display-low'
 }
 
-// NEW: Reminder management functions
+// Reminder management functions
 function addReminderTime(days) {
   if (!formData.value.reminderTimes.includes(days)) {
     formData.value.reminderTimes.push(days)
@@ -823,7 +881,6 @@ function validateForm() {
     }
   }
 
-  // NEW: Validate reminder times
   if (formData.value.taskDeadLineReminders && formData.value.reminderTimes.length === 0) {
     errors.value.reminderTimes = 'Please add at least one reminder time or disable reminders'
   }
@@ -965,6 +1022,17 @@ watch(() => props.show, (newVal) => {
 
 watch(deadlineInput, (newVal) => {
   formData.value.deadline = dateTimeToEpoch(newVal)
+})
+
+// NEW: Watch for project selection changes
+watch(() => formData.value.projectId, (newProjectId, oldProjectId) => {
+  if (newProjectId !== oldProjectId) {
+    console.log(`🔄 Project changed from ${oldProjectId || 'none'} to ${newProjectId || 'none'}`)
+    console.log(`📋 Available collaborators updated: ${availableCollaborators.value.length} users`)
+    
+    // Optional: Clear selected collaborator when project changes
+    selectedCollaborator.value = ''
+  }
 })
 
 // Initialize users and projects
@@ -1872,3 +1940,4 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 </style>
+
