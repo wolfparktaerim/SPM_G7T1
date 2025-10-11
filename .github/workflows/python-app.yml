@@ -51,24 +51,36 @@ jobs:
           ${{ runner.os }}-pip-${{ matrix.service }}-
           ${{ runner.os }}-pip-
 
+    - name: Check if service exists
+      id: check_service
+      run: |
+        if [ -d "${{ matrix.service }}" ]; then
+          echo "service_path=${{ matrix.service }}" >> $GITHUB_OUTPUT
+        elif [ -d "backend/${{ matrix.service }}" ]; then
+          echo "service_path=backend/${{ matrix.service }}" >> $GITHUB_OUTPUT
+        else
+          echo "Error: Cannot find ${{ matrix.service }}"
+          exit 1
+        fi
+
     - name: Install dependencies for ${{ matrix.service }}
-      working-directory: ${{ matrix.service }}
+      working-directory: ${{ steps.check_service.outputs.service_path }}
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pytest pytest-cov pytest-mock
 
     - name: Run tests for ${{ matrix.service }}
-      working-directory: ${{ matrix.service }}
+      working-directory: ${{ steps.check_service.outputs.service_path }}
       env:
-        PYTHONPATH: ${{ github.workspace }}
+        PYTHONPATH: ${{ github.workspace }}/backend
       run: |
         pytest -v --cov=. --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: ${{ matrix.service }}/coverage.xml
+        file: ${{ steps.check_service.outputs.service_path }}/coverage.xml
         flags: ${{ matrix.service }}
         name: ${{ matrix.service }}-coverage
         fail_ci_if_error: false
