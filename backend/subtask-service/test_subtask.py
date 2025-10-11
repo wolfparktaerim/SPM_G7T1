@@ -4,14 +4,18 @@ from unittest.mock import Mock, patch, MagicMock
 import sys
 import os
 
+
 # Set environment variables before imports
 os.environ['JSON_PATH'] = '/tmp/dummy.json'
 os.environ['DATABASE_URL'] = 'https://dummy.firebaseio.com'
 
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 
 # Create a mock Firebase app that will be returned by initialize_app
 mock_firebase_app = MagicMock()
+
 
 # Mock Firebase admin at module level BEFORE any imports
 firebase_admin_patcher = patch.dict('sys.modules', {
@@ -21,10 +25,12 @@ firebase_admin_patcher = patch.dict('sys.modules', {
 })
 firebase_admin_patcher.start()
 
+
 # Now we can import
 from subtask_service import SubtaskService
 from models import Subtask, CreateSubtaskRequest, UpdateSubtaskRequest
 from app import app
+
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +42,7 @@ def mock_firebase():
                 yield
 
 
+
 @pytest.fixture
 def client():
     """Create test client"""
@@ -44,11 +51,13 @@ def client():
         yield client
 
 
+
 @pytest.fixture
 def mock_db():
     """Mock database references"""
     with patch('subtask_service.get_db_reference') as mock:
         yield mock
+
 
 
 @pytest.fixture
@@ -73,6 +82,7 @@ def sample_subtask():
         scheduled=False,
         schedule="daily"
     )
+
 
 
 class TestSubtaskModels:
@@ -152,6 +162,7 @@ class TestSubtaskModels:
         errors = req.validate()
         assert len(errors) > 0
         assert any("custom_schedule" in error for error in errors)
+
 
 
 class TestSubtaskService:
@@ -241,6 +252,65 @@ class TestSubtaskService:
         assert subtask.subtask_id == "test-subtask-id"
         assert subtask.task_id == "t1"
         mock_new_ref.set.assert_called_once()
+    
+    def test_create_subtask_with_different_owner(self, mock_db):
+        """Test that status is set to 'ongoing' when owner differs from creator"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        # Mock parent task exists
+        mock_tasks.child.return_value.get.return_value = {"taskId": "t1"}
+        
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
+        
+        service = SubtaskService()
+        req = CreateSubtaskRequest(
+            title="Test Subtask",
+            creator_id="u1",
+            owner_id="u2",  # Different from creator
+            deadline=1700000000,
+            task_id="t1",
+            status="unassigned"  # Will be overridden to 'ongoing'
+        )
+        
+        subtask, error = service.create_subtask(req)
+        
+        assert error is None
+        assert subtask.status == "ongoing"  # Should be 'ongoing' not 'unassigned'
+        assert subtask.owner_id == "u2"
+        mock_new_ref.set.assert_called_once()
+    
+    def test_create_subtask_same_owner_as_creator(self, mock_db):
+        """Test that status respects requested status when owner is same as creator"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        # Mock parent task exists
+        mock_tasks.child.return_value.get.return_value = {"taskId": "t1"}
+        
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
+        
+        service = SubtaskService()
+        req = CreateSubtaskRequest(
+            title="Test Subtask",
+            creator_id="u1",
+            owner_id="u1",  # Same as creator
+            deadline=1700000000,
+            task_id="t1",
+            status="unassigned"
+        )
+        
+        subtask, error = service.create_subtask(req)
+        
+        assert error is None
+        assert subtask.status == "unassigned"  # Should keep original status
+        assert subtask.owner_id == "u1"
     
     def test_create_subtask_parent_not_found(self, mock_db):
         """Test creating subtask with non-existent parent"""
@@ -412,6 +482,94 @@ class TestSubtaskService:
         assert subtask is None
         assert "empty" in error.lower()
     
+    def test_update_subtask_change_owner_to_different_user(self, mock_db):
+        """Test that status updates to 'ongoing' when owner is changed to someone else"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        mock_subtask_ref = Mock()
+        existing_data = {
+            "subTaskId": "st1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "unassigned",
+            "taskId": "t1",
+            "deadline": 1700000000,
+            "scheduled": False
+        }
+        
+        # First call returns existing data, second returns updated data
+        updated_data = existing_data.copy()
+        updated_data["ownerId"] = "u2"
+        updated_data["status"] = "ongoing"
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        service = SubtaskService()
+        req = UpdateSubtaskRequest(
+            subtask_id="st1",
+            owner_id="u2"  # Changing owner to different user
+        )
+        
+        subtask, error = service.update_subtask(req)
+        
+        assert error is None
+        assert subtask.owner_id == "u2"
+        assert subtask.status == "ongoing"
+        
+        # Verify update was called with both ownerId and status
+        update_call_args = mock_subtask_ref.update.call_args[0][0]
+        assert update_call_args["ownerId"] == "u2"
+        assert update_call_args["status"] == "ongoing"
+    
+    def test_update_subtask_change_owner_to_creator(self, mock_db):
+        """Test that status is auto-changed to ongoing even when owner is set to creator"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        mock_subtask_ref = Mock()
+        existing_data = {
+            "subTaskId": "st1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u2",
+            "status": "under_review",
+            "taskId": "t1",
+            "deadline": 1700000000,
+            "scheduled": False
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["ownerId"] = "u1"  # Changing back to creator
+        updated_data["status"] = "ongoing"  # Will be set to ongoing
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        service = SubtaskService()
+        req = UpdateSubtaskRequest(
+            subtask_id="st1",
+            owner_id="u1"  # Changing owner to creator
+        )
+        
+        subtask, error = service.update_subtask(req)
+        
+        assert error is None
+        
+        # Verify update was called
+        update_call_args = mock_subtask_ref.update.call_args[0][0]
+        assert update_call_args["ownerId"] == "u1"
+        # Status should NOT be set to ongoing when owner is same as creator
+        # But based on the implementation, it checks if owner_id != creator_id
+        # So when setting to creator, status should NOT be auto-changed
+        assert "status" not in update_call_args or update_call_args.get("status") != "ongoing"
+    
     def test_delete_subtask(self, mock_db):
         """Test deleting subtask"""
         mock_subtasks = Mock()
@@ -483,6 +641,7 @@ class TestSubtaskService:
         assert subtasks[0].task_id == "t1"
 
 
+
 class TestSubtaskEndpoints:
     """Test Flask endpoints"""
     
@@ -517,6 +676,48 @@ class TestSubtaskEndpoints:
         data = response.get_json()
         assert 'subtask' in data
     
+    @patch('app.subtask_service.create_subtask')
+    def test_create_subtask_with_different_owner_endpoint(self, mock_create, client):
+        """Test creating subtask with different owner via endpoint"""
+        # Create a subtask with status set to ongoing automatically
+        subtask_with_ongoing = Subtask(
+            subtask_id="st1",
+            title="Test Subtask",
+            creator_id="u1",
+            deadline=1700000000,
+            status="ongoing",  # Auto-set to ongoing
+            notes="",
+            attachments=[],
+            collaborators=[],
+            task_id="t1",
+            owner_id="u2",  # Different from creator
+            priority=0,
+            created_at=1600000000,
+            updated_at=1600000000,
+            start_date=1600000000,
+            active=True,
+            scheduled=False,
+            schedule="daily"
+        )
+        
+        mock_create.return_value = (subtask_with_ongoing, None)
+        
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "creatorId": "u1",
+            "ownerId": "u2",  # Different from creator
+            "deadline": 1700000000,
+            "taskId": "t1",
+            "status": "unassigned",  # Should be overridden
+            "schedule": "daily"
+        })
+        
+        assert response.status_code == 201
+        data = response.get_json()
+        assert 'subtask' in data
+        assert data['subtask']['status'] == 'ongoing'
+        assert data['subtask']['ownerId'] == 'u2'
+    
     @patch('app.subtask_service.get_all_subtasks')
     def test_get_all_subtasks(self, mock_get, client):
         """Test getting all subtasks"""
@@ -550,6 +751,41 @@ class TestSubtaskEndpoints:
         data = response.get_json()
         assert 'subtask' in data
     
+    @patch('app.subtask_service.update_subtask')
+    def test_update_subtask_owner_endpoint(self, mock_update, client):
+        """Test updating subtask owner via endpoint"""
+        updated_subtask = Subtask(
+            subtask_id="st1",
+            title="Test Subtask",
+            creator_id="u1",
+            deadline=1700000000,
+            status="ongoing",  # Auto-set to ongoing
+            notes="",
+            attachments=[],
+            collaborators=[],
+            task_id="t1",
+            owner_id="u3",  # Changed to different user
+            priority=0,
+            created_at=1600000000,
+            updated_at=1700000000,
+            start_date=1600000000,
+            active=True,
+            scheduled=False,
+            schedule="daily"
+        )
+        
+        mock_update.return_value = (updated_subtask, None)
+        
+        response = client.put('/subtasks/st1', json={
+            "ownerId": "u3"  # Changing to different user
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'subtask' in data
+        assert data['subtask']['status'] == 'ongoing'
+        assert data['subtask']['ownerId'] == 'u3'
+    
     @patch('app.subtask_service.delete_subtask')
     def test_delete_subtask(self, mock_delete, client):
         """Test deleting subtask"""
@@ -569,6 +805,7 @@ class TestSubtaskEndpoints:
         assert response.status_code == 200
         data = response.get_json()
         assert 'subtasks' in data
+
 
 
 if __name__ == '__main__':

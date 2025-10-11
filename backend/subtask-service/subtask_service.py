@@ -89,7 +89,7 @@ class SubtaskService:
         new_subtask_ref.set(new_subtask_data)
     
     def create_subtask(self, req: CreateSubtaskRequest):
-        # Validate parent task exists
+    # Validate parent task exists
         parent_task = self.tasks_ref.child(req.task_id).get()
         if not parent_task:
             return None, "Parent task not found"
@@ -97,6 +97,11 @@ class SubtaskService:
         current_time = current_timestamp()
         owner_id = req.owner_id if req.owner_id else req.creator_id
         start_date = req.start_date if req.start_date else current_time
+        
+        # Auto-update status to "ongoing" if owner is different from creator
+        status = req.status
+        if owner_id != req.creator_id:
+            status = "ongoing"
         
         new_subtask_ref = self.subtasks_ref.push()
         subtask_id = new_subtask_ref.key
@@ -106,7 +111,7 @@ class SubtaskService:
             title=req.title,
             creator_id=req.creator_id,
             deadline=req.deadline,
-            status=req.status,
+            status=status,  # Use the potentially updated status
             notes=req.notes,
             attachments=req.attachments,
             collaborators=req.collaborators,
@@ -124,6 +129,7 @@ class SubtaskService:
         
         new_subtask_ref.set(subtask.to_dict())
         return subtask, None
+
     
     def get_all_subtasks(self):
         all_subtasks = self.subtasks_ref.get() or {}
@@ -202,8 +208,14 @@ class SubtaskService:
         if req.collaborators is not None:
             update_data["collaborators"] = req.collaborators
         
+        # Handle owner change and auto-update status
         if req.owner_id is not None:
             update_data["ownerId"] = req.owner_id
+            # Get the creator ID from existing subtask
+            creator_id = existing_subtask.get("creatorId", "")
+            # If owner is being changed to someone other than creator, set status to ongoing
+            if req.owner_id != creator_id:
+                update_data["status"] = "ongoing"
         
         if req.active is not None:
             update_data["active"] = bool(req.active)
@@ -231,12 +243,13 @@ class SubtaskService:
         subtask_ref.update(update_data)
         
         # Check for recurring subtask
-        new_status = req.status.lower() if req.status else prev_status
+        new_status = update_data.get("status", prev_status)
         if prev_status != "completed" and new_status == "completed" and existing_subtask.get("scheduled"):
             updated_subtask = subtask_ref.get()
             self.create_subtask_with_params(updated_subtask)
         
         return Subtask.from_dict(subtask_ref.get()), None
+
     
     def delete_subtask(self, subtask_id):
         subtask_ref = self.subtasks_ref.child(subtask_id)
