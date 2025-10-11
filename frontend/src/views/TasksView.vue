@@ -15,7 +15,7 @@
             <div v-if="!autoRefreshPaused"
               class="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-medium">
               <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              Auto-refresh {{ autoRefreshCountdown }}s
+              Auto-refresh {{ formatCountdown(autoRefreshCountdown) }}
             </div>
             <div v-else
               class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-medium">
@@ -168,7 +168,7 @@ const router = useRouter()
 
 // Auto refresh state
 const autoRefreshInterval = ref(null)
-const autoRefreshCountdown = ref(30)
+const autoRefreshCountdown = ref(900)
 const autoRefreshCountdownInterval = ref(null)
 const autoRefreshPaused = ref(false)
 const lastRefreshTime = ref(Date.now())
@@ -278,6 +278,12 @@ async function fetchTasks() {
     }
     throw error
   }
+}
+
+function formatCountdown(seconds) {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}m ${secs}s`
 }
 
 
@@ -704,7 +710,7 @@ function startAutoRefresh() {
     if (!autoRefreshPaused.value) {
       autoRefreshCountdown.value--
       if (autoRefreshCountdown.value <= 0) {
-        autoRefreshCountdown.value = 30
+        autoRefreshCountdown.value = 900
       }
     }
   }, 1000)
@@ -827,13 +833,13 @@ async function handleTaskFromSchedule(taskId) {
 
 // Watch for filters changes
 watch(filters, () => {
-  autoRefreshCountdown.value = 30
+  autoRefreshCountdown.value = 900
 }, { deep: true })
 // Watch for modals opening/closing to pause auto-refresh
 watch(anyModalOpen, (isOpen) => {
   autoRefreshPaused.value = isOpen
   if (!isOpen) {
-    autoRefreshCountdown.value = 30
+    autoRefreshCountdown.value = 900
   }
 })
 

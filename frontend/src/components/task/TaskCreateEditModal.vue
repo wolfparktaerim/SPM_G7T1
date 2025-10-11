@@ -62,96 +62,6 @@
             <span class="legend-item legend-critical">10: Critical</span>
           </div>
         </div>
-
-        <!-- NEW: Deadline Reminders Section -->
-        <div class="form-group">
-          <label class="form-label">
-            <input v-model="formData.taskDeadLineReminders" type="checkbox" class="checkbox-input" />
-            <span class="checkbox-label">Enable deadline reminders</span>
-          </label>
-          <p class="form-hint">
-            Get notified before the deadline to help you stay on track
-          </p>
-        </div>
-
-        <!-- NEW: Reminder Times Configuration (shown when reminders enabled) -->
-        <transition name="slide-down">
-          <div v-if="formData.taskDeadLineReminders" class="reminder-options">
-            <div class="form-group">
-              <label class="form-label">Reminder Schedule</label>
-
-              <!-- Quick Add Buttons -->
-              <div class="reminder-quick-add">
-                <button type="button" @click="addReminderTime(1)" :disabled="formData.reminderTimes.includes(1)"
-                  class="quick-reminder-btn">
-                  1 day
-                </button>
-                <button type="button" @click="addReminderTime(3)" :disabled="formData.reminderTimes.includes(3)"
-                  class="quick-reminder-btn">
-                  3 days
-                </button>
-                <button type="button" @click="addReminderTime(7)" :disabled="formData.reminderTimes.includes(7)"
-                  class="quick-reminder-btn">
-                  1 week
-                </button>
-                <button type="button" @click="addReminderTime(14)" :disabled="formData.reminderTimes.includes(14)"
-                  class="quick-reminder-btn">
-                  2 weeks
-                </button>
-              </div>
-
-              <!-- Custom Reminder Input -->
-              <div class="custom-reminder-input">
-                <input v-model.number="customReminderDays" type="number" min="1" max="365" placeholder="Custom days..."
-                  class="form-input reminder-custom-input" @keypress.enter.prevent="addCustomReminder" />
-                <button type="button" @click="addCustomReminder" class="add-reminder-btn">
-                  Add
-                </button>
-              </div>
-
-              <span v-if="errors.reminderTimes" class="error-message">{{ errors.reminderTimes }}</span>
-
-              <!-- Reminder Times List -->
-              <div v-if="formData.reminderTimes.length > 0" class="reminder-times-list">
-                <div class="reminder-times-header">
-                  <span class="list-title">Active Reminders ({{ formData.reminderTimes.length }})</span>
-                  <button type="button" @click="clearAllReminders" class="clear-all-btn">
-                    Clear All
-                  </button>
-                </div>
-                <div class="reminder-chips">
-                  <div v-for="days in sortedReminderTimes" :key="days" class="reminder-chip">
-                    <span class="chip-icon">🔔</span>
-                    <span class="chip-text">{{ formatReminderDays(days) }}</span>
-                    <button type="button" @click="removeReminderTime(days)" class="chip-remove">
-                      <X class="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="no-reminders-message">
-                <span class="message-icon">📅</span>
-                <span class="message-text">No reminders set. Add reminders using the buttons above.</span>
-              </div>
-
-              <!-- Reminder Info Box -->
-              <div class="reminder-info-box">
-                <div class="info-icon">ℹ️</div>
-                <div class="info-content">
-                  <div class="info-title">How Reminders Work</div>
-                  <ul class="info-list">
-                    <li>You'll receive notifications on the days you specify before the deadline</li>
-                    <li>All collaborators will receive the reminders</li>
-                    <li>Reminders are sent at 9:00 AM in your local timezone</li>
-                    <li>You can add multiple reminder times (e.g., 1, 3, and 7 days before)</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </transition>
-
         <!-- Recurring Options -->
         <div class="form-group">
           <label class="form-label">
@@ -581,44 +491,6 @@ function getPriorityDisplayClass(priority) {
   return 'priority-display-low'
 }
 
-// NEW: Reminder management functions
-function addReminderTime(days) {
-  if (!formData.value.reminderTimes.includes(days)) {
-    formData.value.reminderTimes.push(days)
-  }
-}
-
-function removeReminderTime(days) {
-  const index = formData.value.reminderTimes.indexOf(days)
-  if (index > -1) {
-    formData.value.reminderTimes.splice(index, 1)
-  }
-}
-
-function addCustomReminder() {
-  if (customReminderDays.value && customReminderDays.value > 0 && customReminderDays.value <= 365) {
-    if (!formData.value.reminderTimes.includes(customReminderDays.value)) {
-      formData.value.reminderTimes.push(customReminderDays.value)
-      customReminderDays.value = null
-    } else {
-      toast.warning('This reminder time is already added')
-    }
-  } else {
-    toast.error('Please enter a valid number of days (1-365)')
-  }
-}
-
-function clearAllReminders() {
-  formData.value.reminderTimes = []
-}
-
-function formatReminderDays(days) {
-  if (days === 1) return '1 day before'
-  if (days === 7) return '1 week before'
-  if (days === 14) return '2 weeks before'
-  if (days === 30) return '1 month before'
-  return `${days} days before`
-}
 
 function handleOwnerChange() {
   const currentUserRole = currentUser.value?.role
@@ -946,8 +818,6 @@ watch(() => props.show, (newVal) => {
         schedule: props.taskData.schedule || 'daily',
         custom_schedule: props.taskData.custom_schedule || null,
         start_date: props.taskData.start_date || Math.floor(Date.now() / 1000),
-        reminderTimes: [...(props.taskData.reminderTimes || [])],
-        taskDeadLineReminders: props.taskData.taskDeadLineReminders || false
       }
       deadlineInput.value = epochToDateTime(props.taskData.deadline)
       existingAttachments.value = props.taskData.attachments || []
@@ -986,84 +856,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* NEW: Reminder Options Styles */
-.reminder-options {
-  padding: 1.5rem;
-  background-color: #fef3c7;
-  border: 2px solid #fbbf24;
-  border-radius: 0.75rem;
-  margin-top: 1rem;
-}
-
-.reminder-quick-add {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
-}
-
-.quick-reminder-btn {
-  padding: 0.5rem 1rem;
-  background-color: white;
-  border: 2px solid #d97706;
-  color: #92400e;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.quick-reminder-btn:hover:not(:disabled) {
-  background-color: #fbbf24;
-  color: white;
-  transform: translateY(-1px);
-}
-
-.quick-reminder-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background-color: #f3f4f6;
-  border-color: #d1d5db;
-  color: #9ca3af;
-}
-
-.custom-reminder-input {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.reminder-custom-input {
-  flex: 1;
-}
-
-.add-reminder-btn {
-  padding: 0.75rem 1.5rem;
-  background-color: #f59e0b;
-  color: white;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.add-reminder-btn:hover {
-  background-color: #d97706;
-  transform: translateY(-1px);
-}
-
-.reminder-times-list {
-  margin-top: 1rem;
-}
-
-.reminder-times-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
 .list-title {
   font-size: 0.875rem;
   font-weight: 600;
