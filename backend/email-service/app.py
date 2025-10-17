@@ -15,7 +15,20 @@ from email_service import EmailService
 from models import EmailRequest
 
 app = Flask(__name__)
-CORS(app)
+
+# Configure CORS to allow rontend
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://spm-g7-t1-td8d.vercel.app",
+            "http://localhost:3000", 
+            "http://localhost:3001" 
+        ],
+        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
