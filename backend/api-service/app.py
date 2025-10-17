@@ -92,7 +92,7 @@ def subtask_proxy(path):
 # ==============================================
 # NOTIFICATION SERVICE ROUTES
 # ==============================================
-@app.route('/notifications', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+@app.route('/notification', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 @app.route('/notifications/<path:path>', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 def notification_proxy(path):
     full_path = f"/notifications{'/' + path if path else ''}"
