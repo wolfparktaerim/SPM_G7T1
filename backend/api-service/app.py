@@ -3,13 +3,12 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
-import logging
 
 app = Flask(__name__)
 
-# Configure CORS to allow frontend
+# Configure CORS for frontend
 CORS(app, resources={
-    r"/api/*": {
+    r"/*": {
         "origins": [
             "https://spm-g7-t1-td8d.vercel.app",
             "http://localhost:3000", 
@@ -21,282 +20,133 @@ CORS(app, resources={
     }
 })
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Service URLs - Set these in Render environment variables
+SERVICE_URLS = {
+    'project': os.getenv('PROJECT_SERVICE_URL', 'http://project-service:6001'),
+    'task': os.getenv('TASK_SERVICE_URL', 'http://task-service:6002'), 
+    'subtask': os.getenv('SUBTASK_SERVICE_URL', 'http://sub-task-service:6003'),
+    'notification': os.getenv('NOTIFICATION_SERVICE_URL', 'http://notification-service:6004'),
+    'email': os.getenv('EMAIL_SERVICE_URL', 'http://email-service:6005')
+}
 
-# Service URLs (from environment variables)
-EMAIL_SERVICE_URL = os.getenv("EMAIL_SERVICE_URL")
-NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL")
-PROJECT_SERVICE_URL = os.getenv("PROJECT_SERVICE_URL")
-TASK_SERVICE_URL = os.getenv("TASK_SERVICE_URL")
-SUBTASK_SERVICE_URL = os.getenv("SUBTASK_SERVICE_URL" )
-
-# ============================================
-# NOTIFICATION SERVICE ROUTES
-# ============================================
-@app.route("/api/notifications/<user_id>", methods=["GET"])
-def get_user_notifications(user_id):
+def proxy_request(service_name, path=''):
+    """Proxy requests to the appropriate microservice"""
+    if service_name not in SERVICE_URLS:
+        return jsonify({'error': 'Service not found'}), 404
+    
+    target_url = f"{SERVICE_URLS[service_name]}{path}"
+    
+    print(f"Proxying {request.method} {request.url} -> {target_url}")
+    
     try:
-        resp = requests.get(f"{NOTIFICATION_SERVICE_URL}/notifications/{user_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+        # Forward the request with the same method, headers, and data
+        if request.method == 'GET':
+            response = requests.get(target_url, params=request.args, timeout=30)
+        elif request.method == 'POST':
+            response = requests.post(target_url, json=request.get_json(), params=request.args, timeout=30)
+        elif request.method == 'PUT':
+            response = requests.put(target_url, json=request.get_json(), params=request.args, timeout=30)
+        elif request.method == 'PATCH':
+            response = requests.patch(target_url, json=request.get_json(), params=request.args, timeout=30)
+        elif request.method == 'DELETE':
+            response = requests.delete(target_url, params=request.args, timeout=30)
+        else:
+            return jsonify({'error': 'Method not allowed'}), 405
+            
+        # Return the response from the microservice
+        return response.content, response.status_code, {
+            'Content-Type': response.headers.get('Content-Type', 'application/json')
+        }
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error proxying request: {e}")
+        return jsonify({'error': f'Service unavailable: {str(e)}'}), 503
 
-@app.route("/api/notifications/<user_id>/unread", methods=["GET"])
-def get_unread_notifications(user_id):
-    try:
-        resp = requests.get(f"{NOTIFICATION_SERVICE_URL}/notifications/{user_id}/unread")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/notifications/<user_id>/<notification_id>/read", methods=["PATCH"])
-def mark_notification_read(user_id, notification_id):
-    try:
-        resp = requests.patch(f"{NOTIFICATION_SERVICE_URL}/notifications/{user_id}/{notification_id}/read")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/notifications/<user_id>/<notification_id>", methods=["DELETE"])
-def delete_notification(user_id, notification_id):
-    try:
-        resp = requests.delete(f"{NOTIFICATION_SERVICE_URL}/notifications/{user_id}/{notification_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/notifications/<user_id>/mark-all-read", methods=["PATCH"])
-def mark_all_notifications_read(user_id):
-    try:
-        resp = requests.patch(f"{NOTIFICATION_SERVICE_URL}/notifications/{user_id}/mark-all-read")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-# ============================================
+# ==============================================
 # PROJECT SERVICE ROUTES
-# ============================================
-@app.route("/api/projects/create", methods=["POST"])
-def create_project():
-    try:
-        resp = requests.post(f"{PROJECT_SERVICE_URL}/project/create", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+# ==============================================
+@app.route('/project', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/project/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def project_proxy(path):
+    full_path = f"/project{'/' + path if path else ''}"
+    return proxy_request('project', full_path)
 
-@app.route("/api/projects/all", methods=["GET"])
-def get_all_projects():
-    try:
-        resp = requests.get(f"{PROJECT_SERVICE_URL}/project/all")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/projects/department/<department>", methods=["GET"])
-def get_projects_by_department(department):
-    try:
-        resp = requests.get(f"{PROJECT_SERVICE_URL}/project/department/{department}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/projects/<user_id>", methods=["GET"])
-@app.route("/api/project/<user_id>", methods=["GET"])  # Support both singular and plural
-def get_user_projects(user_id):
-    try:
-        resp = requests.get(f"{PROJECT_SERVICE_URL}/project/{user_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/projects/update", methods=["POST"])
-def update_project():
-    try:
-        resp = requests.post(f"{PROJECT_SERVICE_URL}/project/update", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/projects/all-users", methods=["GET"])
-def get_all_users():
-    try:
-        resp = requests.get(f"{PROJECT_SERVICE_URL}/project/all-users")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/projects/users/available-for-collaboration/<uid>", methods=["GET"])
-def get_available_users(uid):
-    try:
-        resp = requests.get(f"{PROJECT_SERVICE_URL}/project/users/available-for-collaboration/{uid}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/projects/add-collaborator", methods=["POST"])
-def add_collaborator():
-    try:
-        resp = requests.post(f"{PROJECT_SERVICE_URL}/project/add-collaborator", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/projects/change-owner", methods=["POST"])
-def change_owner():
-    try:
-        resp = requests.post(f"{PROJECT_SERVICE_URL}/project/change-owner", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-# ============================================
+# ==============================================
 # TASK SERVICE ROUTES
-# ============================================
-@app.route("/api/tasks", methods=["POST"])
-def create_task():
-    try:
-        resp = requests.post(f"{TASK_SERVICE_URL}/tasks", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+# ==============================================
+@app.route('/tasks', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/tasks/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def task_proxy(path):
+    full_path = f"/tasks{'/' + path if path else ''}"
+    return proxy_request('task', full_path)
 
-@app.route("/api/tasks", methods=["GET"])
-def get_all_tasks():
-    try:
-        resp = requests.get(f"{TASK_SERVICE_URL}/tasks")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/tasks/<task_id>", methods=["GET"])
-def get_task_by_id(task_id):
-    try:
-        resp = requests.get(f"{TASK_SERVICE_URL}/tasks/{task_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/tasks/<task_id>", methods=["PUT"])
-def update_task_by_id(task_id):
-    try:
-        resp = requests.put(f"{TASK_SERVICE_URL}/tasks/{task_id}", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/tasks/<task_id>", methods=["DELETE"])
-def delete_task_by_id(task_id):
-    try:
-        resp = requests.delete(f"{TASK_SERVICE_URL}/tasks/{task_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/tasks/project/<project_id>", methods=["GET"])
-def get_tasks_by_project(project_id):
-    try:
-        resp = requests.get(f"{TASK_SERVICE_URL}/tasks/project/{project_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-# ============================================
+# ==============================================
 # SUBTASK SERVICE ROUTES
-# ============================================
-@app.route("/api/subtasks", methods=["POST"])
-def create_subtask():
-    try:
-        resp = requests.post(f"{SUBTASK_SERVICE_URL}/subtasks", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+# ==============================================
+@app.route('/subtasks', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/subtasks/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def subtask_proxy(path):
+    full_path = f"/subtasks{'/' + path if path else ''}"
+    return proxy_request('subtask', full_path)
 
-@app.route("/api/subtasks", methods=["GET"])
-def get_all_subtasks():
-    try:
-        resp = requests.get(f"{SUBTASK_SERVICE_URL}/subtasks")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+# ==============================================
+# NOTIFICATION SERVICE ROUTES
+# ==============================================
+@app.route('/notifications', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+@app.route('/notifications/<path:path>', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+def notification_proxy(path):
+    full_path = f"/notifications{'/' + path if path else ''}"
+    return proxy_request('notification', full_path)
 
-@app.route("/api/subtasks/<subtask_id>", methods=["GET"])
-def get_subtask_by_id(subtask_id):
-    try:
-        resp = requests.get(f"{SUBTASK_SERVICE_URL}/subtasks/{subtask_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/subtasks/<subtask_id>", methods=["PUT"])
-def update_subtask_by_id(subtask_id):
-    try:
-        resp = requests.put(f"{SUBTASK_SERVICE_URL}/subtasks/{subtask_id}", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/subtasks/<subtask_id>", methods=["DELETE"])
-def delete_subtask_by_id(subtask_id):
-    try:
-        resp = requests.delete(f"{SUBTASK_SERVICE_URL}/subtasks/{subtask_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-@app.route("/api/subtasks/task/<task_id>", methods=["GET"])
-def get_subtasks_by_task(task_id):
-    try:
-        resp = requests.get(f"{SUBTASK_SERVICE_URL}/subtasks/task/{task_id}")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-# ============================================
+# ==============================================
 # EMAIL SERVICE ROUTES
-# ============================================
-@app.route("/api/email/send-task-reminder", methods=["POST"])
-def send_task_reminder():
-    try:
-        resp = requests.post(f"{EMAIL_SERVICE_URL}/email/send-task-reminder", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+# ==============================================
+@app.route('/email', defaults={'path': ''}, methods=['GET', 'POST'])
+@app.route('/email/<path:path>', methods=['GET', 'POST'])
+def email_proxy(path):
+    full_path = f"/email{'/' + path if path else ''}"
+    return proxy_request('email', full_path)
 
-@app.route("/api/email/test", methods=["POST"])
-def test_email():
-    try:
-        resp = requests.post(f"{EMAIL_SERVICE_URL}/email/test", json=request.json)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
+# ==============================================
+# SCHEDULER SERVICE ROUTES (part of notification)
+# ==============================================
+@app.route('/scheduler', defaults={'path': ''}, methods=['GET', 'POST'])
+@app.route('/scheduler/<path:path>', methods=['GET', 'POST'])
+def scheduler_proxy(path):
+    full_path = f"/scheduler{'/' + path if path else ''}"
+    return proxy_request('notification', full_path)
 
-# ============================================
-# SCHEDULER SERVICE ROUTES
-# ============================================
-@app.route("/api/scheduler/trigger", methods=["POST"])
-def trigger_scheduler():
-    try:
-        resp = requests.post(f"{NOTIFICATION_SERVICE_URL}/scheduler/trigger")
-        return jsonify(resp.json()), resp.status_code
-    except Exception as e:
-        return jsonify(error=str(e)), 500
-
-# ============================================
+# ==============================================
 # HEALTH CHECK
-# ============================================
-@app.route("/health", methods=["GET"])
-def health_check():
-    return jsonify(status="healthy", service="api-gateway"), 200
+# ==============================================
+@app.route('/health')
+def health():
+    return jsonify({
+        'status': 'healthy', 
+        'service': 'api-gateway',
+        'services': SERVICE_URLS
+    })
 
-@app.route("/api/health", methods=["GET"])
-def api_health_check():
-    return jsonify(status="healthy", service="api-gateway"), 200
-
-# Handle 404 errors with CORS headers
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify(error="Endpoint not found"), 404
+# ==============================================
+# ROOT ROUTE
+# ==============================================
+@app.route('/')
+def root():
+    return jsonify({
+        'message': 'Backend API Gateway',
+        'services': ['project', 'tasks', 'subtasks', 'notifications', 'email'],
+        'endpoints': {
+            'project': '/project/*',
+            'tasks': '/tasks/*', 
+            'subtasks': '/subtasks/*',
+            'notifications': '/notifications/*',
+            'email': '/email/*',
+            'scheduler': '/scheduler/*',
+            'health': '/health'
+        },
+        'service_urls': SERVICE_URLS
+    })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=6000, debug=False)
+    port = int(os.environ.get('PORT', 6000))
+    app.run(host='0.0.0.0', port=port, debug=False)
