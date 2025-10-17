@@ -19,6 +19,8 @@ class Notification:
     task_id: Optional[str] = None
     subtask_id: Optional[str] = None
     parent_task_title: Optional[str] = None
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -37,7 +39,9 @@ class Notification:
             read_at=data.get("readAt"),
             task_id=data.get("taskId"),
             subtask_id=data.get("subTaskId"),
-            parent_task_title=data.get("parentTaskTitle")
+            parent_task_title=data.get("parentTaskTitle"),
+            old_status=data.get("oldStatus"),
+            new_status=data.get("newStatus")
         )
     
     def to_dict(self):
@@ -55,14 +59,18 @@ class Notification:
             "createdAt": self.created_at,
             "readAt": self.read_at
         }
-        
+
         if self.task_id:
             result["taskId"] = self.task_id
         if self.subtask_id:
             result["subTaskId"] = self.subtask_id
         if self.parent_task_title:
             result["parentTaskTitle"] = self.parent_task_title
-        
+        if self.old_status:
+            result["oldStatus"] = self.old_status
+        if self.new_status:
+            result["newStatus"] = self.new_status
+
         return result
 
 @dataclass
@@ -71,15 +79,17 @@ class NotificationPreferences:
     user_id: str
     enabled: bool
     task_deadline_reminders: bool
+    task_update_reminders: bool
     channel: str
     reminder_times: list
-    
+
     @classmethod
     def from_dict(cls, data: dict, user_id: str):
         return cls(
             user_id=user_id,
             enabled=data.get("enabled", False),
             task_deadline_reminders=data.get("taskDeadlineReminders", False),
+            task_update_reminders=data.get("taskUpdateReminders", True),
             channel=data.get("channel", "both"),
             reminder_times=data.get("reminderTimes", [])
         )

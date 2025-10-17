@@ -61,8 +61,26 @@
           Part of task: <span class="font-medium text-gray-700">{{ notification.parentTaskTitle }}</span>
         </p>
 
-        <!-- Deadline info -->
-        <div class="mt-2 space-y-1 text-xs">
+        <!-- Status Update Info (for task/subtask status updates) -->
+        <div v-if="isStatusUpdateNotification()" class="mt-2 flex items-center space-x-2 text-xs">
+          <!-- Old status (crossed out) -->
+          <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded-lg line-through font-medium">
+            {{ formatStatus(notification.oldStatus) }}
+          </span>
+
+          <!-- Arrow -->
+          <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+
+          <!-- New status -->
+          <span :class="['px-2 py-1 rounded-lg font-medium', getStatusBadgeClasses(notification.newStatus)]">
+            {{ formatStatus(notification.newStatus) }}
+          </span>
+        </div>
+
+        <!-- Deadline info (for deadline reminders only) -->
+        <div v-else class="mt-2 space-y-1 text-xs">
           <!-- Due date -->
           <div class="flex items-center space-x-1 text-gray-600">
             <Calendar class="w-3.5 h-3.5" :stroke-width="2" />
@@ -128,7 +146,34 @@ const handleMarkAsRead = () => {
   emit('markAsRead', props.notification)
 }
 
+const isStatusUpdateNotification = () => {
+  return props.notification.type === 'task_status_update' ||
+         props.notification.type === 'subtask_status_update'
+}
+
+const formatStatus = (status) => {
+  if (!status) return ''
+  return status.replace(/_/g, ' ').split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1)
+  ).join(' ')
+}
+
+const getStatusBadgeClasses = (status) => {
+  const statusColors = {
+    'completed': 'bg-green-100 text-green-700',
+    'ongoing': 'bg-blue-100 text-blue-700',
+    'under_review': 'bg-purple-100 text-purple-700',
+    'unassigned': 'bg-yellow-100 text-yellow-700'
+  }
+  return statusColors[status] || 'bg-gray-100 text-gray-700'
+}
+
 const getUrgencyIcon = () => {
+  // For status updates, use a different icon
+  if (isStatusUpdateNotification()) {
+    return Bell
+  }
+
   const urgency = props.notification.getUrgencyLevel()
 
   switch (urgency) {

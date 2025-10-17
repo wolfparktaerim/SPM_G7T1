@@ -29,6 +29,7 @@ export class NotificationPreferences {
     reminderTimes = DEFAULT_REMINDER_TIMES,
     enabled = true,
     taskDeadlineReminders = true,
+    taskUpdateReminders = true,
     createdAt = Date.now(),
     updatedAt = Date.now(),
   } = {}) {
@@ -37,6 +38,7 @@ export class NotificationPreferences {
     this.reminderTimes = this.validateReminderTimes(reminderTimes)
     this.enabled = enabled
     this.taskDeadlineReminders = taskDeadlineReminders
+    this.taskUpdateReminders = taskUpdateReminders
     this.createdAt = createdAt
     this.updatedAt = updatedAt
   }
@@ -131,6 +133,7 @@ export class NotificationPreferences {
       reminderTimes: this.reminderTimes,
       enabled: this.enabled,
       taskDeadlineReminders: this.taskDeadlineReminders,
+      taskUpdateReminders: this.taskUpdateReminders,
       createdAt: this.createdAt,
       updatedAt: Date.now(),
     }
@@ -151,7 +154,7 @@ export class NotificationPreferences {
    * @returns {NotificationPreferences} Updated instance
    */
   update(updates) {
-    const allowedFields = ['channel', 'reminderTimes', 'enabled', 'taskDeadlineReminders']
+    const allowedFields = ['channel', 'reminderTimes', 'enabled', 'taskDeadlineReminders', 'taskUpdateReminders']
 
     allowedFields.forEach((field) => {
       if (updates.hasOwnProperty(field)) {
@@ -195,4 +198,5 @@ export const DEFAULT_NOTIFICATION_PREFERENCES = {
   reminderTimes: DEFAULT_REMINDER_TIMES,
   enabled: true,
   taskDeadlineReminders: true,
+  taskUpdateReminders: true,
 }

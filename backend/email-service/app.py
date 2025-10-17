@@ -58,15 +58,55 @@ def send_task_reminder():
     else:
         return jsonify(error="Failed to send email"), 500
 
+@app.route("/email/send-task-update", methods=["POST"])
+def send_task_update():
+    """Send task status update email"""
+
+    try:
+        data = request.get_json(force=False, silent=False)
+    except Exception as e:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    # Handle missing body
+    if data is None or not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    # Validate required fields
+    required_fields = ['toEmail', 'taskTitle', 'oldStatus', 'newStatus']
+    for field in required_fields:
+        if field not in data:
+            return jsonify(error=f"Missing required field: {field}"), 400
+
+    # Extract data
+    to_email = data['toEmail']
+    task_title = data['taskTitle']
+    old_status = data['oldStatus']
+    new_status = data['newStatus']
+    is_subtask = data.get('isSubtask', False)
+    parent_task_title = data.get('parentTaskTitle')
+
+    # Send email
+    success = email_service.send_task_update_email(
+        to_email, task_title, old_status, new_status, is_subtask, parent_task_title
+    )
+
+    if success:
+        return jsonify(
+            message="Task update email sent successfully",
+            sentAt=current_timestamp()
+        ), 200
+    else:
+        return jsonify(error="Failed to send task update email"), 500
+
 @app.route("/email/test", methods=["POST"])
 def test_email():
     """Test email configuration"""
     data = request.get_json()
     if not data or "toEmail" not in data:
         return jsonify(error="Missing required field: toEmail"), 400
-    
+
     success = email_service.send_test_email(data["toEmail"])
-    
+
     if success:
         return jsonify(message="Test email sent successfully"), 200
     else:

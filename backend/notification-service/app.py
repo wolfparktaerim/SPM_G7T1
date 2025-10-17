@@ -96,6 +96,83 @@ def trigger_scheduler_manually():
     except Exception as e:
         return jsonify(error=f"Failed to trigger scheduler: {str(e)}"), 500
 
+@app.route("/notifications/task-update", methods=["POST"])
+def send_task_update_notification():
+    """Send notification for task status update"""
+    try:
+        data = request.json
+
+        # Validate required fields
+        required_fields = ['itemId', 'taskTitle', 'oldStatus', 'newStatus', 'userIds', 'channel']
+        for field in required_fields:
+            if field not in data:
+                return jsonify(error=f"Missing required field: {field}"), 400
+
+        item_id = data['itemId']
+        task_title = data['taskTitle']
+        old_status = data['oldStatus']
+        new_status = data['newStatus']
+        user_ids = data['userIds']  # List of user IDs (owner + collaborators)
+        channel = data['channel']
+        is_subtask = data.get('isSubtask', False)
+        parent_task_title = data.get('parentTaskTitle')
+        user_emails = data.get('userEmails', {})  # Dict mapping user_id to email
+
+        notifications_sent = []
+        emails_sent = []
+
+        # Send notifications to each user
+        for user_id in user_ids:
+            # Check for duplicates
+            if notification_service.check_duplicate_update_notification(user_id, item_id, new_status, is_subtask):
+                logger.info(f"Skipping duplicate notification for user {user_id}")
+                continue
+
+            # Send in-app notification if channel includes in-app
+            if channel in ['in-app', 'both']:
+                notification_id = notification_service.create_task_update_notification(
+                    user_id, item_id, task_title, old_status, new_status, is_subtask, parent_task_title
+                )
+                if notification_id:
+                    notifications_sent.append(user_id)
+
+            # Send email notification if channel includes email
+            if channel in ['email', 'both'] and user_id in user_emails:
+                try:
+                    import requests
+                    email_data = {
+                        "toEmail": user_emails[user_id],
+                        "taskTitle": task_title,
+                        "oldStatus": old_status,
+                        "newStatus": new_status,
+                        "isSubtask": is_subtask,
+                        "parentTaskTitle": parent_task_title
+                    }
+
+                    response = requests.post(
+                        f"{email_service_url}/email/send-task-update",
+                        json=email_data,
+                        timeout=10
+                    )
+
+                    if response.status_code == 200:
+                        emails_sent.append(user_id)
+                        logger.info(f"Task update email sent to {user_emails[user_id]}")
+                    else:
+                        logger.error(f"Failed to send email: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error sending email: {str(e)}")
+
+        return jsonify(
+            message="Task update notifications sent",
+            notificationsSent=notifications_sent,
+            emailsSent=emails_sent
+        ), 200
+
+    except Exception as e:
+        logger.error(f"Failed to send task update notifications: {str(e)}")
+        return jsonify(error=f"Failed to send notifications: {str(e)}"), 500
+
 @app.route("/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
@@ -104,6 +181,6 @@ def health_check():
 if __name__ == '__main__':
     # Start the background scheduler
     scheduler_service.start()
-    
+
     # Start the Flask app
     app.run(host='0.0.0.0', port=6004, debug=True)

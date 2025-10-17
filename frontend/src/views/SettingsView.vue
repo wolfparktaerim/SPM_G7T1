@@ -35,7 +35,7 @@
 
           <!-- Settings Content -->
           <div class="p-6 space-y-6">
-            <!-- Enable/Disable Notifications Toggle -->
+            <!-- Task Deadline Reminders Toggle -->
             <div class="flex items-center justify-between pb-6 border-b border-gray-200">
               <div class="flex-1">
                 <label class="block text-base font-semibold text-gray-900">
@@ -52,6 +52,27 @@
                 <span
                   class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
                   :class="preferences.enabled ? 'translate-x-5' : 'translate-x-0'">
+                </span>
+              </button>
+            </div>
+
+            <!-- Task Update Reminders Toggle -->
+            <div class="flex items-center justify-between pb-6 border-b border-gray-200">
+              <div class="flex-1">
+                <label class="block text-base font-semibold text-gray-900">
+                  Task Update Reminders
+                </label>
+                <p class="text-sm text-gray-500 mt-1">
+                  Receive notifications when assigned task status changes
+                </p>
+              </div>
+              <button @click="toggleTaskUpdateReminders" type="button"
+                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                :class="preferences.taskUpdateReminders ? 'bg-blue-600' : 'bg-gray-200'">
+                <span class="sr-only">Enable task update reminders</span>
+                <span
+                  class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                  :class="preferences.taskUpdateReminders ? 'translate-x-5' : 'translate-x-0'">
                 </span>
               </button>
             </div>
@@ -330,6 +351,14 @@ const validateAndSaveReminderTimes = () => {
  */
 const toggleNotifications = () => {
   preferences.enabled = !preferences.enabled
+  savePreferences()
+}
+
+/**
+ * Toggle task update reminders on/off
+ */
+const toggleTaskUpdateReminders = () => {
+  preferences.taskUpdateReminders = !preferences.taskUpdateReminders
   savePreferences()
 }
 

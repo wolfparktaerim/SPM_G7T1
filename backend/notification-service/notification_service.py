@@ -185,3 +185,88 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Error marking notification as sent: {str(e)}")
 
+    def create_task_update_notification(self, user_id, item_id, task_title, old_status, new_status, is_subtask=False, parent_task_title=None):
+        """Create a notification for task status update"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            new_notification_ref = user_notifications_ref.push()
+            notification_id = new_notification_ref.key
+
+            # Format status for display
+            def format_status(status):
+                return status.replace('_', ' ').title()
+
+            # Create notification
+            if is_subtask:
+                notification_type = "subtask_status_update"
+                title = "Subtask Status Updated"
+                if parent_task_title:
+                    message = f"'{task_title}' (in {parent_task_title}) status changed from {format_status(old_status)} to {format_status(new_status)}"
+                else:
+                    message = f"'{task_title}' status changed from {format_status(old_status)} to {format_status(new_status)}"
+                item_id_field = "subTaskId"
+            else:
+                notification_type = "task_status_update"
+                title = "Task Status Updated"
+                message = f"'{task_title}' status changed from {format_status(old_status)} to {format_status(new_status)}"
+                item_id_field = "taskId"
+
+            notification_data = {
+                "notificationId": notification_id,
+                "userId": user_id,
+                item_id_field: item_id,
+                "type": notification_type,
+                "title": title,
+                "message": message,
+                "taskTitle": task_title,
+                "oldStatus": old_status,
+                "newStatus": new_status,
+                "read": False,
+                "createdAt": current_timestamp(),
+                "readAt": None
+            }
+
+            if is_subtask and parent_task_title:
+                notification_data["parentTaskTitle"] = parent_task_title
+
+            new_notification_ref.set(notification_data)
+            logger.info(f"Created task update notification for user {user_id}")
+            return notification_id
+        except Exception as e:
+            logger.error(f"Failed to create task update notification: {str(e)}")
+            return None
+
+    def check_duplicate_update_notification(self, user_id, item_id, new_status, is_subtask=False):
+        """Check if a similar notification was recently sent to prevent duplicates"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            all_notifications = user_notifications_ref.get() or {}
+
+            current_time = current_timestamp()
+            time_window = 300  # 5 minutes in seconds
+
+            for notification in all_notifications.values():
+                # Check if it's a status update notification
+                notification_type = notification.get('type', '')
+                if not (notification_type == 'task_status_update' or notification_type == 'subtask_status_update'):
+                    continue
+
+                # Check if it's for the same item
+                item_id_field = 'subTaskId' if is_subtask else 'taskId'
+                if notification.get(item_id_field) != item_id:
+                    continue
+
+                # Check if it's the same status change
+                if notification.get('newStatus') != new_status:
+                    continue
+
+                # Check if it was created within the time window
+                created_at = notification.get('createdAt', 0)
+                if current_time - created_at < time_window:
+                    return True  # Duplicate found
+
+            return False  # No duplicate
+        except Exception as e:
+            logger.error(f"Error checking duplicate notification: {str(e)}")
+            return False
+

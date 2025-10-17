@@ -17,7 +17,9 @@ export class Notification {
     read = false,
     createdAt = Date.now(),
     readAt = null,
-    parentTaskTitle = null
+    parentTaskTitle = null,
+    oldStatus = null,
+    newStatus = null
   } = {}) {
     this.notificationId = notificationId
     this.userId = userId
@@ -32,6 +34,8 @@ export class Notification {
     this.createdAt = createdAt
     this.readAt = readAt
     this.parentTaskTitle = parentTaskTitle
+    this.oldStatus = oldStatus
+    this.newStatus = newStatus
   }
 
   /**
@@ -145,7 +149,9 @@ export class Notification {
       read: data.read || false,
       createdAt: data.createdAt,
       readAt: data.readAt,
-      parentTaskTitle: data.parentTaskTitle
+      parentTaskTitle: data.parentTaskTitle,
+      oldStatus: data.oldStatus,
+      newStatus: data.newStatus
     })
   }
 
@@ -167,7 +173,9 @@ export class Notification {
       read: this.read,
       createdAt: this.createdAt,
       readAt: this.readAt,
-      parentTaskTitle: this.parentTaskTitle
+      parentTaskTitle: this.parentTaskTitle,
+      oldStatus: this.oldStatus,
+      newStatus: this.newStatus
     }
   }
 }
