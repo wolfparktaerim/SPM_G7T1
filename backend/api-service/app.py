@@ -25,11 +25,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Service URLs (from environment variables)
-EMAIL_SERVICE_URL = os.getenv("EMAIL_SERVICE_URL", "http://email-service:6005")
-NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:6004")
-PROJECT_SERVICE_URL = os.getenv("PROJECT_SERVICE_URL", "http://project-service:6001")
-TASK_SERVICE_URL = os.getenv("TASK_SERVICE_URL", "http://task-service:6002")
-SUBTASK_SERVICE_URL = os.getenv("SUBTASK_SERVICE_URL", "http://sub-task-service:6003")
+EMAIL_SERVICE_URL = os.getenv("EMAIL_SERVICE_URL")
+NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL")
+PROJECT_SERVICE_URL = os.getenv("PROJECT_SERVICE_URL")
+TASK_SERVICE_URL = os.getenv("TASK_SERVICE_URL")
+SUBTASK_SERVICE_URL = os.getenv("SUBTASK_SERVICE_URL" )
 
 # ============================================
 # NOTIFICATION SERVICE ROUTES
@@ -102,6 +102,7 @@ def get_projects_by_department(department):
         return jsonify(error=str(e)), 500
 
 @app.route("/api/projects/<user_id>", methods=["GET"])
+@app.route("/api/project/<user_id>", methods=["GET"])  # Support both singular and plural
 def get_user_projects(user_id):
     try:
         resp = requests.get(f"{PROJECT_SERVICE_URL}/project/{user_id}")
