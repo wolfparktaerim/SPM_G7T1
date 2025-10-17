@@ -1,5 +1,4 @@
 <!-- frontend/src/components/task/TaskCreateEditModal.vue -->
-
 <template>
   <div v-if="show" class="modal-overlay" @click="handleBackdropClick">
     <div class="modal" @click.stop>
