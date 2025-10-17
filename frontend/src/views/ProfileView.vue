@@ -331,7 +331,7 @@
 
     <!-- Confirmation Modals -->
     <ConfirmationModal :show="showSignOutModal" title="Sign Out" description="Are you sure you want to sign out?"
-      confirm-text="Sign Out" cancel-text="Cancel" variant="warning" icon="logout" @confirm="confirmSignOut"
+      confirm-text="Sign Out" cancel-text="Cancel" variant="danger" icon="logout" @confirm="confirmSignOut"
       @cancel="showSignOutModal = false" />
   </div>
 </template>

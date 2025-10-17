@@ -579,7 +579,11 @@ function getAttachmentType(attachment) {
 
 function downloadAttachment(attachment, index) {
   try {
-    const byteCharacters = atob(attachment)
+    // Remove data URL prefix if present
+    const base64Data = attachment.replace(/^data:.*?;base64,/, '')
+    
+    // Decode base64 to binary
+    const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
 
     for (let i = 0; i < byteCharacters.length; i++) {
@@ -587,19 +591,17 @@ function downloadAttachment(attachment, index) {
     }
 
     const byteArray = new Uint8Array(byteNumbers)
-    const blob = new Blob([byteArray])
+    
+    // Detect MIME type and extension from file signature
+    const { mimeType, extension } = detectFileType(byteArray, attachment)
+    
+    // Create blob with proper MIME type
+    const blob = new Blob([byteArray], { type: mimeType })
+    
+    // Generate filename
+    const filename = getAttachmentName(attachment, index) + '.' + extension
 
-    const type = getAttachmentType(attachment)
-    let extension = 'bin'
-
-    if (type.includes('PNG')) extension = 'png'
-    else if (type.includes('JPEG')) extension = 'jpg'
-    else if (type.includes('PDF')) extension = 'pdf'
-    else if (type.includes('Word')) extension = 'docx'
-    else if (type.includes('Excel')) extension = 'xlsx'
-
-    const filename = getAttachmentName(attachment, index) + (extension !== 'bin' ? '' : `.${extension}`)
-
+    // Create download link
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -616,6 +618,91 @@ function downloadAttachment(attachment, index) {
     toast.error('Failed to download attachment')
   }
 }
+
+function detectFileType(byteArray, base64String) {
+  // Get file signature (magic numbers) from first bytes
+  const header = Array.from(byteArray.slice(0, 8))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()
+  
+  // Check base64 string prefix for quicker detection
+  const prefix = base64String.substring(0, 20)
+  
+  // PDF: starts with %PDF (hex: 25 50 44 46)
+  if (header.startsWith('25504446') || prefix.startsWith('JVBERi0')) {
+    return { mimeType: 'application/pdf', extension: 'pdf' }
+  }
+  
+  // PNG: starts with PNG signature (89 50 4E 47)
+  if (header.startsWith('89504E47') || prefix.startsWith('iVBORw0KGgo')) {
+    return { mimeType: 'image/png', extension: 'png' }
+  }
+  
+  // JPEG: starts with FF D8 FF
+  if (header.startsWith('FFD8FF') || prefix.startsWith('/9j/')) {
+    return { mimeType: 'image/jpeg', extension: 'jpg' }
+  }
+  
+  // ZIP-based formats (DOCX, XLSX): start with PK (50 4B)
+  if (header.startsWith('504B0304') || header.startsWith('504B0506') || prefix.startsWith('UEs')) {
+    // Check for Office Open XML formats
+    const text = String.fromCharCode(...byteArray.slice(0, 200))
+    
+    if (text.includes('word/') || text.includes('document.xml')) {
+      return { 
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+        extension: 'docx' 
+      }
+    }
+    
+    if (text.includes('xl/') || text.includes('workbook.xml')) {
+      return { 
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+        extension: 'xlsx' 
+      }
+    }
+    
+    // Generic ZIP
+    return { mimeType: 'application/zip', extension: 'zip' }
+  }
+  
+  // Old Word doc format: D0 CF 11 E0
+  if (header.startsWith('D0CF11E0')) {
+    return { mimeType: 'application/msword', extension: 'doc' }
+  }
+  
+  // CSV/TXT: Check if all characters are printable ASCII/UTF-8
+  const sample = byteArray.slice(0, 512)
+  let isPrintable = true
+  let hasCommas = false
+  
+  for (let i = 0; i < sample.length; i++) {
+    const byte = sample[i]
+    if ((byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) || byte === 127) {
+      isPrintable = false
+      break
+    }
+    if (byte === 44) hasCommas = true // comma character
+  }
+  
+  if (isPrintable) {
+    if (hasCommas) {
+      return { mimeType: 'text/csv', extension: 'csv' }
+    }
+    return { mimeType: 'text/plain', extension: 'txt' }
+  }
+  
+  // GIF: starts with GIF89a or GIF87a
+  if (header.startsWith('474946383961') || header.startsWith('474946383761') || 
+      prefix.startsWith('R0lGOD')) {
+    return { mimeType: 'image/gif', extension: 'gif' }
+  }
+  
+  // Default fallback
+  return { mimeType: 'application/octet-stream', extension: 'bin' }
+}
+
 
 function viewSubtask(subtask) {
   emit('close')

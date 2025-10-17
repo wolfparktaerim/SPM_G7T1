@@ -1,508 +1,203 @@
 # backend/subtask-service/app.py
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import firebase_admin
-from firebase_admin import credentials, db
-from datetime import datetime, timezone, timedelta
+import sys
 import os
-import calendar
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from shared import init_firebase, validate_epoch_timestamp
+
+from subtask_service import SubtaskService
+from models import CreateSubtaskRequest, UpdateSubtaskRequest
 
 app = Flask(__name__)
 CORS(app)
 
+# Initialize Firebase
+init_firebase()
 
-# Firebase configuration
-JSON_PATH = os.getenv("JSON_PATH")
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-
-cred = credentials.Certificate(JSON_PATH)
-firebase_admin.initialize_app(cred, {
-    "databaseURL": DATABASE_URL
-})
-
-
-# Utility functions
-def current_timestamp():
-    return int(datetime.now(timezone.utc).timestamp())
-
-
-def validate_status(status):
-    allowed_statuses = ["ongoing", "unassigned", "under_review", "completed"]
-    return status.lower() in allowed_statuses
-
-
-def validate_epoch_timestamp(timestamp):
-    try:
-        if isinstance(timestamp, (int, float)):
-            return timestamp > 0
-        return False
-    except (ValueError, TypeError):
-        return False
-
-
-def calculate_new_start_date(old_start_date, schedule, custom_schedule=None):
-    today_ts = current_timestamp()
-    old_dt = datetime.fromtimestamp(old_start_date, tz=timezone.utc)
-
-
-    if schedule == "daily":
-        new_dt = old_dt + timedelta(days=1)
-    elif schedule == "weekly":
-        new_dt = old_dt + timedelta(weeks=1)
-    elif schedule == "monthly":
-        month = old_dt.month + 1 if old_dt.month < 12 else 1
-        year = old_dt.year if old_dt.month < 12 else old_dt.year + 1
-        day = old_dt.day
-        try:
-            new_dt = datetime(year, month, day, tzinfo=timezone.utc)
-        except ValueError:
-            last_day = calendar.monthrange(year, month)[1]
-            new_dt = datetime(year, month, last_day, tzinfo=timezone.utc)
-    elif schedule == "custom" and custom_schedule:
-        new_dt = old_dt + timedelta(days=custom_schedule)
-    else:
-        new_dt = old_dt
-
-
-    new_start_ts = int(new_dt.timestamp())
-
-
-    if new_start_ts < today_ts:
-        today_dt = datetime.fromtimestamp(today_ts, tz=timezone.utc)
-        if schedule == "daily":
-            new_dt = today_dt + timedelta(days=1)
-        elif schedule == "weekly":
-            new_dt = today_dt + timedelta(weeks=1)
-        elif schedule == "monthly":
-            month = today_dt.month + 1 if today_dt.month < 12 else 1
-            year = today_dt.year if today_dt.month < 12 else today_dt.year + 1
-            day = today_dt.day
-            try:
-                new_dt = datetime(year, month, day, tzinfo=timezone.utc)
-            except ValueError:
-                last_day = calendar.monthrange(year, month)[1]
-                new_dt = datetime(year, month, last_day, tzinfo=timezone.utc)
-        elif schedule == "custom" and custom_schedule:
-            new_dt = today_dt + timedelta(days=custom_schedule)
-        new_start_ts = int(new_dt.timestamp())
-
-
-    return new_start_ts
-
-
-def create_subtask_with_params(subtask):
-    now = current_timestamp()
-    new_start_date = calculate_new_start_date(
-        subtask.get("start_date", now),
-        subtask.get("schedule"),
-        subtask.get("custom_schedule")
-    )
-    active_flag = True if new_start_date <= now else False
-
-
-    new_subtask_ref = db.reference("subtasks").push()
-    new_subtask_data = dict(subtask)  # clone original subtask
-
-
-    new_subtask_data.update({
-        "subTaskId": new_subtask_ref.key,
-        "start_date": new_start_date,
-        "active": active_flag,
-        "status": "ongoing",
-        "createdAt": now,
-        "updatedAt": now
-    })
-
-
-    new_subtask_ref.set(new_subtask_data)
-
+# Initialize service
+subtask_service = SubtaskService()
 
 @app.route("/subtasks", methods=["POST"])
 def create_subtask():
+    """Create a new subtask"""
     data = request.get_json()
     if not data:
         return jsonify(error="Missing JSON body"), 400
-
-
-    required_fields = ["title", "creatorId", "deadline", "taskId"]
-    for field in required_fields:
-        if not data.get(field):
-            return jsonify(error=f"Missing required field: {field}"), 400
-
-
-    deadline = data.get("deadline")
-    if not validate_epoch_timestamp(deadline):
+    
+    req = CreateSubtaskRequest.from_dict(data)
+    errors = req.validate()
+    if errors:
+        return jsonify(error=f"Validation failed: {', '.join(errors)}"), 400
+    
+    if not validate_epoch_timestamp(req.deadline):
         return jsonify(error="Deadline must be a valid epoch timestamp"), 400
-
-
-    status = data.get("status", "ongoing").lower()
-    if not validate_status(status):
-        return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
-
-
-    task_id = data.get("taskId")
-    try:
-        parent_task_ref = db.reference(f"tasks/{task_id}")
-        parent_task = parent_task_ref.get()
-        if not parent_task:
-            return jsonify(error="Parent task not found"), 404
-    except Exception as e:
-        return jsonify(error=f"Failed to validate parent task: {str(e)}"), 500
-
-
-    title = data.get("title").strip()
-    if not title:
-        return jsonify(error="Title cannot be empty"), 400
-
-
-    creator_id = data.get("creatorId")
-    owner_id = data.get("ownerId", creator_id)
-    notes = data.get("notes", "")
-    attachments = data.get("attachments", [])
-    collaborators = data.get("collaborators", [])
-
-
-    priority = data.get("priority")
-    if priority is not None:
-        if not isinstance(priority, int):
-            return jsonify(error="Priority must be an integer"), 400
-    else:
-        priority = 0
-
-
-    if not isinstance(attachments, list) or not all(isinstance(att, str) for att in attachments):
-        return jsonify(error="Attachments must be an array of strings (base64)"), 400
-
-
-    if not isinstance(collaborators, list) or not all(isinstance(collab, str) for collab in collaborators):
-        return jsonify(error="Collaborators must be an array of user IDs"), 400
-
-
-    active = data.get("active", True)
-    scheduled = data.get("scheduled", False)
-    schedule = data.get("schedule", "daily")
-    valid_schedules = ["daily", "weekly", "monthly", "custom"]
-    if schedule not in valid_schedules:
-        return jsonify(error=f"Schedule must be one of: {', '.join(valid_schedules)}"), 400
-
-
-    custom_schedule = data.get("custom_schedule")
-    if schedule == "custom":
-        if custom_schedule is None or not isinstance(custom_schedule, int):
-            return jsonify(error="custom_schedule must be an integer when schedule is 'custom'"), 400
-    else:
-        custom_schedule = None
-
-
-    # NEW: Validate reminderTimes and taskDeadLineReminders
-    reminder_times = data.get("reminderTimes", [])
-    if not isinstance(reminder_times, list) or not all(isinstance(i, int) and i > 0 for i in reminder_times):
-        return jsonify(error="reminderTimes must be a list of positive integers"), 400
-
-
-    task_deadline_reminders = data.get("taskDeadLineReminders", False)
-    if not isinstance(task_deadline_reminders, bool):
-        return jsonify(error="taskDeadLineReminders must be a boolean"), 400
-
-
-    current_time = current_timestamp()
-    start_date = data.get("start_date", current_time)
-    if not validate_epoch_timestamp(start_date):
+    
+    if req.start_date and not validate_epoch_timestamp(req.start_date):
         return jsonify(error="start_date must be a valid epoch timestamp"), 400
-
-
-    subtasks_ref = db.reference("subtasks")
-    new_subtask_ref = subtasks_ref.push()
-    subtask_id = new_subtask_ref.key
-
-
-    subtask_data = {
-        "subTaskId": subtask_id,
-        "title": title,
-        "creatorId": creator_id,
-        "deadline": deadline,
-        "status": status,
-        "notes": notes,
-        "attachments": attachments,
-        "collaborators": collaborators,
-        "taskId": task_id,
-        "ownerId": owner_id,
-        "priority": priority,
-        "createdAt": current_time,
-        "updatedAt": current_time,
-        "start_date": start_date,
-        "active": bool(active),
-        "scheduled": bool(scheduled),
-        "schedule": schedule,
-        "custom_schedule": custom_schedule,
-        "reminderTimes": reminder_times,
-        "taskDeadLineReminders": task_deadline_reminders
-    }
-
-
-    try:
-        new_subtask_ref.set(subtask_data)
-        return jsonify(message="Subtask created successfully", subtask=subtask_data), 201
-    except Exception as e:
-        return jsonify(error=f"Failed to create subtask: {str(e)}"), 500
-
+    
+    if not subtask_service.validate_status(req.status):
+        return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
+    
+    if req.schedule not in ["daily", "weekly", "monthly", "custom"]:
+        return jsonify(error="Schedule must be one of: daily, weekly, monthly, custom"), 400
+    
+    subtask, error = subtask_service.create_subtask(req)
+    if error:
+        return jsonify(error=error), 404 if "not found" in error else 400
+    
+    return jsonify(message="Subtask created successfully", subtask=subtask.to_dict()), 201
 
 @app.route("/subtasks", methods=["GET"])
 def get_all_subtasks():
-    try:
-        subtasks_ref = db.reference("subtasks")
-        all_subtasks = subtasks_ref.get() or {}
-
-
-        now = current_timestamp()
-        for subtask in all_subtasks.values():
-            start_date = subtask.get("start_date")
-            if start_date is not None:
-                if now >= start_date:
-                    if not subtask.get("active", False):
-                        db.reference(f"subtasks/{subtask['subTaskId']}").update({"active": True})
-                    subtask["active"] = True
-                else:
-                    subtask["active"] = False
-
-
-        return jsonify(subtasks=list(all_subtasks.values())), 200
-    except Exception as e:
-        return jsonify(error=f"Failed to retrieve subtasks: {str(e)}"), 500
-
+    """Get all subtasks"""
+    subtasks = subtask_service.get_all_subtasks()
+    return jsonify(subtasks=[s.to_dict() for s in subtasks]), 200
 
 @app.route("/subtasks/<subtask_id>", methods=["GET"])
 def get_subtask_by_id(subtask_id):
-    try:
-        subtask_ref = db.reference(f"subtasks/{subtask_id}")
-        subtask = subtask_ref.get()
-
-
-        if not subtask:
-            return jsonify(error="Subtask not found"), 404
-
-
-        now = current_timestamp()
-        start_date = subtask.get("start_date")
-        if start_date is not None:
-            if now >= start_date and not subtask.get("active", False):
-                subtask_ref.update({"active": True})
-                subtask["active"] = True
-            elif now < start_date:
-                subtask["active"] = False
-
-
-        return jsonify(subtask=subtask), 200
-    except Exception as e:
-        return jsonify(error=f"Failed to retrieve subtask: {str(e)}"), 500
-
+    """Get a subtask by ID"""
+    subtask, error = subtask_service.get_subtask_by_id(subtask_id)
+    if error:
+        return jsonify(error=error), 404
+    
+    return jsonify(subtask=subtask.to_dict()), 200
 
 @app.route("/subtasks/<subtask_id>", methods=["PUT"])
 def update_subtask_by_id(subtask_id):
+    """Update a subtask by ID"""
     data = request.get_json()
     if not data:
         return jsonify(error="Missing JSON body"), 400
-
-
-    try:
-        subtask_ref = db.reference(f"subtasks/{subtask_id}")
-        existing_subtask = subtask_ref.get()
-        if not existing_subtask:
-            return jsonify(error="Subtask not found"), 404
-
-
-        prev_status = existing_subtask.get("status", "").lower()
-
-
-        update_data = {}
-
-
-        if "title" in data:
-            title = data["title"].strip()
-            if not title:
-                return jsonify(error="Title cannot be empty"), 400
-            update_data["title"] = title
-
-
-        if "deadline" in data:
-            deadline = data["deadline"]
-            if not validate_epoch_timestamp(deadline):
-                return jsonify(error="Deadline must be a valid epoch timestamp"), 400
-            update_data["deadline"] = deadline
-
-
-        if "status" in data:
-            status = data["status"].lower()
-            if not validate_status(status):
-                return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
-            update_data["status"] = status
-
-
-        if "taskId" in data:
-            task_id = data["taskId"]
-            parent_task_ref = db.reference(f"tasks/{task_id}")
-            parent_task = parent_task_ref.get()
-            if not parent_task:
-                return jsonify(error="Parent task not found"), 404
-            update_data["taskId"] = task_id
-
-
-        if "priority" in data:
-            priority = data["priority"]
-            if not isinstance(priority, int):
-                return jsonify(error="Priority must be an integer"), 400
-            update_data["priority"] = priority
-
-
-        if "notes" in data:
-            update_data["notes"] = data["notes"]
-
-
-        if "attachments" in data:
-            attachments = data["attachments"]
-            if not isinstance(attachments, list) or not all(isinstance(att, str) for att in attachments):
-                return jsonify(error="Attachments must be an array of strings (base64)"), 400
-            update_data["attachments"] = attachments
-
-
-        if "collaborators" in data:
-            collaborators = data["collaborators"]
-            if not isinstance(collaborators, list) or not all(isinstance(collab, str) for collab in collaborators):
-                return jsonify(error="Collaborators must be an array of user IDs"), 400
-            update_data["collaborators"] = collaborators
-
-
-        if "ownerId" in data:
-            update_data["ownerId"] = data["ownerId"]
-
-
-        if "active" in data:
-            update_data["active"] = bool(data["active"])
-
-
-        if "scheduled" in data:
-            update_data["scheduled"] = bool(data["scheduled"])
-
-
-        if "schedule" in data:
-            schedule = data["schedule"]
-            valid_schedules = ["daily", "weekly", "monthly", "custom"]
-            if schedule not in valid_schedules:
-                return jsonify(error=f"Schedule must be one of: {', '.join(valid_schedules)}"), 400
-            update_data["schedule"] = schedule
-
-
-            if schedule == "custom":
-                custom_schedule = data.get("custom_schedule")
-                if custom_schedule is None or not isinstance(custom_schedule, int):
-                    return jsonify(error="custom_schedule must be an integer when schedule is 'custom'"), 400
-                update_data["custom_schedule"] = custom_schedule
-            else:
-                update_data["custom_schedule"] = None
-        elif "custom_schedule" in data:
-            if existing_subtask.get("schedule") == "custom":
-                if data["custom_schedule"] is None or not isinstance(data["custom_schedule"], int):
-                    return jsonify(error="custom_schedule must be an integer when schedule is 'custom'"), 400
-                update_data["custom_schedule"] = data["custom_schedule"]
-
-
-        if "start_date" in data:
-            start_date = data["start_date"]
-            if not validate_epoch_timestamp(start_date):
-                return jsonify(error="start_date must be a valid epoch timestamp"), 400
-            update_data["start_date"] = start_date
-
-
-        # NEW: Handle reminderTimes and taskDeadLineReminders
-        if "reminderTimes" in data:
-            reminder_times = data["reminderTimes"]
-            if not isinstance(reminder_times, list) or not all(isinstance(i, int) and i > 0 for i in reminder_times):
-                return jsonify(error="reminderTimes must be a list of positive integers"), 400
-            update_data["reminderTimes"] = reminder_times
-
-
-        if "taskDeadLineReminders" in data:
-            task_deadline_reminders = data["taskDeadLineReminders"]
-            if not isinstance(task_deadline_reminders, bool):
-                return jsonify(error="taskDeadLineReminders must be a boolean"), 400
-            update_data["taskDeadLineReminders"] = task_deadline_reminders
-
-
-        update_data["updatedAt"] = current_timestamp()
-
-
-        if not update_data or (len(update_data) == 1 and "updatedAt" in update_data):
-            return jsonify(error="No valid fields provided for update"), 400
-
-
-        subtask_ref.update(update_data)
-
-
-        new_status = data.get("status", prev_status).lower()
-        if prev_status != "completed" and new_status == "completed" and existing_subtask.get("scheduled"):
-            updated_subtask = subtask_ref.get()
-            create_subtask_with_params(updated_subtask)
-
-
-        updated_subtask = subtask_ref.get()
-        return jsonify(message="Subtask updated successfully", subtask=updated_subtask), 200
-
-
-    except Exception as e:
-        return jsonify(error=f"Failed to update subtask: {str(e)}"), 500
-
+    
+    req = UpdateSubtaskRequest.from_dict(data, subtask_id)
+    
+    if req.deadline is not None and not validate_epoch_timestamp(req.deadline):
+        return jsonify(error="Deadline must be a valid epoch timestamp"), 400
+    
+    if req.start_date is not None and not validate_epoch_timestamp(req.start_date):
+        return jsonify(error="start_date must be a valid epoch timestamp"), 400
+    
+    if req.status is not None and not subtask_service.validate_status(req.status):
+        return jsonify(error="Status must be one of: ongoing, unassigned, under_review, completed"), 400
+    
+    if req.schedule is not None and req.schedule not in ["daily", "weekly", "monthly", "custom"]:
+        return jsonify(error="Schedule must be one of: daily, weekly, monthly, custom"), 400
+    
+    subtask, error = subtask_service.update_subtask(req)
+    if error:
+        return jsonify(error=error), 404 if "not found" in error else 400
+    
+    return jsonify(message="Subtask updated successfully", subtask=subtask.to_dict()), 200
 
 @app.route("/subtasks/<subtask_id>", methods=["DELETE"])
 def delete_subtask_by_id(subtask_id):
-    try:
-        subtask_ref = db.reference(f"subtasks/{subtask_id}")
-        existing_subtask = subtask_ref.get()
-        if not existing_subtask:
-            return jsonify(error="Subtask not found"), 404
-
-
-        subtask_ref.delete()
-
-
-        return jsonify(message="Subtask deleted successfully"), 200
-    except Exception as e:
-        return jsonify(error=f"Failed to delete subtask: {str(e)}"), 500
-
+    """Delete a subtask by ID"""
+    success, error = subtask_service.delete_subtask(subtask_id)
+    if error:
+        return jsonify(error=error), 404
+    
+    return jsonify(message="Subtask deleted successfully"), 200
 
 @app.route("/subtasks/task/<task_id>", methods=["GET"])
 def get_subtasks_by_task(task_id):
-    try:
-        subtasks_ref = db.reference("subtasks")
-        all_subtasks = subtasks_ref.get() or {}
-
-
-        now = current_timestamp()
-        filtered_subtasks = []
-        for subtask in all_subtasks.values():
-            if subtask.get("taskId") == task_id:
-                start_date = subtask.get("start_date")
-                if start_date is not None:
-                    if now >= start_date:
-                        if not subtask.get("active", False):
-                            db.reference(f"subtasks/{subtask['subTaskId']}").update({"active": True})
-                        subtask["active"] = True
-                    else:
-                        subtask["active"] = False
-                filtered_subtasks.append(subtask)
-
-
-        return jsonify(subtasks=filtered_subtasks), 200
-    except Exception as e:
-        return jsonify(error=f"Failed to retrieve subtasks by task: {str(e)}"), 500
-
+    """Get all subtasks by task ID"""
+    subtasks = subtask_service.get_subtasks_by_task(task_id)
+    return jsonify(subtasks=[s.to_dict() for s in subtasks]), 200
 
 @app.route("/health", methods=["GET"])
 def health_check():
+    """Health check endpoint"""
     return jsonify(status="healthy", service="subtask-service"), 200
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=6003, debug=True)
+
+# ===================================================
+# backend/subtask-service/test_subtask.py
+import pytest
+from unittest.mock import Mock, patch
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from app import app
+from subtask_service import SubtaskService
+from models import Subtask, CreateSubtaskRequest
+
+@pytest.fixture
+def client():
+    app.config['TESTING'] = True
+    with app.test_client() as client:
+        yield client
+
+@pytest.fixture
+def mock_db():
+    with patch('subtask_service.get_db_reference') as mock:
+        yield mock
+
+class TestSubtaskModels:
+    def test_subtask_from_dict(self):
+        data = {
+            "subTaskId": "st1",
+            "title": "Test Subtask",
+            "creatorId": "u1",
+            "deadline": 1700000000,
+            "status": "ongoing",
+            "notes": "",
+            "attachments": [],
+            "collaborators": [],
+            "taskId": "t1",
+            "ownerId": "u1",
+            "priority": 0,
+            "createdAt": 1600000000,
+            "updatedAt": 1600000000,
+            "start_date": 1600000000,
+            "active": True,
+            "scheduled": False,
+            "schedule": "daily"
+        }
+        subtask = Subtask.from_dict(data)
+        assert subtask.subtask_id == "st1"
+        assert subtask.title == "Test Subtask"
+
+class TestSubtaskService:
+    def test_create_subtask(self, mock_db):
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        mock_tasks.child.return_value.get.return_value = {"taskId": "t1"}
+        
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
+        
+        service = SubtaskService()
+        req = CreateSubtaskRequest(
+            title="Test Subtask",
+            creator_id="u1",
+            deadline=1700000000,
+            task_id="t1"
+        )
+        
+        subtask, error = service.create_subtask(req)
+        assert error is None
+        assert subtask.title == "Test Subtask"
+
+class TestSubtaskEndpoints:
+    def test_health_check(self, client):
+        response = client.get('/health')
+        assert response.status_code == 200
+        assert response.get_json()['status'] == 'healthy'
+    
+    @patch('app.subtask_service.get_all_subtasks')
+    def test_get_all_subtasks(self, mock_get, client):
+        mock_get.return_value = []
+        response = client.get('/subtasks')
+        assert response.status_code == 200
+
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])

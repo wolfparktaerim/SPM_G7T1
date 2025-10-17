@@ -62,96 +62,6 @@
             <span class="legend-item legend-critical">10: Critical</span>
           </div>
         </div>
-
-        <!-- NEW: Deadline Reminders Section -->
-        <div class="form-group">
-          <label class="form-label">
-            <input v-model="formData.taskDeadLineReminders" type="checkbox" class="checkbox-input" />
-            <span class="checkbox-label">Enable deadline reminders</span>
-          </label>
-          <p class="form-hint">
-            Get notified before the deadline to help you stay on track
-          </p>
-        </div>
-
-        <!-- NEW: Reminder Times Configuration (shown when reminders enabled) -->
-        <transition name="slide-down">
-          <div v-if="formData.taskDeadLineReminders" class="reminder-options">
-            <div class="form-group">
-              <label class="form-label">Reminder Schedule</label>
-
-              <!-- Quick Add Buttons -->
-              <div class="reminder-quick-add">
-                <button type="button" @click="addReminderTime(1)" :disabled="formData.reminderTimes.includes(1)"
-                  class="quick-reminder-btn">
-                  1 day
-                </button>
-                <button type="button" @click="addReminderTime(3)" :disabled="formData.reminderTimes.includes(3)"
-                  class="quick-reminder-btn">
-                  3 days
-                </button>
-                <button type="button" @click="addReminderTime(7)" :disabled="formData.reminderTimes.includes(7)"
-                  class="quick-reminder-btn">
-                  1 week
-                </button>
-                <button type="button" @click="addReminderTime(14)" :disabled="formData.reminderTimes.includes(14)"
-                  class="quick-reminder-btn">
-                  2 weeks
-                </button>
-              </div>
-
-              <!-- Custom Reminder Input -->
-              <div class="custom-reminder-input">
-                <input v-model.number="customReminderDays" type="number" min="1" max="365" placeholder="Custom days..."
-                  class="form-input reminder-custom-input" @keypress.enter.prevent="addCustomReminder" />
-                <button type="button" @click="addCustomReminder" class="add-reminder-btn">
-                  Add
-                </button>
-              </div>
-
-              <span v-if="errors.reminderTimes" class="error-message">{{ errors.reminderTimes }}</span>
-
-              <!-- Reminder Times List -->
-              <div v-if="formData.reminderTimes.length > 0" class="reminder-times-list">
-                <div class="reminder-times-header">
-                  <span class="list-title">Active Reminders ({{ formData.reminderTimes.length }})</span>
-                  <button type="button" @click="clearAllReminders" class="clear-all-btn">
-                    Clear All
-                  </button>
-                </div>
-                <div class="reminder-chips">
-                  <div v-for="days in sortedReminderTimes" :key="days" class="reminder-chip">
-                    <span class="chip-icon">🔔</span>
-                    <span class="chip-text">{{ formatReminderDays(days) }}</span>
-                    <button type="button" @click="removeReminderTime(days)" class="chip-remove">
-                      <X class="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="no-reminders-message">
-                <span class="message-icon">📅</span>
-                <span class="message-text">No reminders set. Add reminders using the buttons above.</span>
-              </div>
-
-              <!-- Reminder Info Box -->
-              <div class="reminder-info-box">
-                <div class="info-icon">ℹ️</div>
-                <div class="info-content">
-                  <div class="info-title">How Reminders Work</div>
-                  <ul class="info-list">
-                    <li>You'll receive notifications on the days you specify before the deadline</li>
-                    <li>All collaborators will receive the reminders</li>
-                    <li>Reminders are sent at 9:00 AM in your local timezone</li>
-                    <li>You can add multiple reminder times (e.g., 1, 3, and 7 days before)</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </transition>
-
         <!-- Recurring Options -->
         <div class="form-group">
           <label class="form-label">
@@ -164,7 +74,7 @@
           </p>
         </div>
 
-        <!-- Schedule Type (shown when recurring is enabled) -->
+        <!-- Schedule Type -->
         <transition name="slide-down">
           <div v-if="formData.scheduled" class="recurring-options">
             <div class="form-group">
@@ -209,7 +119,7 @@
           </div>
         </transition>
 
-        <!-- Status Field -->
+        <!-- Status Field (Subtasks only) -->
         <div v-if="isSubtask && isEditing" class="form-group">
           <label class="form-label required">Status</label>
           <select v-model="formData.status" required class="form-input" :class="{ 'error': errors.status }">
@@ -261,17 +171,27 @@
         <!-- Collaborators Field (Only for owners) -->
         <div v-if="canManageCollaborators" class="form-group">
           <label class="form-label">Collaborators</label>
-          <!-- Department info -->
+          <!-- Department/Project Info -->
           <div class="dept-info">
-            <span class="dept-badge">{{ currentUser?.department || 'Unknown Department' }}</span>
-            <span class="dept-text">You can only add collaborators from your department</span>
+            <span class="dept-badge">
+              {{ formData.projectId ? '🎯 Project Team' : `👥 ${currentUser?.department || 'Department'}` }}
+            </span>
+            <span class="dept-text">
+              {{ formData.projectId ? 'Showing collaborators from selected project'
+                : 'Showing users from your department' }}
+            </span>
           </div>
           <div class="collaborators-input">
             <select v-model="selectedCollaborator" @change="addCollaborator" class="form-input"
               :disabled="availableCollaborators.length === 0">
               <option value="">
-                <span v-if="availableCollaborators.length === 0">No available collaborators in your department</span>
-                <span v-else>Select a collaborator from your department...</span>
+                <span v-if="availableCollaborators.length === 0">
+                  {{ formData.projectId ? 'No more project collaborators available'
+                    : 'No available collaborators in yourdepartment' }}
+                </span>
+                <span v-else>
+                  {{ formData.projectId ? 'Select a project collaborator...' : 'Select a department collaborator...' }}
+                </span>
               </option>
               <option v-for="user in availableCollaborators" :key="user.uid" :value="user.uid">
                 {{ getUserDisplayName(user) }} ({{ formatRole(user.role) }})
@@ -284,8 +204,12 @@
             <div class="message-icon">👥</div>
             <div class="message-content">
               <div class="message-title">No Available Collaborators</div>
-              <div class="message-text">There are no other users in your department ({{ currentUser?.department }}) to
-                add as collaborators.</div>
+              <div class="message-text">
+                {{ formData.projectId
+                  ? 'All project collaborators have been added, or you are the only member.'
+                  : `There are no other users in your department (${currentUser?.department}) to add as collaborators.`
+                }}
+              </div>
             </div>
           </div>
 
@@ -319,7 +243,7 @@
             </div>
           </div>
           <p class="form-hint">
-            Only the task owner can modify collaborators. Collaborators must be from the same department.
+            Only the task owner can modify collaborators.
           </p>
         </div>
 
@@ -448,7 +372,6 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 // Reactive data
-const loading = ref(false)
 const allUsers = ref([])
 const projects = ref([])
 const loadingProjects = ref(false)
@@ -457,7 +380,10 @@ const deadlineInput = ref('')
 const newAttachments = ref([])
 const existingAttachments = ref([])
 const errors = ref({})
-const customReminderDays = ref(null)
+const loading = ref(false)
+
+// NEW: Store for preloaded project collaborators
+const projectCollaboratorsCache = ref({})
 
 // Form data
 const formData = ref({
@@ -473,8 +399,6 @@ const formData = ref({
   schedule: 'daily',
   custom_schedule: null,
   start_date: Math.floor(Date.now() / 1000),
-  reminderTimes: [],
-  taskDeadLineReminders: false
 })
 
 // Computed properties
@@ -510,12 +434,31 @@ const subordinateUsers = computed(() => {
   })
 })
 
+// NEW: Dynamic collaborator list based on project selection
 const availableCollaborators = computed(() => {
   const currentUserDept = currentUser.value?.department
-  if (!currentUserDept) return []
+  const currentUserId = currentUser.value?.uid
 
+  if (!currentUserDept || !currentUserId) return []
+
+  // If a project is selected, use project collaborators
+  if (formData.value.projectId) {
+    const projectCollabs = projectCollaboratorsCache.value[formData.value.projectId] || []
+
+    console.log(`🔍 Using project collaborators for ${formData.value.projectId}:`, projectCollabs)
+
+    // Filter out current user and already-added collaborators
+    return props.allUsers.filter(user =>
+      projectCollabs.includes(user.uid) &&
+      user.uid !== currentUserId &&
+      !formData.value.collaborators.includes(user.uid)
+    )
+  }
+
+  // Otherwise, use department users
+  console.log(`🔍 Using department collaborators for ${currentUserDept}`)
   return props.allUsers.filter(user =>
-    user.uid !== currentUser.value?.uid &&
+    user.uid !== currentUserId &&
     user.department === currentUserDept &&
     !formData.value.collaborators.includes(user.uid)
   )
@@ -537,15 +480,32 @@ const availableProjects = computed(() => {
   )
 })
 
-const sortedReminderTimes = computed(() => {
-  return [...formData.value.reminderTimes].sort((a, b) => a - b)
-})
-
 const isFormValid = computed(() => {
   return formData.value.title.trim() &&
     formData.value.deadline > 0 &&
     !Object.keys(errors.value).length
 })
+
+// NEW: Preload project collaborators for all projects
+async function preloadProjectCollaborators() {
+  try {
+    console.log('🔄 Preloading project collaborators...')
+
+    for (const project of projects.value) {
+      // Store collaborators for each project (owner + collaborators)
+      projectCollaboratorsCache.value[project.projectId] = [
+        project.ownerUid,
+        ...(project.collaborators || [])
+      ]
+
+      console.log(`✅ Cached ${projectCollaboratorsCache.value[project.projectId].length} collaborators for project: ${project.title}`)
+    }
+
+    console.log('✅ Project collaborators preloaded:', projectCollaboratorsCache.value)
+  } catch (error) {
+    console.error('⚠️ Error preloading project collaborators:', error)
+  }
+}
 
 // Methods
 async function fetchProjects() {
@@ -555,6 +515,9 @@ async function fetchProjects() {
   try {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${currentUser.value.uid}`)
     projects.value = response.data.projects || []
+
+    // NEW: Preload collaborators after fetching projects
+    await preloadProjectCollaborators()
   } catch (error) {
     console.error('Error fetching projects:', error)
     if (error.response?.status !== 404) {
@@ -579,45 +542,6 @@ function getPriorityDisplayClass(priority) {
   if (p >= 7) return 'priority-display-high'
   if (p >= 4) return 'priority-display-medium'
   return 'priority-display-low'
-}
-
-// NEW: Reminder management functions
-function addReminderTime(days) {
-  if (!formData.value.reminderTimes.includes(days)) {
-    formData.value.reminderTimes.push(days)
-  }
-}
-
-function removeReminderTime(days) {
-  const index = formData.value.reminderTimes.indexOf(days)
-  if (index > -1) {
-    formData.value.reminderTimes.splice(index, 1)
-  }
-}
-
-function addCustomReminder() {
-  if (customReminderDays.value && customReminderDays.value > 0 && customReminderDays.value <= 365) {
-    if (!formData.value.reminderTimes.includes(customReminderDays.value)) {
-      formData.value.reminderTimes.push(customReminderDays.value)
-      customReminderDays.value = null
-    } else {
-      toast.warning('This reminder time is already added')
-    }
-  } else {
-    toast.error('Please enter a valid number of days (1-365)')
-  }
-}
-
-function clearAllReminders() {
-  formData.value.reminderTimes = []
-}
-
-function formatReminderDays(days) {
-  if (days === 1) return '1 day before'
-  if (days === 7) return '1 week before'
-  if (days === 14) return '2 weeks before'
-  if (days === 30) return '1 month before'
-  return `${days} days before`
 }
 
 function handleOwnerChange() {
@@ -823,11 +747,6 @@ function validateForm() {
     }
   }
 
-  // NEW: Validate reminder times
-  if (formData.value.taskDeadLineReminders && formData.value.reminderTimes.length === 0) {
-    errors.value.reminderTimes = 'Please add at least one reminder time or disable reminders'
-  }
-
   return Object.keys(errors.value).length === 0
 }
 
@@ -918,14 +837,11 @@ function resetForm() {
     schedule: 'daily',
     custom_schedule: null,
     start_date: Math.floor(Date.now() / 1000),
-    reminderTimes: [],
-    taskDeadLineReminders: false
   }
   deadlineInput.value = ''
   newAttachments.value = []
   existingAttachments.value = []
   selectedCollaborator.value = ''
-  customReminderDays.value = null
   errors.value = {}
 }
 
@@ -946,8 +862,6 @@ watch(() => props.show, (newVal) => {
         schedule: props.taskData.schedule || 'daily',
         custom_schedule: props.taskData.custom_schedule || null,
         start_date: props.taskData.start_date || Math.floor(Date.now() / 1000),
-        reminderTimes: [...(props.taskData.reminderTimes || [])],
-        taskDeadLineReminders: props.taskData.taskDeadLineReminders || false
       }
       deadlineInput.value = epochToDateTime(props.taskData.deadline)
       existingAttachments.value = props.taskData.attachments || []
@@ -965,6 +879,17 @@ watch(() => props.show, (newVal) => {
 
 watch(deadlineInput, (newVal) => {
   formData.value.deadline = dateTimeToEpoch(newVal)
+})
+
+// NEW: Watch for project selection changes
+watch(() => formData.value.projectId, (newProjectId, oldProjectId) => {
+  if (newProjectId !== oldProjectId) {
+    console.log(`🔄 Project changed from ${oldProjectId || 'none'} to ${newProjectId || 'none'}`)
+    console.log(`📋 Available collaborators updated: ${availableCollaborators.value.length} users`)
+
+    // Optional: Clear selected collaborator when project changes
+    selectedCollaborator.value = ''
+  }
 })
 
 // Initialize users and projects
@@ -986,84 +911,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* NEW: Reminder Options Styles */
-.reminder-options {
-  padding: 1.5rem;
-  background-color: #fef3c7;
-  border: 2px solid #fbbf24;
-  border-radius: 0.75rem;
-  margin-top: 1rem;
-}
-
-.reminder-quick-add {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
-}
-
-.quick-reminder-btn {
-  padding: 0.5rem 1rem;
-  background-color: white;
-  border: 2px solid #d97706;
-  color: #92400e;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.quick-reminder-btn:hover:not(:disabled) {
-  background-color: #fbbf24;
-  color: white;
-  transform: translateY(-1px);
-}
-
-.quick-reminder-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background-color: #f3f4f6;
-  border-color: #d1d5db;
-  color: #9ca3af;
-}
-
-.custom-reminder-input {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.reminder-custom-input {
-  flex: 1;
-}
-
-.add-reminder-btn {
-  padding: 0.75rem 1.5rem;
-  background-color: #f59e0b;
-  color: white;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.add-reminder-btn:hover {
-  background-color: #d97706;
-  transform: translateY(-1px);
-}
-
-.reminder-times-list {
-  margin-top: 1rem;
-}
-
-.reminder-times-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
 .list-title {
   font-size: 0.875rem;
   font-weight: 600;
@@ -1083,30 +930,6 @@ onMounted(async () => {
   background-color: #fee2e2;
 }
 
-.reminder-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.reminder-chip {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.5rem 0.75rem;
-  background-color: white;
-  border: 2px solid #f59e0b;
-  border-radius: 1.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #92400e;
-  transition: all 0.2s ease;
-}
-
-.reminder-chip:hover {
-  background-color: #fffbeb;
-  transform: translateY(-1px);
-}
 
 .chip-icon {
   font-size: 1rem;
@@ -1128,17 +951,6 @@ onMounted(async () => {
   background-color: #fee2e2;
 }
 
-.no-reminders-message {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  background-color: white;
-  border: 2px dashed #d97706;
-  border-radius: 0.5rem;
-  color: #92400e;
-}
-
 .message-icon {
   font-size: 1.5rem;
 }
@@ -1146,16 +958,6 @@ onMounted(async () => {
 .message-text {
   font-size: 0.875rem;
   font-weight: 500;
-}
-
-.reminder-info-box {
-  display: flex;
-  gap: 0.75rem;
-  padding: 1rem;
-  background-color: #fffbeb;
-  border: 1px solid #fcd34d;
-  border-radius: 0.5rem;
-  margin-top: 1rem;
 }
 
 /* Priority Selector Styles */
