@@ -27,6 +27,12 @@ services:
       - name: notification-route
         paths: [/notification]
         strip_path: true
+  - name: comment-service
+    url: http://comment-service:6006
+    routes:
+      - name: comment-route
+        paths: [/comments]
+        strip_path: false
 
 
 plugins:
