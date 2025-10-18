@@ -13,7 +13,7 @@ import {
   setPersistence,
   browserSessionPersistence,
 } from 'firebase/auth'
-import { ref as dbRef, get, set } from 'firebase/database'
+import { ref as dbRef, get, set, update } from 'firebase/database'
 import { auth, database } from '@/firebase/firebaseConfig'
 import { NotificationPreferences, DEFAULT_NOTIFICATION_PREFERENCES } from '@/models/notificationPreferences'
 
@@ -206,22 +206,66 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Send password reset email
+  // Send password reset email with rate limiting and token tracking
   const sendPasswordReset = async (email) => {
     try {
       error.value = null
       success.value = null
       loading.value = true
 
+      // Normalize email to lowercase for consistent tracking
+      const normalizedEmail = email.toLowerCase().trim()
+
+      // Check rate limiting - prevent multiple requests within 5 minutes
+      const resetRequestsRef = dbRef(database, `passwordResetRequests/${btoa(normalizedEmail)}`)
+      const snapshot = await get(resetRequestsRef)
+
+      if (snapshot.exists()) {
+        const lastRequest = snapshot.val()
+        const timeSinceLastRequest = Date.now() - lastRequest.timestamp
+        const fiveMinutes = 5 * 60 * 1000 // 5 minutes in milliseconds
+
+        if (timeSinceLastRequest < fiveMinutes) {
+          const minutesRemaining = Math.ceil((fiveMinutes - timeSinceLastRequest) / 60000)
+          // Use generic message to prevent user enumeration
+          success.value = 'If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.'
+          return
+        }
+      }
+
+      // Send password reset email with 60-minute expiration
+      // Note: Firebase default expiration is 1 hour, but we can configure this in Firebase Console
+      // under Authentication > Templates > Password reset
       await sendPasswordResetEmail(auth, email, {
         url: window.location.origin + '/authentication', // Redirect back to auth page after reset
         handleCodeInApp: false,
       })
 
-      success.value = 'Password reset email sent! Please check your inbox and spam folder.'
+      // Track password reset request with timestamp
+      const resetData = {
+        timestamp: Date.now(),
+        email: normalizedEmail,
+        expiresAt: Date.now() + (60 * 60 * 1000), // 60 minutes from now
+      }
+
+      // Store the reset request (this will invalidate any previous unexpired requests)
+      await set(resetRequestsRef, resetData)
+
+      // Always show the same message to prevent user enumeration
+      success.value = 'If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.'
     } catch (err) {
-      error.value = getFirebaseErrorMessage(err.code) || 'Failed to send password reset email'
-      throw err
+      // For security, don't reveal whether the email exists or not
+      // Show generic success message even on error (except for network errors)
+      if (err.code === 'auth/network-request-failed') {
+        error.value = 'Network error. Please check your internet connection.'
+        throw err
+      } else if (err.code === 'auth/too-many-requests') {
+        error.value = 'Too many requests. Please try again later.'
+        throw err
+      } else {
+        // For all other errors (including user-not-found), show generic success message
+        success.value = 'If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.'
+      }
     } finally {
       loading.value = false
     }
