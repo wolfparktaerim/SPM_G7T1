@@ -2,8 +2,8 @@
 
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-const NOTIFICATION_SERVICE_URL = `${API_BASE_URL}/notification`
+const API_BASE_URL = import.meta.env.VITE_BACKEND_API || 'http://localhost:8000/'
+const NOTIFICATION_SERVICE_URL = `${API_BASE_URL}notification`
 
 /**
  * Get all notifications for a user
