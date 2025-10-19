@@ -113,7 +113,7 @@
           <div class="flex flex-col sm:flex-row gap-4">
             <div class="relative flex-1">
               <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input v-model="searchQuery" placeholder="Search projects by title..."
+              <input v-model="searchQuery" placeholder="Search projects by title or owner name"
                 class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200" />
             </div>
             <select v-model="filterOption"
@@ -597,6 +597,7 @@ const selectedCollaborator = ref('');
 const assignableUsers = ref([]);
 const newlyAddedCollaborators = ref([]);
 const today = new Date().toISOString().split('T')[0] // gives "YYYY-MM-DD"
+const searchQuery = ref('');
 
 // Form state
 const showCreateForm = ref(false);
@@ -623,19 +624,37 @@ function getProjectTasks(projectId) {
 // --- Computed: filter projects based on role ---
 const filterOption = ref('createdAt') // default sort
 const projectsToShow = computed(() => {
-  return [...projects.value].sort((a, b) => {
+  // First, filter by search query
+  let filtered = projects.value;
+  
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim();
+    filtered = filtered.filter(project => {
+      // Search by project title
+      const titleMatch = project.title.toLowerCase().includes(query);
+      
+      // Search by owner name
+      const ownerName = usersMap[project.ownerId]?.name || '';
+      const ownerMatch = ownerName.toLowerCase().includes(query);
+      
+      return titleMatch || ownerMatch;
+    });
+  }
+  
+  // Then, sort the filtered results
+  return [...filtered].sort((a, b) => {
     if (filterOption.value === 'createdAt') {
-      return new Date(a.createdAt) - new Date(b.createdAt)
+      return new Date(a.createdAt) - new Date(b.createdAt);
     }
     if (filterOption.value === 'deadline') {
-      return new Date(a.deadline) - new Date(b.deadline)
+      return new Date(a.deadline) - new Date(b.deadline);
     }
     if (filterOption.value === 'title') {
-      return a.title.localeCompare(b.title)
+      return a.title.localeCompare(b.title);
     }
-    return 0
-  })
-})
+    return 0;
+  });
+});
 
 async function fetchAllUsers() {
   try {
