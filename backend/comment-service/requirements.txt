@@ -1,4 +1,4 @@
-# backend/task-service/requirements.txt
+# backend/comment-service/requirements.txt
 
 flask
 flask_cors

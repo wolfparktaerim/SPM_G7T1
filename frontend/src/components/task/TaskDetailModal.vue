@@ -313,6 +313,15 @@
         </button>
       </div>
     </div>
+
+
+    <!-- Comment Section -->
+    <div class="section">
+      <CommentSection :parent-id="isSubtask ? taskData.subtaskId : taskData.taskId"
+        :parent-type="isSubtask ? 'subtask' : 'task'" :current-user-id="currentUserId" :all-users="allUsers"
+        :collaborators="taskData?.collaborators || []" @thread-created="handleCommentThreadCreated"
+        @thread-updated="handleCommentThreadUpdated" @thread-resolved="handleCommentThreadResolved" />
+    </div>
   </div>
 </template>
 
@@ -340,6 +349,8 @@ import {
   Zap,
   Repeat
 } from 'lucide-vue-next'
+
+import CommentSection from './CommentSection.vue'
 
 const props = defineProps({
   show: {
@@ -581,7 +592,7 @@ function downloadAttachment(attachment, index) {
   try {
     // Remove data URL prefix if present
     const base64Data = attachment.replace(/^data:.*?;base64,/, '')
-    
+
     // Decode base64 to binary
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
@@ -591,13 +602,13 @@ function downloadAttachment(attachment, index) {
     }
 
     const byteArray = new Uint8Array(byteNumbers)
-    
+
     // Detect MIME type and extension from file signature
     const { mimeType, extension } = detectFileType(byteArray, attachment)
-    
+
     // Create blob with proper MIME type
     const blob = new Blob([byteArray], { type: mimeType })
-    
+
     // Generate filename
     const filename = getAttachmentName(attachment, index) + '.' + extension
 
@@ -625,58 +636,58 @@ function detectFileType(byteArray, base64String) {
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
     .toUpperCase()
-  
+
   // Check base64 string prefix for quicker detection
   const prefix = base64String.substring(0, 20)
-  
+
   // PDF: starts with %PDF (hex: 25 50 44 46)
   if (header.startsWith('25504446') || prefix.startsWith('JVBERi0')) {
     return { mimeType: 'application/pdf', extension: 'pdf' }
   }
-  
+
   // PNG: starts with PNG signature (89 50 4E 47)
   if (header.startsWith('89504E47') || prefix.startsWith('iVBORw0KGgo')) {
     return { mimeType: 'image/png', extension: 'png' }
   }
-  
+
   // JPEG: starts with FF D8 FF
   if (header.startsWith('FFD8FF') || prefix.startsWith('/9j/')) {
     return { mimeType: 'image/jpeg', extension: 'jpg' }
   }
-  
+
   // ZIP-based formats (DOCX, XLSX): start with PK (50 4B)
   if (header.startsWith('504B0304') || header.startsWith('504B0506') || prefix.startsWith('UEs')) {
     // Check for Office Open XML formats
     const text = String.fromCharCode(...byteArray.slice(0, 200))
-    
+
     if (text.includes('word/') || text.includes('document.xml')) {
-      return { 
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-        extension: 'docx' 
+      return {
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        extension: 'docx'
       }
     }
-    
+
     if (text.includes('xl/') || text.includes('workbook.xml')) {
-      return { 
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
-        extension: 'xlsx' 
+      return {
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        extension: 'xlsx'
       }
     }
-    
+
     // Generic ZIP
     return { mimeType: 'application/zip', extension: 'zip' }
   }
-  
+
   // Old Word doc format: D0 CF 11 E0
   if (header.startsWith('D0CF11E0')) {
     return { mimeType: 'application/msword', extension: 'doc' }
   }
-  
+
   // CSV/TXT: Check if all characters are printable ASCII/UTF-8
   const sample = byteArray.slice(0, 512)
   let isPrintable = true
   let hasCommas = false
-  
+
   for (let i = 0; i < sample.length; i++) {
     const byte = sample[i]
     if ((byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) || byte === 127) {
@@ -685,20 +696,20 @@ function detectFileType(byteArray, base64String) {
     }
     if (byte === 44) hasCommas = true // comma character
   }
-  
+
   if (isPrintable) {
     if (hasCommas) {
       return { mimeType: 'text/csv', extension: 'csv' }
     }
     return { mimeType: 'text/plain', extension: 'txt' }
   }
-  
+
   // GIF: starts with GIF89a or GIF87a
-  if (header.startsWith('474946383961') || header.startsWith('474946383761') || 
-      prefix.startsWith('R0lGOD')) {
+  if (header.startsWith('474946383961') || header.startsWith('474946383761') ||
+    prefix.startsWith('R0lGOD')) {
     return { mimeType: 'image/gif', extension: 'gif' }
   }
-  
+
   // Default fallback
   return { mimeType: 'application/octet-stream', extension: 'bin' }
 }

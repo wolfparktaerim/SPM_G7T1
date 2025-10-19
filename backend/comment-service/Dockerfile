@@ -1,4 +1,4 @@
-# backend/task-service/Dockerfile
+# backend/comment-service/Dockerfile
 
 # Use an official Python runtime as base image
 FROM python:3.12-slim
