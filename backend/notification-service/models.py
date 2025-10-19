@@ -80,6 +80,7 @@ class NotificationPreferences:
     enabled: bool
     task_deadline_reminders: bool
     task_update_reminders: bool
+    task_comment_notifications: bool
     channel: str
     reminder_times: list
 
@@ -90,6 +91,7 @@ class NotificationPreferences:
             enabled=data.get("enabled", False),
             task_deadline_reminders=data.get("taskDeadlineReminders", False),
             task_update_reminders=data.get("taskUpdateReminders", True),
+            task_comment_notifications=data.get("taskCommentNotifications", True),
             channel=data.get("channel", "both"),
             reminder_times=data.get("reminderTimes", [])
         )

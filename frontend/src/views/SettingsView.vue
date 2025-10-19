@@ -56,11 +56,11 @@
               </button>
             </div>
 
-            <!-- Task Update Reminders Toggle -->
+            <!-- Task Status Updates Toggle -->
             <div class="flex items-center justify-between pb-6 border-b border-gray-200">
               <div class="flex-1">
                 <label class="block text-base font-semibold text-gray-900">
-                  Task Update Reminders
+                  Task Status Updates
                 </label>
                 <p class="text-sm text-gray-500 mt-1">
                   Receive notifications when assigned task status changes
@@ -69,10 +69,34 @@
               <button @click="toggleTaskUpdateReminders" type="button"
                 class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 :class="preferences.taskUpdateReminders ? 'bg-blue-600' : 'bg-gray-200'">
-                <span class="sr-only">Enable task update reminders</span>
+                <span class="sr-only">Enable task status updates</span>
                 <span
                   class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
                   :class="preferences.taskUpdateReminders ? 'translate-x-5' : 'translate-x-0'">
+                </span>
+              </button>
+            </div>
+
+            <!-- Task Comment Alerts Toggle -->
+            <div class="flex items-center justify-between pb-6 border-b border-gray-200">
+              <div class="flex-1">
+                <label class="block text-base font-semibold text-gray-900">
+                  Task Comment Alerts
+                </label>
+                <p class="text-sm text-gray-500 mt-1">
+                  Receive notifications when new comments are added to your assigned tasks
+                </p>
+                <p class="text-xs text-amber-600 mt-2 font-medium">
+                  Note: Notifications for comments where you are mentioned are mandatory and cannot be disabled
+                </p>
+              </div>
+              <button @click="toggleTaskCommentNotifications" type="button"
+                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                :class="preferences.taskCommentNotifications ? 'bg-blue-600' : 'bg-gray-200'">
+                <span class="sr-only">Enable task comment alerts</span>
+                <span
+                  class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                  :class="preferences.taskCommentNotifications ? 'translate-x-5' : 'translate-x-0'">
                 </span>
               </button>
             </div>
@@ -359,6 +383,14 @@ const toggleNotifications = () => {
  */
 const toggleTaskUpdateReminders = () => {
   preferences.taskUpdateReminders = !preferences.taskUpdateReminders
+  savePreferences()
+}
+
+/**
+ * Toggle task comment notifications on/off
+ */
+const toggleTaskCommentNotifications = () => {
+  preferences.taskCommentNotifications = !preferences.taskCommentNotifications
   savePreferences()
 }
 
