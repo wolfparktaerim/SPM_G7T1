@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['uid', 'email', 'name', 'role', 'department'])"
+      }
+    },
+    "projects": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "tasks": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "subtasks": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "notifications": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "notificationPreferences": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['userId', 'emailNotifications', 'inAppNotifications'])"
+      }
+    },
+    "passwordResetRequests": {
+      ".read": false,
+      ".write": true,
+      "$emailHash": {
+        ".validate": "newData.hasChildren(['timestamp', 'email', 'expiresAt']) && newData.child('timestamp').isNumber() && newData.child('expiresAt').isNumber() && newData.child('email').isString()"
+      }
+    }
+  }
+}

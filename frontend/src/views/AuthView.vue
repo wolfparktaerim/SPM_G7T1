@@ -206,7 +206,7 @@
                 </div>
               </div>
               <p class="mt-2 text-xs font-medium" :class="getStrengthTextColor(passwordStrength)">
-                {{ getStrengthText(passwordStrength) }}
+                {{ getStrengthDescription(passwordStrength) }}
               </p>
             </div>
           </div>
@@ -346,6 +346,12 @@ import { usersService } from '@/services/users.js'
 import { DEPARTMENTS } from '@/models/user.js'
 import { useToast } from 'vue-toastification'
 import {
+  calculatePasswordStrength,
+  getStrengthDescription,
+  getStrengthColor,
+  getStrengthTextColor,
+} from '@/utils/passwordPolicy.js'
+import {
   Building,
   Building2,
   Crown,
@@ -403,22 +409,9 @@ const displayError = computed(() => {
   return authStore.error
 })
 
-// Password strength calculation
+// Password strength calculation using password policy utility
 const passwordStrength = computed(() => {
-  const pwd = password.value
-  if (!pwd) return 0
-
-  // If password is less than 8 characters, it's always weak (strength 1)
-  if (pwd.length < 8) return 1
-
-  let strength = 0
-  if (pwd.length >= 8) strength++
-  if (/[A-Z]/.test(pwd)) strength++
-  if (/[a-z]/.test(pwd)) strength++
-  if (/\d/.test(pwd)) strength++
-  if (/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) strength++
-
-  return Math.min(strength, 4)
+  return calculatePasswordStrength(password.value)
 })
 
 // Form validation
@@ -468,26 +461,8 @@ const setMode = (newMode) => {
   authStore.clearMessages()
 }
 
-const getStrengthColor = (strength) => {
-  if (strength <= 1) return 'bg-red-400'
-  if (strength <= 2) return 'bg-yellow-400'
-  if (strength <= 3) return 'bg-blue-400'
-  return 'bg-green-400'
-}
-
-const getStrengthTextColor = (strength) => {
-  if (strength <= 1) return 'text-red-600'
-  if (strength <= 2) return 'text-yellow-600'
-  if (strength <= 3) return 'text-blue-600'
-  return 'text-green-600'
-}
-
-const getStrengthText = (strength) => {
-  if (strength <= 1) return 'Weak password'
-  if (strength <= 2) return 'Fair password'
-  if (strength <= 3) return 'Good password'
-  return 'Strong password'
-}
+// These functions are now imported from passwordPolicy.js
+// No need to redefine them here
 
 const clearForgotPasswordState = () => {
   forgotPasswordEmail.value = ''
