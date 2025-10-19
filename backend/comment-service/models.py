@@ -54,15 +54,14 @@ class CreateCommentRequest:
 
 @dataclass
 class UpdateCommentRequest:
-    """Request model for updating a comment thread"""
+    """Request model for adding a reply to a comment thread"""
     type: str
     parent_id: str
     thread_index: int
-    comment: Optional[str] = None
-    user_id: Optional[str] = None
-    creation_date: Optional[int] = None
+    comment: str
+    user_id: str
+    creation_date: int
     mention: Optional[List[str]] = None
-    active: Optional[bool] = None
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -70,11 +69,10 @@ class UpdateCommentRequest:
             type=data.get("type", ""),
             parent_id=data.get("parentId", ""),
             thread_index=data.get("threadIndex", -1),
-            comment=data.get("comment"),
-            user_id=data.get("userId"),
-            creation_date=data.get("creationDate"),
-            mention=data.get("mention"),
-            active=data.get("active")
+            comment=data.get("comment", ""),
+            user_id=data.get("userId", ""),
+            creation_date=data.get("creationDate", 0),
+            mention=data.get("mention")
         )
     
     def validate(self):
@@ -86,16 +84,12 @@ class UpdateCommentRequest:
             errors.append("parentId is required")
         if self.thread_index < 0:
             errors.append("threadIndex is required and must be >= 0")
-        
-        # If adding a new comment, all comment fields are required
-        if self.comment is not None or self.user_id is not None or self.creation_date is not None:
-            if not self.comment or not self.comment.strip():
-                errors.append("comment cannot be empty when adding a reply")
-            if not self.user_id:
-                errors.append("userId is required when adding a reply")
-            if not self.creation_date:
-                errors.append("creationDate is required when adding a reply")
-        
+        if not self.comment or not self.comment.strip():
+            errors.append("comment is required and cannot be empty")
+        if not self.user_id:
+            errors.append("userId is required")
+        if not self.creation_date:
+            errors.append("creationDate is required")
         return errors
     
     def to_dict(self):
@@ -103,16 +97,45 @@ class UpdateCommentRequest:
         result = {
             'type': self.type,
             'parent_id': self.parent_id,
-            'thread_index': self.thread_index
+            'thread_index': self.thread_index,
+            'comment': self.comment,
+            'user_id': self.user_id,
+            'creation_date': self.creation_date
         }
-        if self.comment is not None:
-            result['comment'] = self.comment
-        if self.user_id is not None:
-            result['user_id'] = self.user_id
-        if self.creation_date is not None:
-            result['creation_date'] = self.creation_date
         if self.mention is not None:
             result['mention'] = self.mention
-        if self.active is not None:
-            result['active'] = self.active
         return result
+
+@dataclass
+class ArchiveCommentRequest:
+    """Request model for archiving a comment thread"""
+    type: str
+    parent_id: str
+    thread_index: int
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            type=data.get("type", ""),
+            parent_id=data.get("parentId", ""),
+            thread_index=data.get("threadIndex", -1)
+        )
+    
+    def validate(self):
+        """Validate archive comment request"""
+        errors = []
+        if self.type not in ["task", "subtask"]:
+            errors.append("type must be either 'task' or 'subtask'")
+        if not self.parent_id:
+            errors.append("parentId is required")
+        if self.thread_index < 0:
+            errors.append("threadIndex is required and must be >= 0")
+        return errors
+    
+    def to_dict(self):
+        """Convert to dictionary for service layer"""
+        return {
+            'type': self.type,
+            'parent_id': self.parent_id,
+            'thread_index': self.thread_index
+        }

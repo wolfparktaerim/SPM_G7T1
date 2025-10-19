@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from shared import init_firebase, validate_epoch_timestamp
 from comment_service import CommentService
-from models import CreateCommentRequest, UpdateCommentRequest
+from models import CreateCommentRequest, UpdateCommentRequest, ArchiveCommentRequest
 
 app = Flask(__name__)
 CORS(app)
@@ -53,7 +53,7 @@ def create_comment():
 
 @app.route("/comments", methods=["PUT"])
 def update_comment():
-    """Update an existing comment thread (add reply or change status)"""
+    """Add a reply to an existing comment thread"""
     data = request.get_json()
     
     if not data:
@@ -66,7 +66,7 @@ def update_comment():
         return jsonify(error=f"Validation failed: {', '.join(errors)}"), 400
     
     # Additional validations
-    if req.creation_date is not None and not validate_epoch_timestamp(req.creation_date):
+    if not validate_epoch_timestamp(req.creation_date):
         return jsonify(error="creationDate must be a valid epoch timestamp"), 400
     
     if req.mention is not None:
@@ -79,7 +79,31 @@ def update_comment():
         return jsonify(error=error), 400
     
     return jsonify(
-        message="Comment thread updated successfully",
+        message="Reply added successfully",
+        commentThread=comment_thread
+    ), 200
+
+@app.route("/comments/archive", methods=["PUT"])
+def archive_comment():
+    """Archive a comment thread by setting active to False"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify(error="Missing JSON body"), 400
+    
+    req = ArchiveCommentRequest.from_dict(data)
+    errors = req.validate()
+    
+    if errors:
+        return jsonify(error=f"Validation failed: {', '.join(errors)}"), 400
+    
+    comment_thread, error = comment_service.archive_comment_thread(req.to_dict())
+    
+    if error:
+        return jsonify(error=error), 400
+    
+    return jsonify(
+        message="Comment thread archived successfully",
         commentThread=comment_thread
     ), 200
 

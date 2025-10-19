@@ -89,6 +89,9 @@ components:
         - type
         - parentId
         - threadIndex
+        - comment
+        - userId
+        - creationDate
       properties:
         type:
           type: string
@@ -102,20 +105,20 @@ components:
         threadIndex:
           type: integer
           minimum: 0
-          description: Index of the comment thread to update
+          description: Index of the comment thread to add reply to
           example: 0
         comment:
           type: string
-          description: Comment text for adding a reply (optional)
+          description: Comment text for the reply
           example: "I'll verify this now"
         userId:
           type: string
-          description: User ID for adding a reply (required if adding comment)
+          description: User ID for the reply
           example: "Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"
         creationDate:
           type: number
           format: int64
-          description: Timestamp for the reply (required if adding comment)
+          description: Timestamp for the reply
           example: 1727096400
         mention:
           type: array
@@ -123,10 +126,28 @@ components:
             type: string
           description: Additional mentions for the reply (optional)
           example: ["user_789"]
-        active:
-          type: boolean
-          description: Update the active status of the thread (optional)
-          example: false
+
+    ArchiveCommentRequest:
+      type: object
+      required:
+        - type
+        - parentId
+        - threadIndex
+      properties:
+        type:
+          type: string
+          enum: [task, subtask]
+          description: Type of parent entity
+          example: "task"
+        parentId:
+          type: string
+          description: ID of the parent task or subtask
+          example: "-ObqP3PlcdaKb_2J9UbQ"
+        threadIndex:
+          type: integer
+          minimum: 0
+          description: Index of the comment thread to archive
+          example: 0
 
     ErrorResponse:
       type: object
@@ -201,8 +222,8 @@ paths:
                     error: "creationDate must be a valid epoch timestamp"
 
     put:
-      summary: Update a comment thread
-      description: Add a reply to an existing comment thread or update its active status
+      summary: Add a reply to a comment thread
+      description: Add a new comment reply to an existing comment thread and optionally update mentions
       requestBody:
         required: true
         content:
@@ -211,7 +232,7 @@ paths:
               $ref: "#/components/schemas/UpdateCommentRequest"
             examples:
               addReply:
-                summary: Add a reply to thread
+                summary: Add a simple reply
                 value:
                   type: "task"
                   parentId: "-ObqP3PlcdaKb_2J9UbQ"
@@ -219,13 +240,6 @@ paths:
                   comment: "I'll verify this now"
                   userId: "Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"
                   creationDate: 1727096400
-              updateStatus:
-                summary: Update thread active status
-                value:
-                  type: "task"
-                  parentId: "-ObqP3PlcdaKb_2J9UbQ"
-                  threadIndex: 0
-                  active: false
               addReplyWithMention:
                 summary: Add reply with new mentions
                 value:
@@ -238,7 +252,7 @@ paths:
                   mention: ["user_789"]
       responses:
         "200":
-          description: Comment thread updated successfully
+          description: Reply added successfully
           content:
             application/json:
               schema:
@@ -246,7 +260,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: "Comment thread updated successfully"
+                    example: "Reply added successfully"
                   commentThread:
                     $ref: "#/components/schemas/CommentThread"
         "400":
@@ -261,7 +275,67 @@ paths:
                     error: "Invalid thread_index: 5"
                 missingFields:
                   value:
-                    error: "Validation failed: userId is required when adding a reply"
+                    error: "Validation failed: comment is required and cannot be empty"
+        "404":
+          description: Parent task/subtask not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: "Task not found"
+
+  /comments/archive:
+    put:
+      summary: Archive a comment thread
+      description: Set the active status of a comment thread to False
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveCommentRequest"
+            examples:
+              archiveTask:
+                summary: Archive task comment thread
+                value:
+                  type: "task"
+                  parentId: "-ObqP3PlcdaKb_2J9UbQ"
+                  threadIndex: 0
+              archiveSubtask:
+                summary: Archive subtask comment thread
+                value:
+                  type: "subtask"
+                  parentId: "subtask_xyz"
+                  threadIndex: 2
+      responses:
+        "200":
+          description: Comment thread archived successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Comment thread archived successfully"
+                  commentThread:
+                    $ref: "#/components/schemas/CommentThread"
+        "400":
+          description: Invalid input data or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidIndex:
+                  value:
+                    error: "Invalid thread_index: 5"
+                missingField:
+                  value:
+                    error: "Validation failed: parentId is required"
         "404":
           description: Parent task/subtask not found
           content:
@@ -316,9 +390,9 @@ paths:
                           - ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2", "I'll verify this now", 1727096400]
                         mention: ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"]
                         creation_date: 1727092800
-                      - active: true
+                      - active: false
                         comments:
-                          - ["user_789", "Another comment thread", 1727100000]
+                          - ["user_789", "Archived comment thread", 1727100000]
                         mention: []
                         creation_date: 1727100000
                 emptyThreads:
