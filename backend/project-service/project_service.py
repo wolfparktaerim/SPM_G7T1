@@ -49,7 +49,8 @@ class ProjectService:
             description=req.description,
             deadline=req.deadline,
             creation_date=current_timestamp(),
-            department=department
+            department=department,
+            archived = False
         )
         
         new_proj_ref.set(project.to_dict())
@@ -72,14 +73,16 @@ class ProjectService:
         return filtered
     
     def get_user_projects(self, user_id):
-        """Get projects for a user (owner or collaborator)"""
+        """Get projects for a user (owner or collaborator) - excluding archived"""
         all_projects = self.projects_ref.get() or {}
         
         filtered = [
             Project.from_dict(p) for p in all_projects.values()
-            if user_id == p.get("ownerId") or user_id in p.get("collaborators", [])
+            if (user_id == p.get("ownerId") or user_id in p.get("collaborators", []))
+            and not p.get("archived", False)
         ]
         return filtered
+
     
     def get_available_users_for_collaboration(self, project_id):
         """Get users available for collaboration (not already collaborating)"""
@@ -204,3 +207,52 @@ class ProjectService:
         })
         
         return Project.from_dict(project_ref.get()), None
+    
+    def archive_project(self, user_id, project_id):
+        """Archive a project (owner only)"""
+        project_ref = self.projects_ref.child(project_id)
+        project_data = project_ref.get()
+        
+        if not project_data:
+            return None, "Project not found"
+        
+        # Check if user is the owner
+        if project_data.get("ownerId") != user_id:
+            return None, "Only the project owner can archive this project"
+        
+        # Update archived status
+        project_ref.update({"archived": True})
+        
+        # Return updated project
+        updated_data = project_ref.get()
+        return Project.from_dict(updated_data), None
+    
+    def unarchive_project(self, user_id, project_id):
+        """Unarchive a project (owner only)"""
+        project_ref = self.projects_ref.child(project_id)
+        project_data = project_ref.get()
+        
+        if not project_data:
+            return None, "Project not found"
+        
+        # Check if user is the owner
+        if project_data.get("ownerId") != user_id:
+            return None, "Only the project owner can unarchive this project"
+        
+        # Update archived status
+        project_ref.update({"archived": False})
+        
+        # Return updated project
+        updated_data = project_ref.get()
+        return Project.from_dict(updated_data), None
+    
+    def get_archived_projects(self, user_id):
+        """Get all archived projects where user is owner"""
+        all_projects = self.projects_ref.get() or {}
+        
+        # Only owners can see archived projects
+        filtered = [
+            Project.from_dict(p) for p in all_projects.values()
+            if p.get("ownerId") == user_id and p.get("archived", False)
+        ]
+        return filtered
