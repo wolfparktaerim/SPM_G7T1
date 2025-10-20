@@ -293,7 +293,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   CheckSquare, User, Settings, LogOut, ChevronDown, ChevronRight,
@@ -304,6 +304,7 @@ import NotificationCard from '@/components/NotificationCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import { notificationService } from '@/services/notificationService'
+import { useNotificationEvents } from '@/composables/useNotificationEvents'
 
 // Auth store
 const authStore = useAuthStore()
@@ -314,6 +315,9 @@ const router = useRouter()
 
 // Toast composable
 const toast = useToast()
+
+// Notification events composable
+const { onNotificationUpdate } = useNotificationEvents()
 
 // State
 const showUserMenu = ref(false)
@@ -504,6 +508,12 @@ const handleClickOutside = (event) => {
     showMobileMenu.value = false
   }
 }
+
+// Watch for notification update events
+watch(onNotificationUpdate(), () => {
+  // Refresh the notification count when an event is triggered
+  fetchUnreadCount()
+})
 
 // Lifecycle
 onMounted(() => {
