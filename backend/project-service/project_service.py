@@ -62,13 +62,14 @@ class ProjectService:
         return [Project.from_dict(p) for p in all_projects.values()]
     
     def get_projects_by_department(self, department):
-        """Get projects by department"""
+        """Get projects by department - excluding archived"""
         all_projects = self.projects_ref.get() or {}
         dept_lower = (department or "unknown").lower()
         
         filtered = [
             Project.from_dict(p) for p in all_projects.values()
             if (p.get("department") or "unknown").lower() == dept_lower
+            and not p.get("archived", False)
         ]
         return filtered
     
