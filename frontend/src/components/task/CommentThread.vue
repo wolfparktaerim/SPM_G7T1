@@ -49,7 +49,7 @@
     <!-- Initial Comment -->
     <div class="ml-[52px]">
       <div class="text-gray-700 text-base leading-relaxed whitespace-pre-wrap break-words mb-3">{{ thread.comments[0][1]
-      }}</div>
+        }}</div>
       <div v-if="thread.mention && thread.mention.length > 0"
         class="flex items-start gap-2 px-3 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl text-xs text-blue-900">
         <Users class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -230,6 +230,10 @@ const props = defineProps({
   collaborators: {
     type: Array,
     default: () => []
+  },
+  isResolved: {
+    type: Boolean,
+    default: false
   }
 })
 

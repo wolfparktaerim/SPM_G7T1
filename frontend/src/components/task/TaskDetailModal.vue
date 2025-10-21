@@ -82,8 +82,8 @@
               </div>
             </div>
 
-            <!-- Priority Display (Tasks only) -->
-            <div v-if="!isSubtask && taskData?.priority" class="info-item">
+            <!-- Priority Display (for both tasks AND subtasks) -->
+            <div v-if="taskData?.priority" class="info-item">
               <label class="info-label">
                 <Zap class="w-4 h-4" />
                 Priority
@@ -317,10 +317,12 @@
 
     <!-- Comment Section -->
     <div class="section">
-      <CommentSection :parent-id="isSubtask ? taskData.subtaskId : taskData.taskId"
-        :parent-type="isSubtask ? 'subtask' : 'task'" :current-user-id="currentUserId" :all-users="allUsers"
-        :collaborators="taskData?.collaborators || []" @thread-created="handleCommentThreadCreated"
-        @thread-updated="handleCommentThreadUpdated" @thread-resolved="handleCommentThreadResolved" />
+      <CommentSection
+        :key="`comment-${isSubtask ? 'subtask' : 'task'}-${isSubtask ? taskData?.subtaskId : taskData?.taskId}`"
+        :parent-id="isSubtask ? taskData.subTaskId : taskData.taskId" :parent-type="isSubtask ? 'subtask' : 'task'"
+        :current-user-id="currentUserId" :all-users="allUsers" :collaborators="taskData?.collaborators || []"
+        @thread-created="handleCommentThreadCreated" @thread-updated="handleCommentThreadUpdated"
+        @thread-resolved="handleCommentThreadResolved" />
     </div>
   </div>
 </template>

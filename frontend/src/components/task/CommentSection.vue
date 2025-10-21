@@ -14,7 +14,7 @@
       </div>
     </div>
 
-    <!-- New Comment Input - Moved to Top -->
+    <!-- New Comment Input  -->
     <div class="border-b-2 border-gray-200 px-6 py-5 bg-white flex-shrink-0 relative">
       <div class="flex justify-between items-center mb-4">
         <h4 class="flex items-center gap-2 text-base font-semibold text-gray-700 m-0">
@@ -91,29 +91,91 @@
       </div>
     </div>
 
+    <!-- Tab Navigation (NEW) -->
+    <div class="flex border-b-2 border-gray-200 bg-white px-6 flex-shrink-0">
+      <button @click="activeTab = 'active'" :class="[
+        'px-4 py-3 font-semibold text-sm transition-all duration-200 border-b-2 -mb-[2px]',
+        activeTab === 'active'
+          ? 'text-blue-600 border-blue-600'
+          : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
+      ]">
+        <div class="flex items-center gap-2">
+          <MessageCircle class="w-4 h-4" />
+          <span>Active</span>
+          <span class="px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full text-xs font-bold">
+            {{ activeThreads.length }}
+          </span>
+        </div>
+      </button>
+      <button @click="activeTab = 'resolved'" :class="[
+        'px-4 py-3 font-semibold text-sm transition-all duration-200 border-b-2 -mb-[2px]',
+        activeTab === 'resolved'
+          ? 'text-green-600 border-green-600'
+          : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
+      ]">
+        <div class="flex items-center gap-2">
+          <CheckCircle class="w-4 h-4" />
+          <span>Resolved</span>
+          <span class="px-2 py-0.5 bg-green-100 text-green-600 rounded-full text-xs font-bold">
+            {{ resolvedThreads.length }}
+          </span>
+        </div>
+      </button>
+    </div>
+
     <!-- Scrollable Comments Container -->
     <div class="flex-1 overflow-y-auto px-6 py-6 max-h-[calc(75vh-300px)] min-h-[200px]" ref="commentsContainerRef">
-      <!-- Active Comment Threads -->
-      <div v-if="activeThreads.length > 0" class="flex flex-col gap-4">
-        <CommentThread v-for="(thread, index) in activeThreads" :key="index" :thread="thread" :thread-index="index"
-          :parent-id="parentId" :parent-type="parentType" :current-user-id="currentUserId" :all-users="allUsers"
-          :collaborators="collaboratorUsers" @reply-added="handleReplyAdded" @thread-resolved="handleThreadResolved" />
+      <!-- Loading State -->
+      <div v-if="isLoading" class="flex flex-col items-center justify-center px-8 py-16 h-full">
+        <div class="relative mb-6">
+          <div class="w-16 h-16 border-4 border-gray-200 rounded-full"></div>
+          <div
+            class="absolute top-0 left-0 w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin">
+          </div>
+        </div>
+        <p class="text-lg font-semibold text-gray-700 mb-2">Loading comments...</p>
+        <p class="text-sm text-gray-500">Please wait while we fetch the discussion</p>
       </div>
 
-      <!-- Empty State -->
-      <div v-else class="flex flex-col items-center justify-center px-8 py-16 text-center h-full">
-        <div class="mb-6 p-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full">
-          <MessageCircle class="w-16 h-16 text-gray-300" />
+      <!-- Active Tab Content (NEW) -->
+      <div v-else-if="activeTab === 'active'">
+        <div v-if="activeThreads.length > 0" class="flex flex-col gap-4">
+          <CommentThread v-for="(thread, index) in activeThreads" :key="index" :thread="thread" :thread-index="index"
+            :parent-id="parentId" :parent-type="parentType" :current-user-id="currentUserId" :all-users="allUsers"
+            :collaborators="collaboratorUsers" @reply-added="handleReplyAdded"
+            @thread-resolved="handleThreadResolved" />
         </div>
-        <p class="text-xl font-semibold text-gray-700 mb-2">No comments yet</p>
-        <p class="text-base text-gray-600 max-w-xs">Start a conversation to collaborate with your team</p>
+        <div v-else class="flex flex-col items-center justify-center px-8 py-16 text-center h-full">
+          <div class="mb-6 p-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full">
+            <MessageCircle class="w-16 h-16 text-gray-300" />
+          </div>
+          <p class="text-xl font-semibold text-gray-700 mb-2">No active comments</p>
+          <p class="text-base text-gray-600 max-w-xs">Start a conversation to collaborate with your team</p>
+        </div>
+      </div>
+
+      <!-- Resolved Tab Content (NEW) -->
+      <div v-else-if="activeTab === 'resolved'">
+        <div v-if="resolvedThreads.length > 0" class="flex flex-col gap-4">
+          <CommentThread v-for="(thread, index) in resolvedThreads" :key="index" :thread="thread"
+            :thread-index="getOriginalThreadIndex(thread)" :parent-id="parentId" :parent-type="parentType"
+            :current-user-id="currentUserId" :all-users="allUsers" :collaborators="collaboratorUsers"
+            :is-resolved="true" @reply-added="handleReplyAdded" @thread-resolved="handleThreadResolved" />
+        </div>
+        <div v-else class="flex flex-col items-center justify-center px-8 py-16 text-center h-full">
+          <div class="mb-6 p-6 bg-gradient-to-br from-green-100 to-green-200 rounded-full">
+            <CheckCircle class="w-16 h-16 text-green-300" />
+          </div>
+          <p class="text-xl font-semibold text-gray-700 mb-2">No resolved comments</p>
+          <p class="text-base text-gray-600 max-w-xs">Resolved conversations will appear here</p>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import axios from 'axios'
 import {
@@ -125,7 +187,8 @@ import {
   AtSign,
   Users,
   X,
-  Building2
+  Building2,
+  CheckCircle
 } from 'lucide-vue-next'
 import CommentThread from './CommentThread.vue'
 
@@ -154,7 +217,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['thread-created', 'thread-updated', 'thread-resolved'])
-
+const activeTab = ref('active') // 'active' or 'resolved'
 // Composables
 const toast = useToast()
 
@@ -178,6 +241,10 @@ const mentionDropdownTop = ref('auto')
 // Computed
 const activeThreads = computed(() => {
   return commentThreads.value.filter(thread => thread.active !== false)
+})
+
+const resolvedThreads = computed(() => {
+  return commentThreads.value.filter(thread => thread.active === false)
 })
 
 // Get full user objects for collaborators (excluding current user)
@@ -322,6 +389,11 @@ function removeMention(userId) {
   toast.info(`Removed mention: ${getUserDisplayName(userId)}`)
 }
 
+function getOriginalThreadIndex(thread) {
+  // Find the original index in the full commentThreads array
+  return commentThreads.value.findIndex(t => t === thread)
+}
+
 async function submitComment() {
   if (!canSubmitComment.value) return
 
@@ -398,12 +470,30 @@ function getInitials(name) {
     .substring(0, 2)
 }
 
-// Watchers
-watch(() => props.parentId, () => {
-  if (props.parentId) {
-    fetchComments()
-  }
-}, { immediate: true })
+watch(
+  () => [props.parentId, props.parentType],
+  () => {
+    // Clear state
+    commentThreads.value = []
+    newComment.value = ''
+    mentionedUserIds.value = []
+    showMentionDropdown.value = false
+    activeTab.value = 'active'
+
+    // Fetch if valid
+    if (props.parentId && props.parentType) {
+      fetchComments()
+    }
+  },
+  { immediate: true }
+)
+
+// Clean up on unmount
+onUnmounted(() => {
+  commentThreads.value = []
+  newComment.value = ''
+  mentionedUserIds.value = []
+})
 
 // Lifecycle
 onMounted(() => {
