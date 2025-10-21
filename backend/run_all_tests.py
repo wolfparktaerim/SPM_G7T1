@@ -36,6 +36,8 @@ def run_tests_for_service(service_path):
         test_file = "test_task.py"
     elif service_name == "subtask-service":
         test_file = "test_subtask.py"
+    elif service_name == "comment-service":
+        test_file = "test_comment.py"
     else:
         print(f"Warning: Unknown service {service_name}")
         return False
@@ -85,7 +87,8 @@ def main():
         'notification-service',
         'project-service',
         'task-service',
-        'subtask-service'
+        'subtask-service',
+        'comment-service'
     ]
     
     root = Path(__file__).parent

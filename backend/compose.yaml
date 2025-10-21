@@ -12,6 +12,7 @@ services:
       - TASK_SERVICE_URL=http://task-service:6002
       - SUBTASK_SERVICE_URL=http://subtask-service:6003
       - NOTIFICATION_SERVICE_URL=http://notification-service:6004
+      - COMMENT_SERVICE_URL=http://comment-service:6006
     command: >
       sh -c "
         apk add --no-cache gettext &&
@@ -101,3 +102,14 @@ services:
       SMTP_PASSWORD: "${SMTP_PASSWORD}"
       FROM_EMAIL: "${FROM_EMAIL}"
       FROM_NAME: "${FROM_NAME:-Task Management System}"
+  comment-service:
+    build:
+      context: .
+      dockerfile: comment-service/Dockerfile
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./firebase-cred.json:/app/firebase.json:ro
+    environment:
+      JSON_PATH: "/app/firebase.json"
+      DATABASE_URL: "${DATABASE_URL}"
