@@ -156,6 +156,17 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
               </button>
+              <!-- Add inside quick actions or suitable place -->
+<button @click="openReport" class="quick-action-btn group">
+  <div class="quick-action-icon bg-indigo-100 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    </svg>
+  </div>
+  <span class="font-medium text-gray-700 group-hover:text-gray-900">Generate Project Report</span>
+</button>
+
             </div>
           </div>
 
@@ -437,6 +448,47 @@
           </div>
         </div>
       </div>
+
+<!-- Project Report Modal -->
+<div v-if="showReport" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-lg shadow-lg max-w-5xl max-h-[80vh] overflow-y-auto p-6">
+    <h2 class="text-3xl font-bold mb-6 border-b pb-2">Project Report</h2>
+
+    <div id="report-content" class="space-y-8">
+      <section v-for="project in projectsForReport" :key="project.projectId" class="border-b pb-4">
+        <h3 class="text-2xl font-semibold text-indigo-700 mb-3">{{ project.title }}</h3>
+
+        <div v-if="tasksByProject(project.projectId).length === 0" class="italic text-gray-400 ml-4">
+          No tasks for this project.
+        </div>
+
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div v-for="(tasksGroup, status) in categorizedTasksByStatus(project.projectId)" :key="status" class="bg-gray-50 rounded p-4 border">
+            <h4 class="text-lg font-semibold capitalize mb-2 border-b border-gray-300 pb-1 text-gray-700">{{ status }}</h4>
+            <ul>
+              <li v-for="task in tasksGroup" :key="task.taskId" class="mb-1">
+                <strong>{{ task.title }}</strong> — Due: {{ formatDeadline(task.deadline) }}
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="mt-6 flex justify-end gap-4">
+      <button @click="exportPDF" class="px-5 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">
+        Export as PDF
+      </button>
+      <button @click="showReport = false" class="px-5 py-2 border rounded hover:bg-gray-100 transition">
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
+
+
+
     </div>
   </div>
 </template>
@@ -448,6 +500,8 @@ import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
 import NavigationBar from '@/components/NavigationBar.vue'
 import axios from 'axios'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 
 const route = useRoute()
 const router = useRouter()
@@ -459,6 +513,10 @@ const loading = ref(true)
 const tasks = ref([])
 const subtasks = ref([])
 const projects = ref([])
+
+const showReport = ref(false)
+const tasksForReport = ref([])
+const projectsForReport = ref([])  // Added for report projects grouping
 
 // Statistics
 const statistics = ref({
@@ -483,7 +541,6 @@ const completionRate = computed(() => {
 const upcomingTasks = computed(() => {
   const now = Date.now() / 1000
   const allTasks = [...tasks.value, ...subtasks.value]
-
   return allTasks
     .filter(task => task.deadline && task.deadline > now && task.status !== 'completed')
     .sort((a, b) => a.deadline - b.deadline)
@@ -492,11 +549,38 @@ const upcomingTasks = computed(() => {
 
 const recentTasks = computed(() => {
   const allTasks = [...tasks.value, ...subtasks.value]
-
   return allTasks
     .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
     .slice(0, 5)
 })
+
+// Categorized for all tasks for basic usage
+const categorized = computed(() => ({
+  projected: tasksForReport.value.filter(t => t.status === 'projected'),
+  'in progress': tasksForReport.value.filter(t => t.status === 'ongoing'),
+  'under review': tasksForReport.value.filter(t => t.status === 'under_review'),
+  completed: tasksForReport.value.filter(t => t.status === 'completed')
+}))
+
+// Helper: Returns tasks for a specific project
+function tasksByProject(projectId) {
+  return tasksForReport.value.filter(task => task.projectId === projectId)
+}
+
+// Helper: Categorizes tasks for one project
+function categorizedTasksByStatus(projectId) {
+  const projectTasks = tasksByProject(projectId)
+  const allCategories = {
+    projected: projectTasks.filter(t => t.status === 'projected'),
+    'in progress': projectTasks.filter(t => t.status === 'ongoing'),
+    'under review': projectTasks.filter(t => t.status === 'under_review'),
+    completed: projectTasks.filter(t => t.status === 'completed'),
+  }
+  return Object.fromEntries(
+    Object.entries(allCategories).filter(([_, tasks]) => tasks.length > 0)
+  )
+}
+
 
 // Methods
 async function fetchData() {
@@ -520,7 +604,6 @@ async function fetchTasks() {
   try {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
     const currentUserId = authStore.user?.uid
-
     tasks.value = (response.data.tasks || []).filter(task =>
       task.ownerId === currentUserId ||
       task.collaborators?.includes(currentUserId) ||
@@ -536,7 +619,6 @@ async function fetchSubtasks() {
   try {
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
     const currentUserId = authStore.user?.uid
-
     subtasks.value = (response.data.subtasks || []).filter(subtask =>
       subtask.ownerId === currentUserId ||
       subtask.collaborators?.includes(currentUserId) ||
@@ -551,13 +633,30 @@ async function fetchSubtasks() {
 async function fetchProjects() {
   try {
     if (!authStore.user?.uid) return
-
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
     projects.value = response.data.projects || []
   } catch (error) {
     console.error('Error fetching projects:', error)
     projects.value = []
   }
+}
+
+function exportPDF() {
+  const element = document.getElementById('report-content')
+  html2canvas(element, { scale: 2 }).then(canvas => {
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const width = pdf.internal.pageSize.getWidth()
+    const height = (canvas.height * width) / canvas.width
+    pdf.addImage(imgData, 'PNG', 0, 0, width, height)
+    pdf.save('Project_Report.pdf')
+  })
+}
+
+function openReport() {
+  tasksForReport.value = tasks.value     // existing tasks
+  projectsForReport.value = projects.value  // existing projects
+  showReport.value = true
 }
 
 function calculateStatistics() {
@@ -700,10 +799,9 @@ function getActivityDescription(task) {
 
 onMounted(async () => {
   console.log('Dashboard mounted, route query:', route.query)
-
   await fetchData()
   await nextTick()
-
+  
   if (route.query.newUser === 'true') {
     console.log('Showing welcome toast for new user')
     setTimeout(() => {
@@ -723,6 +821,7 @@ onMounted(async () => {
   }
 })
 </script>
+
 
 <style scoped>
 /* Animations */
