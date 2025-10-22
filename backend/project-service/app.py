@@ -131,6 +131,52 @@ def change_owner():
     
     return jsonify(message="Project ownership changed", project=project.to_dict()), 200
 
+@app.route("/project/archive", methods=["POST"])
+def archive_project():
+    """Archive a project"""
+    data = request.get_json()
+    if not data:
+        return jsonify(error="Missing JSON body"), 400
+    
+    userid = data.get("userid")
+    project_id = data.get("projectId")
+    
+    if not userid or not project_id:
+        return jsonify(error="userid and projectId required"), 400
+    
+    project, error = project_service.archive_project(userid, project_id)
+    if error:
+        code = 404 if "not found" in error else 403
+        return jsonify(error=error), code
+    
+    return jsonify(message="Project archived successfully", project=project.to_dict()), 200
+
+@app.route("/project/unarchive", methods=["POST"])
+def unarchive_project():
+    """Unarchive a project"""
+    data = request.get_json()
+    if not data:
+        return jsonify(error="Missing JSON body"), 400
+    
+    userid = data.get("userid")
+    project_id = data.get("projectId")
+    
+    if not userid or not project_id:
+        return jsonify(error="userid and projectId required"), 400
+    
+    project, error = project_service.unarchive_project(userid, project_id)
+    if error:
+        code = 404 if "not found" in error else 403
+        return jsonify(error=error), code
+    
+    return jsonify(message="Project unarchived successfully", project=project.to_dict()), 200
+
+@app.route("/project/archived/<userid>", methods=["GET"])
+def get_archived_projects(userid):
+    """Get archived projects for a user"""
+    projects = project_service.get_archived_projects(userid)
+    return jsonify(projects=[p.to_dict() for p in projects]), 200
+
 @app.route("/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""

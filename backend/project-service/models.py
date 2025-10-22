@@ -13,6 +13,7 @@ class Project:
     deadline: int
     creation_date: int
     department: str
+    archived: bool = False
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -25,7 +26,8 @@ class Project:
             description=data.get("description", ""),
             deadline=data.get("deadline", 0),
             creation_date=data.get("creationDate", 0),
-            department=data.get("department", "Unknown")
+            department=data.get("department", "Unknown"),
+            archived=data.get("archived", False)
         )
     
     def to_dict(self):
@@ -38,7 +40,8 @@ class Project:
             "description": self.description,
             "deadline": self.deadline,
             "creationDate": self.creation_date,
-            "department": self.department
+            "department": self.department,
+            "archived": self.archived
         }
 
 @dataclass
