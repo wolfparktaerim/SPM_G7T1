@@ -450,42 +450,109 @@
       </div>
 
 <!-- Project Report Modal -->
-<div v-if="showReport" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-  <div class="bg-white rounded-lg shadow-lg max-w-5xl max-h-[80vh] overflow-y-auto p-6">
-    <h2 class="text-3xl font-bold mb-6 border-b pb-2">Project Report</h2>
+<div
+  v-if="showReport"
+  class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+>
+  <div
+    class="bg-white rounded-lg shadow-lg max-w-5xl w-full max-h-[80vh] overflow-y-auto p-6"
+  >
+    <!-- Header -->
+    <header class="flex items-center justify-between border-b pb-3 mb-6">
+      <h2 class="text-3xl font-bold text-gray-800">Project Report</h2>
+      <button
+        @click="showReport = false"
+        class="text-gray-500 hover:text-gray-700 text-xl"
+        title="Close"
+      >
+        &times;
+      </button>
+    </header>
 
-    <div id="report-content" class="space-y-8">
-      <section v-for="project in projectsForReport" :key="project.projectId" class="border-b pb-4">
-        <h3 class="text-2xl font-semibold text-indigo-700 mb-3">{{ project.title }}</h3>
+    <!-- Report Content -->
+<div id="report-content" class="space-y-8">
+  <!-- Project Sections -->
+  <section
+    v-for="project in projects"
+    :key="project.projectId"
+    class="border-b pb-6"
+  >
+    <h3 class="text-2xl font-semibold text-indigo-700 mb-3">
+      {{ project.title }}
+    </h3>
 
-        <div v-if="tasksByProject(project.projectId).length === 0" class="italic text-gray-400 ml-4">
-          No tasks for this project.
-        </div>
-
-        <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div v-for="(tasksGroup, status) in categorizedTasksByStatus(project.projectId)" :key="status" class="bg-gray-50 rounded p-4 border">
-            <h4 class="text-lg font-semibold capitalize mb-2 border-b border-gray-300 pb-1 text-gray-700">{{ status }}</h4>
-            <ul>
-              <li v-for="task in tasksGroup" :key="task.taskId" class="mb-1">
-                <strong>{{ task.title }}</strong> — Due: {{ formatDeadline(task.deadline) }}
-              </li>
-            </ul>
-          </div>
-        </div>
-      </section>
+    <div
+      v-if="tasksByProject(project.projectId).length === 0"
+      class="italic text-gray-400 ml-4"
+    >
+      No tasks for this project.
     </div>
 
-    <div class="mt-6 flex justify-end gap-4">
-      <button @click="exportPDF" class="px-5 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">
-        Export as PDF
-      </button>
-      <button @click="showReport = false" class="px-5 py-2 border rounded hover:bg-gray-100 transition">
-        Close
-      </button>
+    <ul v-else class="space-y-3">
+      <li
+        v-for="task in tasksByProject(project.projectId)"
+        :key="task.taskId"
+        class="p-4 border rounded-lg bg-gray-50"
+      >
+        <div class="font-semibold text-lg text-gray-800">
+          {{ task.title }}
+        </div>
+
+        <div class="text-sm text-gray-600">
+          Status:
+          <span class="capitalize font-medium text-gray-800">
+            {{ task.status }}
+          </span>
+        </div>
+
+       
+        <!-- Collaborators Section -->
+       <div v-if="task.collaborators?.length" class="mt-4">
+  <h3 class="text-sm font-semibold text-gray-700 mb-2">Collaborators</h3>
+  <div class="flex flex-wrap gap-2">
+    <div
+      v-for="user in getCollaboratorsForTask(task)"
+      :key="user.uid"
+      class="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full"
+    >
+      <img
+        v-if="user.photoURL"
+        :src="user.photoURL"
+        alt="profile"
+        class="w-6 h-6 rounded-full object-cover"
+      />
+      <span>{{ user.name || user.displayName || user.email }}</span>
     </div>
   </div>
 </div>
 
+
+        <div v-else class="mt-4 text-gray-500 text-sm italic">
+          No collaborators assigned.
+        </div>
+      </li>
+    </ul>
+  </section>
+</div>
+
+
+    <!-- Footer Buttons -->
+    <footer class="mt-8 flex justify-end gap-4">
+      <button
+        @click="exportPDF"
+        class="px-5 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
+      >
+        Export as PDF
+      </button>
+      <button
+        @click="showReport = false"
+        class="px-5 py-2 border rounded hover:bg-gray-100 transition"
+      >
+        Close
+      </button>
+    </footer>
+  </div>
+</div>
 
 
 
@@ -494,31 +561,43 @@
 </template>
 
 <script setup>
+/* ========================
+   Imports
+======================== */
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
+import { usersService } from '@/services/users'
 import NavigationBar from '@/components/NavigationBar.vue'
 import axios from 'axios'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas-pro'
 
+/* ========================
+   Setup
+======================== */
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
 
-// Reactive data
+/* ========================
+   Reactive State
+======================== */
 const loading = ref(true)
 const tasks = ref([])
 const subtasks = ref([])
 const projects = ref([])
+const allUsers = ref([])
 
 const showReport = ref(false)
 const tasksForReport = ref([])
-const projectsForReport = ref([])  // Added for report projects grouping
+const projectsForReport = ref([])
 
-// Statistics
+
+
+
 const statistics = ref({
   totalTasks: 0,
   totalSubtasks: 0,
@@ -532,68 +611,64 @@ const statistics = ref({
   lowPriority: 0
 })
 
-// Computed properties
-const completionRate = computed(() => {
-  if (statistics.value.totalTasks === 0) return 0
-  return Math.round((statistics.value.completedTasks / statistics.value.totalTasks) * 100)
-})
+/* ========================
+   Computed Properties
+======================== */
+const completionRate = computed(() =>
+  statistics.value.totalTasks === 0
+    ? 0
+    : Math.round((statistics.value.completedTasks / statistics.value.totalTasks) * 100)
+)
+const logCollaborators = (task) => {
+  console.log('Collaborators for task:', task.title)
+  console.log(task.collaborators)
+  return task.collaborators
+}
 
 const upcomingTasks = computed(() => {
   const now = Date.now() / 1000
-  const allTasks = [...tasks.value, ...subtasks.value]
-  return allTasks
-    .filter(task => task.deadline && task.deadline > now && task.status !== 'completed')
+  return [...tasks.value, ...subtasks.value]
+    .filter(t => t.deadline && t.deadline > now && t.status !== 'completed')
     .sort((a, b) => a.deadline - b.deadline)
     .slice(0, 5)
 })
 
-const recentTasks = computed(() => {
-  const allTasks = [...tasks.value, ...subtasks.value]
-  return allTasks
+const recentTasks = computed(() =>
+  [...tasks.value, ...subtasks.value]
     .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
     .slice(0, 5)
-})
+)
 
-// Categorized for all tasks for basic usage
-const categorized = computed(() => ({
-  projected: tasksForReport.value.filter(t => t.status === 'projected'),
-  'in progress': tasksForReport.value.filter(t => t.status === 'ongoing'),
-  'under review': tasksForReport.value.filter(t => t.status === 'under_review'),
-  completed: tasksForReport.value.filter(t => t.status === 'completed')
-}))
-
-// Helper: Returns tasks for a specific project
-function tasksByProject(projectId) {
-  return tasksForReport.value.filter(task => task.projectId === projectId)
-}
-
-// Helper: Categorizes tasks for one project
-function categorizedTasksByStatus(projectId) {
-  const projectTasks = tasksByProject(projectId)
-  const allCategories = {
-    projected: projectTasks.filter(t => t.status === 'projected'),
-    'in progress': projectTasks.filter(t => t.status === 'ongoing'),
-    'under review': projectTasks.filter(t => t.status === 'under_review'),
-    completed: projectTasks.filter(t => t.status === 'completed'),
-  }
-  return Object.fromEntries(
-    Object.entries(allCategories).filter(([_, tasks]) => tasks.length > 0)
+const getCollaboratorUsers = (task) => {
+  if (!task?.collaborators?.length || !allUsers.value?.length) return []
+  return allUsers.value.filter(u =>
+    task.collaborators.includes(u.uid)
   )
 }
+const getCollaboratorsForTask = (task) => {
+  if (!task?.collaborators?.length) return []
+  return task.collaborators
+    .map(uid => allUsers.value.find(u => u.uid === uid))
+    .filter(Boolean) // remove undefined if a uid doesn’t match
+}
 
 
-// Methods
+const tasksWithoutProject = computed(() =>
+  tasks.value.filter(t => !t.projectId || t.projectId.trim() === '')
+)
+
+/* ========================
+   Fetch Data
+======================== */
+
+
 async function fetchData() {
   loading.value = true
   try {
-    await Promise.all([
-      fetchTasks(),
-      fetchSubtasks(),
-      fetchProjects()
-    ])
+    await Promise.all([fetchTasks(), fetchSubtasks(), fetchProjects()])
     calculateStatistics()
-  } catch (error) {
-    console.error('Error fetching dashboard data:', error)
+  } catch (err) {
+    console.error('Error fetching dashboard data:', err)
     toast.error('Failed to load dashboard data')
   } finally {
     loading.value = false
@@ -602,30 +677,48 @@ async function fetchData() {
 
 async function fetchTasks() {
   try {
+    console.log('Fetching tasks from:', `${import.meta.env.VITE_BACKEND_API}tasks`)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
+    const data = response.data
+
+    // UPDATED: Filter tasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
-    tasks.value = (response.data.tasks || []).filter(task =>
-      task.ownerId === currentUserId ||
-      task.collaborators?.includes(currentUserId) ||
-      task.creatorId === currentUserId
-    )
+    tasks.value = data.tasks?.filter(task => {
+      return task.ownerId === currentUserId ||
+        task.collaborators?.includes(currentUserId) ||
+        task.creatorId === currentUserId
+    }) || []
+
+    console.log(`Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
+
   } catch (error) {
-    console.error('Error fetching tasks:', error)
-    tasks.value = []
+    console.error('Error fetching tasks:', error.response?.status, error.response?.data)
+    if (error.response?.status === 404) {
+      if (isManualRefresh.value) {
+        toast.error('Tasks API not found. Please check if the backend services are running.')
+      }
+    } else if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+      if (isManualRefresh.value) {
+        toast.error('Cannot connect to backend. Please ensure services are running.')
+      }
+    } else {
+      if (isManualRefresh.value) {
+        toast.error('Failed to load tasks')
+      }
+    }
+    throw error
   }
 }
 
 async function fetchSubtasks() {
   try {
-    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
-    const currentUserId = authStore.user?.uid
-    subtasks.value = (response.data.subtasks || []).filter(subtask =>
-      subtask.ownerId === currentUserId ||
-      subtask.collaborators?.includes(currentUserId) ||
-      subtask.creatorId === currentUserId
+    const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
+    const userId = authStore.user?.uid
+    subtasks.value = (data.subtasks || []).filter(
+      s => s.ownerId === userId || s.collaborators?.includes(userId) || s.creatorId === userId
     )
-  } catch (error) {
-    console.error('Error fetching subtasks:', error)
+  } catch (err) {
+    console.error('Error fetching subtasks:', err)
     subtasks.value = []
   }
 }
@@ -633,66 +726,90 @@ async function fetchSubtasks() {
 async function fetchProjects() {
   try {
     if (!authStore.user?.uid) return
-    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
-    projects.value = response.data.projects || []
-  } catch (error) {
-    console.error('Error fetching projects:', error)
+    const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
+    projects.value = data.projects || []
+  } catch (err) {
+    console.error('Error fetching projects:', err)
     projects.value = []
   }
 }
 
-function exportPDF() {
-  const element = document.getElementById('report-content')
-  html2canvas(element, { scale: 2 }).then(canvas => {
-    const imgData = canvas.toDataURL('image/png')
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const width = pdf.internal.pageSize.getWidth()
-    const height = (canvas.height * width) / canvas.width
-    pdf.addImage(imgData, 'PNG', 0, 0, width, height)
-    pdf.save('Project_Report.pdf')
-  })
-}
-
+/* ========================
+   Report + PDF
+======================== */
 function openReport() {
-  tasksForReport.value = tasks.value     // existing tasks
-  projectsForReport.value = projects.value  // existing projects
+  tasksForReport.value = tasks.value
+  projectsForReport.value = projects.value
   showReport.value = true
 }
 
-function calculateStatistics() {
-  const now = Date.now() / 1000
-  const sevenDaysFromNow = now + (7 * 24 * 60 * 60)
+async function exportPDF() {
+  const element = document.getElementById('report-content')
+  if (!element) return console.error("Report content element not found")
 
-  statistics.value = {
-    totalTasks: tasks.value.length,
-    totalSubtasks: subtasks.value.length,
-    ongoingTasks: tasks.value.filter(t => t.status === 'ongoing').length,
-    completedTasks: tasks.value.filter(t => t.status === 'completed').length,
-    overdueTasks: tasks.value.filter(t => t.deadline && t.deadline < now && t.status !== 'completed').length,
-    dueSoonTasks: tasks.value.filter(t => t.deadline && t.deadline > now && t.deadline < sevenDaysFromNow).length,
-    criticalPriority: tasks.value.filter(t => (t.priority || 0) >= 8).length,
-    highPriority: tasks.value.filter(t => (t.priority || 0) >= 6 && (t.priority || 0) < 8).length,
-    mediumPriority: tasks.value.filter(t => (t.priority || 0) >= 4 && (t.priority || 0) < 6).length,
-    lowPriority: tasks.value.filter(t => (t.priority || 0) < 4).length
+  try {
+    const canvas = await html2canvas(element, { scale: 2 })
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const width = pdf.internal.pageSize.getWidth()
+    const height = (canvas.height * width) / canvas.width
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, width, height)
+    pdf.save('ProjectReport.pdf')
+  } catch (err) {
+    console.error("Error exporting PDF:", err)
   }
 }
 
-function getUserDisplayName() {
-  return authStore.user?.displayName || authStore.user?.name || authStore.user?.email || 'User'
+/* ========================
+   Calculations
+======================== */
+function calculateStatistics() {
+  const now = Date.now() / 1000
+  const nextWeek = now + 7 * 24 * 60 * 60
+
+  const t = tasks.value
+  statistics.value = {
+    totalTasks: t.length,
+    totalSubtasks: subtasks.value.length,
+    ongoingTasks: t.filter(x => x.status === 'ongoing').length,
+    completedTasks: t.filter(x => x.status === 'completed').length,
+    overdueTasks: t.filter(x => x.deadline && x.deadline < now && x.status !== 'completed').length,
+    dueSoonTasks: t.filter(x => x.deadline && x.deadline > now && x.deadline < nextWeek).length,
+    criticalPriority: t.filter(x => (x.priority || 0) >= 8).length,
+    highPriority: t.filter(x => (x.priority || 0) >= 6 && (x.priority || 0) < 8).length,
+    mediumPriority: t.filter(x => (x.priority || 0) >= 4 && (x.priority || 0) < 6).length,
+    lowPriority: t.filter(x => (x.priority || 0) < 4).length
+  }
 }
 
-function navigateTo(path) {
-  router.push(path)
+/* ========================
+   Helpers
+======================== */
+const tasksByProject = id => tasksForReport.value.filter(t => t.projectId === id)
+
+function categorizedTasksByStatus(projectId) {
+  const grouped = {
+    projected: [],
+    'in progress': [],
+    'under review': [],
+    completed: []
+  }
+  tasksByProject(projectId).forEach(t => {
+    if (grouped[t.status]) grouped[t.status].push(t)
+  })
+  return Object.fromEntries(Object.entries(grouped).filter(([_, arr]) => arr.length))
 }
+
+const getUserDisplayName = () =>
+  authStore.user?.displayName || authStore.user?.name || authStore.user?.email || 'User'
+
+const navigateTo = path => router.push(path)
 
 function navigateToTask(task) {
   window.selectedTaskForView = task
   router.push('/tasks')
 }
 
-function getProjectTaskCount(projectId) {
-  return tasks.value.filter(t => t.projectId === projectId).length
-}
+const getProjectTaskCount = id => tasks.value.filter(t => t.projectId === id).length
 
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline'
@@ -704,123 +821,102 @@ function formatDeadline(deadline) {
   })
 }
 
-function formatDate(timestamp) {
-  if (!timestamp) return 'Unknown'
-  const date = new Date(timestamp * 1000)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
+const formatDate = ts =>
+  ts ? new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown'
 
-function formatRelativeTime(timestamp) {
-  if (!timestamp) return 'Unknown'
-  const now = Date.now()
-  const time = timestamp * 1000
-  const diff = now - time
-
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
+function formatRelativeTime(ts) {
+  if (!ts) return 'Unknown'
+  const diff = Date.now() - ts * 1000
+  const minutes = diff / 60000
   if (minutes < 1) return 'Just now'
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-  return formatDate(timestamp)
+  if (minutes < 60) return `${Math.floor(minutes)}m ago`
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`
+  if (minutes < 10080) return `${Math.floor(minutes / 1440)}d ago`
+  return formatDate(ts)
 }
 
 function getDeadlineStatus(deadline) {
   if (!deadline) return 'No deadline'
-  const now = Date.now() / 1000
-  const daysUntil = Math.ceil((deadline - now) / 86400)
-
-  if (daysUntil < 0) return 'Overdue'
-  if (daysUntil === 0) return 'Due today'
-  if (daysUntil === 1) return 'Due tomorrow'
-  if (daysUntil <= 7) return `Due in ${daysUntil} days`
+  const days = Math.ceil((deadline - Date.now() / 1000) / 86400)
+  if (days < 0) return 'Overdue'
+  if (days === 0) return 'Due today'
+  if (days === 1) return 'Due tomorrow'
+  if (days <= 7) return `Due in ${days} days`
   return ''
 }
 
 function getDeadlineClass(deadline) {
   if (!deadline) return ''
-  const now = Date.now() / 1000
-  const daysUntil = (deadline - now) / 86400
-
-  if (daysUntil < 0) return 'text-red-600'
-  if (daysUntil <= 1) return 'text-red-500'
-  if (daysUntil <= 3) return 'text-orange-500'
-  if (daysUntil <= 7) return 'text-amber-500'
+  const days = (deadline - Date.now() / 1000) / 86400
+  if (days < 0) return 'text-red-600'
+  if (days <= 1) return 'text-red-500'
+  if (days <= 3) return 'text-orange-500'
+  if (days <= 7) return 'text-amber-500'
   return 'text-gray-500'
 }
-
-function formatStatus(status) {
-  const statusMap = {
-    'unassigned': 'Unassigned',
-    'ongoing': 'Ongoing',
-    'under_review': 'Under Review',
-    'completed': 'Completed'
-  }
-  return statusMap[status] || status
+function getTaskCollaborators(task) {
+  if (!task?.collaborators?.length) return []
+  console.log(allUsers)
+  return allUsers.value.filter(u => task.collaborators.includes(u.uid))
 }
 
-function getStatusClass(status) {
-  const classMap = {
-    'unassigned': 'status-unassigned',
-    'ongoing': 'status-ongoing',
-    'under_review': 'status-review',
-    'completed': 'status-completed'
-  }
-  return classMap[status] || 'status-default'
-}
+/* ========================
+   Status / Priority Styling
+======================== */
+const formatStatus = s =>
+  ({ unassigned: 'Unassigned', ongoing: 'Ongoing', under_review: 'Under Review', completed: 'Completed' }[s] || s)
 
-function getPriorityBadgeClass(priority) {
-  const p = priority || 5
+const getStatusClass = s =>
+  ({ unassigned: 'status-unassigned', ongoing: 'status-ongoing', under_review: 'status-review', completed: 'status-completed' }[s] || 'status-default')
+
+function getPriorityBadgeClass(p = 5) {
   if (p >= 8) return 'priority-critical'
   if (p >= 6) return 'priority-high'
   if (p >= 4) return 'priority-medium'
   return 'priority-low'
 }
 
-function getActivityIconClass(status) {
-  const classMap = {
-    'completed': 'bg-green-100 text-green-600',
-    'ongoing': 'bg-blue-100 text-blue-600',
-    'under_review': 'bg-purple-100 text-purple-600',
-    'unassigned': 'bg-amber-100 text-amber-600'
-  }
-  return classMap[status] || 'bg-gray-100 text-gray-600'
-}
+const getActivityIconClass = s =>
+  ({ completed: 'bg-green-100 text-green-600', ongoing: 'bg-blue-100 text-blue-600', under_review: 'bg-purple-100 text-purple-600', unassigned: 'bg-amber-100 text-amber-600' }[s] || 'bg-gray-100 text-gray-600')
 
-function getActivityDescription(task) {
-  const status = formatStatus(task.status)
-  if (task.subTaskId) {
-    return `Subtask is ${status.toLowerCase()}`
+const getActivityDescription = t =>
+  t.subTaskId ? `Subtask is ${formatStatus(t.status).toLowerCase()}` : `Task is ${formatStatus(t.status).toLowerCase()}`
+async function fetchUsers() {
+  try {
+    const users = await usersService.getAllUsers()
+    allUsers.value = users
+    console.log(`Loaded ${allUsers.value.length} users`)
+  } catch (error) {
+    console.error('Error fetching users:', error)
   }
-  return `Task is ${status.toLowerCase()}`
 }
-
+const getUserNameById = (uid) => {
+  const user = allUsers.value.find(u => u.uid === uid)
+  return user?.name || user?.displayName || user?.email || uid
+}
+/* ========================
+   Lifecycle
+======================== */
 onMounted(async () => {
   console.log('Dashboard mounted, route query:', route.query)
   await fetchData()
   await nextTick()
-  
+  await fetchUsers()
   if (route.query.newUser === 'true') {
-    console.log('Showing welcome toast for new user')
     setTimeout(() => {
       toast.success('Account created successfully! Welcome to Smart Task Management System.', {
         timeout: 5000,
         closeOnClick: true,
-        pauseOnFocusLoss: false,
         pauseOnHover: true,
         draggable: true,
-        draggablePercent: 0.6,
-        showCloseButtonOnHover: false,
         hideProgressBar: false,
-        closeButton: "button",
         icon: true
       })
     }, 500)
   }
 })
 </script>
+
 
 
 <style scoped>
