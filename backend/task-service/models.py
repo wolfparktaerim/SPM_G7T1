@@ -23,6 +23,8 @@ class Task:
     scheduled: bool
     schedule: str
     custom_schedule: Optional[int] = None
+    completed_at: Optional[int] = None
+    started_at: Optional[int] = None
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -45,12 +47,14 @@ class Task:
             active=data.get("active", True),
             scheduled=data.get("scheduled", False),
             schedule=data.get("schedule", "daily"),
-            custom_schedule=data.get("custom_schedule")
+            custom_schedule=data.get("custom_schedule"),
+            completed_at=data.get("completedAt"),
+            started_at=data.get("startedAt")
         )
     
     def to_dict(self):
         """Convert Task to dictionary"""
-        return {
+        result = {
             "taskId": self.task_id,
             "title": self.title,
             "creatorId": self.creator_id,
@@ -68,8 +72,11 @@ class Task:
             "active": self.active,
             "scheduled": self.scheduled,
             "schedule": self.schedule,
-            "custom_schedule": self.custom_schedule
+            "custom_schedule": self.custom_schedule,
+            "completedAt": self.completed_at,
+            "startedAt": self.started_at
         }
+        return result
 
 @dataclass
 class CreateTaskRequest:
@@ -82,9 +89,9 @@ class CreateTaskRequest:
     attachments: List[str] = field(default_factory=list)
     collaborators: List[str] = field(default_factory=list)
     project_id: str = ""
-    owner_id: Optional[str] = None
+    owner_id: str = ""
     priority: int = 0
-    start_date: Optional[int] = None
+    start_date: int = 0
     active: bool = True
     scheduled: bool = False
     schedule: str = "daily"
@@ -92,6 +99,7 @@ class CreateTaskRequest:
     
     @classmethod
     def from_dict(cls, data: dict):
+        """Create CreateTaskRequest from dictionary"""
         return cls(
             title=data.get("title", ""),
             creator_id=data.get("creatorId", ""),
@@ -101,9 +109,9 @@ class CreateTaskRequest:
             attachments=data.get("attachments", []),
             collaborators=data.get("collaborators", []),
             project_id=data.get("projectId", ""),
-            owner_id=data.get("ownerId"),
+            owner_id=data.get("ownerId", ""),
             priority=data.get("priority", 0),
-            start_date=data.get("start_date"),
+            start_date=data.get("start_date", 0),
             active=data.get("active", True),
             scheduled=data.get("scheduled", False),
             schedule=data.get("schedule", "daily"),
@@ -119,8 +127,6 @@ class CreateTaskRequest:
             errors.append("creatorId is required")
         if not self.deadline:
             errors.append("deadline is required")
-        if self.schedule == "custom" and self.custom_schedule is None:
-            errors.append("custom_schedule is required when schedule is 'custom'")
         return errors
 
 @dataclass
@@ -144,6 +150,7 @@ class UpdateTaskRequest:
     
     @classmethod
     def from_dict(cls, data: dict, task_id: str):
+        """Create UpdateTaskRequest from dictionary"""
         return cls(
             task_id=task_id,
             title=data.get("title"),

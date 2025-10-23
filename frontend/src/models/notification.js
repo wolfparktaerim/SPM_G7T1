@@ -22,7 +22,7 @@ export class Notification {
     newStatus = null,
     commentText = null,
     commenterName = null,
-    commenterId = null
+    commenterId = null,
   } = {}) {
     this.notificationId = notificationId
     this.userId = userId
@@ -60,12 +60,12 @@ export class Notification {
     if (!this.taskDeadline) return 'N/A'
 
     const date = new Date(this.taskDeadline * 1000) // Convert epoch to milliseconds
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-SG', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     })
   }
 
@@ -130,9 +130,9 @@ export class Notification {
     if (diffHours < 24) return `${diffHours}h ago`
     if (diffDays < 7) return `${diffDays}d ago`
 
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-SG', {
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     })
   }
 
@@ -160,7 +160,7 @@ export class Notification {
       newStatus: data.newStatus,
       commentText: data.commentText,
       commenterName: data.commenterName,
-      commenterId: data.commenterId
+      commenterId: data.commenterId,
     })
   }
 
@@ -187,7 +187,7 @@ export class Notification {
       newStatus: this.newStatus,
       commentText: this.commentText,
       commenterName: this.commenterName,
-      commenterId: this.commenterId
+      commenterId: this.commenterId,
     }
   }
 }

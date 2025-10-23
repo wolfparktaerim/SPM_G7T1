@@ -44,13 +44,9 @@
 
                 <div class="space-y-2">
                   <label class="block text-sm font-semibold text-gray-700">Deadline *</label>
-                  <input
-  type="date"
-  v-model="newProject.deadline"
-  :min="today"
-  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-  required
-/>
+                  <input type="date" v-model="newProject.deadline" :min="today"
+                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                    required />
 
                 </div>
               </div>
@@ -295,8 +291,7 @@
                 </p>
               </div>
             </div>
-            <ChevronDown 
-              class="w-6 h-6 text-gray-400 transition-transform duration-300"
+            <ChevronDown class="w-6 h-6 text-gray-400 transition-transform duration-300"
               :class="{ 'rotate-180': showArchivedSection }" />
           </button>
 
@@ -317,7 +312,8 @@
                   <div class="p-6 pb-4 border-b border-gray-200 bg-gray-100/50">
                     <div class="flex items-start justify-between">
                       <div class="flex items-start gap-4 flex-1">
-                        <div class="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                        <div
+                          class="w-12 h-12 bg-gradient-to-br from-gray-400 to-gray-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
                           <Archive class="w-7 h-7 text-white" />
                         </div>
 
@@ -433,7 +429,7 @@
               {{ archiveAction === 'archive' ? 'Archive' : 'Unarchive' }} Project
             </h2>
           </div>
-          
+
           <!-- Modal Body -->
           <div class="px-6 py-5">
             <p class="text-gray-700 mb-4">
@@ -444,7 +440,7 @@
                 Are you sure you want to unarchive <strong>{{ projectToArchive?.title }}</strong>?
               </template>
             </p>
-            
+
             <div v-if="archiveAction === 'archive'" class="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <p class="text-sm text-amber-800 mb-2">
                 <strong>Consequences:</strong>
@@ -455,14 +451,14 @@
                 <li>You can unarchive it later to restore access</li>
               </ul>
             </div>
-            
+
             <div v-else class="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p class="text-sm text-blue-700">
                 This will restore the project to active status and make it visible to all collaborators again.
               </p>
             </div>
           </div>
-          
+
           <!-- Modal Footer -->
           <div class="px-6 py-5 border-t border-gray-200/50 flex justify-end gap-3">
             <button @click="cancelArchive"
@@ -470,7 +466,7 @@
               Cancel
             </button>
             <button @click="executeArchive"
-              :class="archiveAction === 'archive' 
+              :class="archiveAction === 'archive'
                 ? 'px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-200'
                 : 'px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-200'">
               {{ archiveAction === 'archive' ? 'Archive' : 'Unarchive' }}
@@ -745,7 +741,7 @@ import {
   AlertCircle,
   CheckSquare,
   ChevronRight,
-  Archive, 
+  Archive,
   ChevronDown
 } from 'lucide-vue-next';
 
@@ -808,21 +804,21 @@ const filterOption = ref('createdAt') // default sort
 const projectsToShow = computed(() => {
   // First, filter by search query
   let filtered = projects.value;
-  
+
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase().trim();
     filtered = filtered.filter(project => {
       // Search by project title
       const titleMatch = project.title.toLowerCase().includes(query);
-      
+
       // Search by owner name
       const ownerName = usersMap[project.ownerId]?.name || '';
       const ownerMatch = ownerName.toLowerCase().includes(query);
-      
+
       return titleMatch || ownerMatch;
     });
   }
-  
+
   // Then, sort the filtered results
   return [...filtered].sort((a, b) => {
     if (filterOption.value === 'createdAt') {
@@ -894,7 +890,7 @@ async function fetchProjects() {
       if (!res.ok) throw new Error("Failed to fetch department projects");
       data = await res.json();
       projects.value = data.projects || [];
-      
+
       console.log(`Director department: ${directorDept}, Projects found: ${projects.value.length}`);
     } else {
       // Non-directors: Fetch only projects they own or collaborate on
@@ -1022,11 +1018,11 @@ function addCollaborator() {
       if (!editingProject.value.collaborators.includes(selectedCollaborator.value)) {
         editingProject.value.collaborators.push(selectedCollaborator.value);
         newlyAddedCollaborators.value.push(selectedCollaborator.value);
-        
+
         console.log('Added collaborator:', selectedCollaborator.value);
         console.log('Current collaborators:', editingProject.value.collaborators);
         console.log('Newly added:', newlyAddedCollaborators.value);
-        
+
         selectedCollaborator.value = '';
         fetchAvailableUsers(editingProject.value);
       }
@@ -1051,26 +1047,26 @@ function fetchAssignableUsers(currentUserId) {
   try {
     const currentUserRole = usersMap[currentUserId]?.role;
     const currentUserDept = usersMap[currentUserId]?.department; // Get current user's department
-    
+
     const filtered = allUsers.value.filter(user => {
       if (user.uid === currentUserId) return false; // Can't assign to self
-      
+
       const userRole = user.role;
       const userDept = user.department;
-      
+
       // Must be same department
       if (userDept !== currentUserDept) return false;
-      
+
       // Role hierarchy: director > manager > staff
       if (currentUserRole === 'director') {
         return userRole === 'manager' || userRole === 'staff'; // Director can assign to manager or staff only
       } else if (currentUserRole === 'manager') {
         return userRole === 'staff'; // Manager can assign to staff only
       }
-      
+
       return false; // Staff cannot assign ownership
     });
-    
+
     assignableUsers.value = filtered;
   } catch (error) {
     console.error('Failed to filter assignable users:', error);
@@ -1080,14 +1076,14 @@ function fetchAssignableUsers(currentUserId) {
 
 async function saveProject() {
   if (!currentUser.value) return;
-  
+
   console.log('Saving project...');
   console.log('Newly added collaborators:', newlyAddedCollaborators.value);
   console.log('Full collaborators list:', editingProject.value.collaborators);
-  
+
   try {
     const currentUserRole = usersMap[currentUser.value]?.role;
-    
+
     const payload = {
       userid: currentUser.value,
       role: currentUserRole,
@@ -1098,9 +1094,9 @@ async function saveProject() {
       collaborators: newlyAddedCollaborators.value, // Send only newly added
       ownerId: editingProject.value.ownerId,
     };
-    
+
     console.log('Sending payload:', payload);
-    
+
     const res = await fetch(`${API_BASE}/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1109,7 +1105,7 @@ async function saveProject() {
 
     const data = await res.json();
     console.log('Server response:', data);
-    
+
     if (!res.ok) {
       throw new Error(data.error || "Failed to update project");
     }
@@ -1118,11 +1114,11 @@ async function saveProject() {
     error.value = false;
     closeEditModal();
     await fetchProjects(); // Refresh to see updates
-    
+
     setTimeout(() => {
       message.value = '';
     }, 5000);
-    
+
   } catch (err) {
     error.value = true;
     message.value = err.message;
@@ -1138,13 +1134,13 @@ async function saveProject() {
 async function fetchArchivedProjects() {
   if (!currentUser.value) return;
   loadingArchived.value = true;
-  
+
   try {
     const res = await fetch(`${API_BASE}/archived/${currentUser.value}`);
     if (!res.ok) throw new Error("Failed to fetch archived projects");
     const data = await res.json();
     archivedProjects.value = data.projects || [];
-    
+
     // Fetch tasks for archived projects
     for (const project of archivedProjects.value) {
       await fetchProjectTasks(project.projectId);
@@ -1178,12 +1174,12 @@ function cancelArchive() {
 
 async function executeArchive() {
   if (!projectToArchive.value || !currentUser.value) return;
-  
+
   try {
-    const endpoint = archiveAction.value === 'archive' 
-      ? `${API_BASE}/archive` 
+    const endpoint = archiveAction.value === 'archive'
+      ? `${API_BASE}/archive`
       : `${API_BASE}/unarchive`;
-    
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1192,28 +1188,28 @@ async function executeArchive() {
         projectId: projectToArchive.value.projectId
       })
     });
-    
+
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Failed to ${archiveAction.value} project`);
-    
-    message.value = archiveAction.value === 'archive' 
-      ? 'Project archived successfully!' 
+
+    message.value = archiveAction.value === 'archive'
+      ? 'Project archived successfully!'
       : 'Project unarchived successfully!';
     error.value = false;
-    
+
     // Close any open modals
     closeEditModal();
     closeViewModal();
     cancelArchive();
-    
+
     // Refresh both lists
     await fetchProjects();
     if (showArchivedSection.value) {
       await fetchArchivedProjects();
     }
-    
+
     setTimeout(() => { message.value = ''; }, 5000);
-    
+
   } catch (err) {
     error.value = true;
     message.value = err.message;
@@ -1273,7 +1269,7 @@ function formatDate(date) {
   const d = new Date(parsed);
   if (isNaN(d.getTime())) return 'Invalid date';
 
-  return d.toLocaleDateString('en-US', {
+  return d.toLocaleDateString('en-SG', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

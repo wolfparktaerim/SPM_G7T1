@@ -186,19 +186,20 @@ class CommentService:
     
     def archive_comment_thread(self, archive_data):
         """
-        Archive a comment thread by setting active to False
+        Archive or reopen a comment thread by setting active status
         
         Args:
             archive_data: dict with keys:
                 - type: str ("task" or "subtask")
                 - parent_id: str (task_id or subtask_id)
                 - thread_index: int (index of the comment thread to archive)
+                - active: bool (True to reopen, False to archive)  # ✅ UPDATED DOCSTRING
         
         Returns:
             tuple: (updated_thread_data, error)
         """
         # Validate required fields
-        required_fields = ['type', 'parent_id', 'thread_index']
+        required_fields = ['type', 'parent_id', 'thread_index', 'active'] 
         for field in required_fields:
             if field not in archive_data:
                 return None, f"Missing required field: {field}"
@@ -206,6 +207,7 @@ class CommentService:
         comment_type = archive_data['type']
         parent_id = archive_data['parent_id']
         thread_index = archive_data['thread_index']
+        active = archive_data['active']  
         
         # Validate type
         if comment_type not in ['task', 'subtask']:
@@ -229,9 +231,9 @@ class CommentService:
         if thread_index < 0 or thread_index >= len(comment_threads):
             return None, f"Invalid thread_index: {thread_index}"
         
-        # Get the specific thread and set active to False
+        # Get the specific thread and set active to the provided value
         thread = comment_threads[thread_index]
-        thread['active'] = False
+        thread['active'] = active  
         
         # Update the thread in the list
         comment_threads[thread_index] = thread
@@ -240,7 +242,7 @@ class CommentService:
         parent_ref.update({'comment_thread': comment_threads})
         
         return thread, None
-    
+
     def get_comment_threads(self, parent_id, comment_type):
         """
         Get all comment threads for a task or subtask

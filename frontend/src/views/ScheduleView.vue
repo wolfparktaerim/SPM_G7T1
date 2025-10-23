@@ -24,8 +24,7 @@
         <!-- 🧭 Sidebar Filters -->
         <div class="lg:col-span-1">
           <div
-            class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6 space-y-6 sticky top-24"
-          >
+            class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 p-6 space-y-6 sticky top-24">
             <h3 class="text-lg font-bold text-gray-900 mb-4">Filter Schedule</h3>
 
             <!-- 👤 Viewing User -->
@@ -47,11 +46,8 @@
             <!-- 📁 Project Filter -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Select Project</label>
-              <select
-                v-model="selectedProjectId"
-                @change="onProjectSelect($event.target.value)"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
+              <select v-model="selectedProjectId" @change="onProjectSelect($event.target.value)"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                 <option :value="null">Select Project</option>
                 <option v-for="p in userProjects" :key="p.projectId" :value="p.projectId">
                   {{ p.title }}
@@ -62,17 +58,10 @@
             <!-- 👥 Collaborator Filter -->
             <div v-if="selectedProject && projectCollaborators.length" class="mb-4">
               <label class="block text-sm font-medium text-gray-700 mb-2">View Team Member</label>
-              <select
-                v-model="selectedCollaborator"
-                @change="onCollaboratorSelect($event.target.value)"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
+              <select v-model="selectedCollaborator" @change="onCollaboratorSelect($event.target.value)"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                 <option :value="null">Select a team member</option>
-                <option
-                  v-for="c in projectCollaborators"
-                  :key="c.uid"
-                  :value="c.uid"
-                >
+                <option v-for="c in projectCollaborators" :key="c.uid" :value="c.uid">
                   {{ c.name }} {{ c.isCurrentUser ? '(You)' : '' }} {{ c.isOwner ? '👑' : '' }}
                 </option>
               </select>
@@ -82,11 +71,8 @@
             </div>
 
             <!-- 🔄 Reset -->
-            <button
-              v-if="selectedProject || selectedCollaborator"
-              @click="resetFilters"
-              class="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-all"
-            >
+            <button v-if="selectedProject || selectedCollaborator" @click="resetFilters"
+              class="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-all">
               Reset Filters
             </button>
           </div>
@@ -111,18 +97,11 @@
 
     <!-- 🧭 Task Detail Modal -->
     <transition name="fade">
-      <div
-        v-if="showTaskDetailModal"
-        class="fixed inset-0 z-50 overflow-y-auto"
-        @click.self="closeTaskDetailModal"
-      >
+      <div v-if="showTaskDetailModal" class="fixed inset-0 z-50 overflow-y-auto" @click.self="closeTaskDetailModal">
         <div class="flex items-center justify-center min-h-screen px-4 py-6">
           <transition name="scale">
-            <div
-              v-if="showTaskDetailModal"
-              class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl transform transition-all"
-              @click.stop
-            >
+            <div v-if="showTaskDetailModal"
+              class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl transform transition-all" @click.stop>
               <!-- Header -->
               <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-start">
                 <div>
@@ -130,42 +109,28 @@
                     {{ selectedTaskDetail?.title || 'Task Details' }}
                   </h3>
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span
-                      v-if="selectedTaskDetail?.status"
-                      :class="getStatusBadgeClass(selectedTaskDetail.status)" 
-                      class="px-3 py-1 rounded-full text-xs font-semibold"
-                      >
-                      ● {{ selectedTaskDetail.status}}
+                    <span v-if="selectedTaskDetail?.status" :class="getStatusBadgeClass(selectedTaskDetail.status)"
+                      class="px-3 py-1 rounded-full text-xs font-semibold">
+                      ● {{ selectedTaskDetail.status }}
                     </span>
-                    <span
-                      v-if="isTaskOwner(selectedTaskDetail)"
-                      class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700"
-                    >
+                    <span v-if="isTaskOwner(selectedTaskDetail)"
+                      class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
                       <Crown class="w-3 h-3 inline-block mr-1" /> Owner
                     </span>
-                    <span
-                      v-if="getDueSoonBadge(selectedTaskDetail)"
-                      :class="getDueSoonBadge(selectedTaskDetail).class"
-                      class="px-3 py-1 rounded-full text-xs font-semibold"
-                    >
+                    <span v-if="getDueSoonBadge(selectedTaskDetail)" :class="getDueSoonBadge(selectedTaskDetail).class"
+                      class="px-3 py-1 rounded-full text-xs font-semibold">
                       {{ getDueSoonBadge(selectedTaskDetail).text }}
                     </span>
                   </div>
                 </div>
 
                 <div class="flex items-center gap-2">
-                  <button
-                    v-if="isTaskOwner(selectedTaskDetail)"
-                    @click="handleEditTask(selectedTaskDetail)"
-                    class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                    title="Edit Task"
-                  >
+                  <button v-if="isTaskOwner(selectedTaskDetail)" @click="handleEditTask(selectedTaskDetail)"
+                    class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit Task">
                     <Edit3 class="w-5 h-5" />
                   </button>
-                  <button
-                    @click="closeTaskDetailModal"
-                    class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                  >
+                  <button @click="closeTaskDetailModal"
+                    class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                     <X class="w-5 h-5" />
                   </button>
                 </div>
@@ -195,11 +160,8 @@
                         <p class="text-sm text-gray-900">
                           {{ getUserDisplayName(selectedTaskDetail?.ownerId) }}
                         </p>
-                        <span
-                          v-if="selectedTaskDetail?.ownerId === currentUser"
-                          class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium"
-                          >You</span
-                        >
+                        <span v-if="selectedTaskDetail?.ownerId === currentUser"
+                          class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">You</span>
                       </div>
                     </div>
                   </div>
@@ -212,25 +174,18 @@
                     Collaborators ({{ selectedTaskDetail.collaborators.length }})
                   </h4>
                   <div class="space-y-2">
-                    <div
-                      v-for="id in selectedTaskDetail.collaborators"
-                      :key="id"
-                      class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
-                    >
+                    <div v-for="id in selectedTaskDetail.collaborators" :key="id"
+                      class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                       <div
-                        class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm"
-                      >
+                        class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
                         {{ getUserDisplayName(id).charAt(0).toUpperCase() }}
                       </div>
                       <div class="flex-1">
                         <p class="text-sm font-medium text-gray-900">{{ getUserDisplayName(id) }}</p>
                         <p class="text-xs text-gray-600">{{ usersMap[id]?.role || 'Collaborator' }}</p>
                       </div>
-                      <span
-                        v-if="id === currentUser"
-                        class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium"
-                        >You</span
-                      >
+                      <span v-if="id === currentUser"
+                        class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">You</span>
                     </div>
                   </div>
                 </div>
@@ -250,52 +205,42 @@
                     Subtasks ({{ selectedTaskDetail.subtasks.length }})
                   </h4>
                   <div class="space-y-2">
-                    <div
-                      v-for="subtask in selectedTaskDetail.subtasks"
-                      :key="subtask.subTaskId"
-                      class="group bg-gray-50 hover:bg-white border border-gray-200 hover:border-blue-300 rounded-lg p-3 transition-all"
-                    >
+                    <div v-for="subtask in selectedTaskDetail.subtasks" :key="subtask.subTaskId"
+                      class="group bg-gray-50 hover:bg-white border border-gray-200 hover:border-blue-300 rounded-lg p-3 transition-all">
                       <div class="flex items-start justify-between gap-3">
                         <!-- Subtask Info -->
                         <div class="flex-1 min-w-0">
                           <div class="flex items-center gap-2 mb-2">
                             <h5 class="text-sm font-medium text-gray-900 truncate">{{ subtask.title }}</h5>
-                            
+
                             <!-- Status Badge -->
-                            <span 
-                              :class="getStatusBadgeClass(subtask.status)" 
-                              class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap"
-                            >
+                            <span :class="getStatusBadgeClass(subtask.status)"
+                              class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap">
                               ● {{ subtask.status }}
                             </span>
                           </div>
-                          
+
                           <!-- Subtask Meta Info -->
                           <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600">
                             <!-- Owner -->
                             <div class="flex items-center gap-1">
                               <User class="w-3 h-3" />
                               <span>{{ getUserDisplayName(subtask.ownerId) }}</span>
-                              <span 
-                                v-if="subtask.ownerId === currentUser" 
-                                class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium"
-                              >
+                              <span v-if="subtask.ownerId === currentUser"
+                                class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
                                 You
                               </span>
                             </div>
-                            
+
                             <!-- Deadline -->
                             <div class="flex items-center gap-1">
                               <Calendar class="w-3 h-3" />
                               <span>{{ formatDateDisplay(subtask.deadline) }}</span>
                             </div>
-                            
+
                             <!-- Due Soon Badge -->
-                            <span 
-                              v-if="getDueSoonBadge(subtask)" 
-                              :class="getDueSoonBadge(subtask).class"
-                              class="px-2 py-0.5 rounded-full text-xs font-semibold"
-                            >
+                            <span v-if="getDueSoonBadge(subtask)" :class="getDueSoonBadge(subtask).class"
+                              class="px-2 py-0.5 rounded-full text-xs font-semibold">
                               {{ getDueSoonBadge(subtask).text }}
                             </span>
                           </div>
@@ -315,10 +260,8 @@
 
               <!-- Footer -->
               <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end rounded-b-2xl">
-                <button
-                  @click="closeTaskDetailModal"
-                  class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium"
-                >
+                <button @click="closeTaskDetailModal"
+                  class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium">
                   Close
                 </button>
               </div>
@@ -330,10 +273,8 @@
 
     <!-- 🔔 Toast -->
     <transition name="fade">
-      <div
-        v-if="showNotification"
-        class="fixed bottom-8 right-8 z-50 bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3"
-      >
+      <div v-if="showNotification"
+        class="fixed bottom-8 right-8 z-50 bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3">
         <span>{{ notificationMessage }}</span>
         <button @click="showNotification = false" class="text-gray-400 hover:text-white">
           <X class="w-4 h-4" />
@@ -390,11 +331,11 @@ const notificationMessage = ref('');
 
 // --- Status Colors (Unified) ---
 const statusColors = {
-  unassigned:    '#d1d5db', // gray
-  ongoing:       '#1945e6', // blue
-  'under_review':'#f59e0b', // orange
-  completed:     '#3BB143', // green
-  overdue:       '#ff0009'  // red
+  unassigned: '#d1d5db', // gray
+  ongoing: '#1945e6', // blue
+  'under_review': '#f59e0b', // orange
+  completed: '#3BB143', // green
+  overdue: '#ff0009'  // red
 };
 
 // --- Computed: Calendar Events ---
@@ -560,9 +501,9 @@ function isTaskOwner(task) {
 function formatDateDisplay(epochTimestamp) {
   if (!epochTimestamp) return 'No deadline';
   const date = new Date(epochTimestamp * 1000);
-  return date.toLocaleDateString('en-US', { 
-    month: 'long', 
-    day: 'numeric', 
+  return date.toLocaleDateString('en-SG', {
+    month: 'long',
+    day: 'numeric',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
@@ -570,12 +511,12 @@ function formatDateDisplay(epochTimestamp) {
 }
 
 function resetFilters() {
-selectedProject.value = null;
-selectedProjectId.value = null;
-projectCollaborators.value = [];
-selectedCollaborator.value = null;
-viewingUserId.value = currentUser.value;
-filterTasksByUser(currentUser.value);
+  selectedProject.value = null;
+  selectedProjectId.value = null;
+  projectCollaborators.value = [];
+  selectedCollaborator.value = null;
+  viewingUserId.value = currentUser.value;
+  filterTasksByUser(currentUser.value);
 }
 
 function getStatusBadgeClass(status) {
@@ -590,12 +531,12 @@ function getStatusBadgeClass(status) {
 function handleEditTask(task) {
   closeTaskDetailModal();
   // Navigate to Tasks page with taskId as query parameter
-  router.push({ 
-      name: 'tasks', 
-      query: { 
-        taskId: task.taskId,
-        action: 'edit' // Optional: indicates intent to edit
-      }
+  router.push({
+    name: 'tasks',
+    query: {
+      taskId: task.taskId,
+      action: 'edit' // Optional: indicates intent to edit
+    }
   });
 }
 
@@ -678,8 +619,8 @@ async function onProjectSelect(projectId) {
       };
     })
     .sort((a, b) => a.isCurrentUser ? -1 : b.isCurrentUser ? 1 :
-                   a.isOwner ? -1 : b.isOwner ? 1 :
-                   a.name.localeCompare(b.name));
+      a.isOwner ? -1 : b.isOwner ? 1 :
+        a.name.localeCompare(b.name));
 }
 
 function onCollaboratorSelect(uid) {
@@ -710,71 +651,89 @@ onMounted(() => {
 </script>
 
 <style scoped>
-   /* FullCalendar custom styling */
-   :deep(.fc) {
-   /* Override FullCalendar default styles to match your design */
-   font-family: inherit;
-   }
-   :deep(.fc .fc-button) {
-   background-color: #3b82f6;
-   border-color: #3b82f6;
-   text-transform: capitalize;
-   font-weight: 600;
-   padding: 0.5rem 1rem;
-   border-radius: 0.5rem;
-   transition: all 0.2s;
-   }
-   :deep(.fc .fc-button:hover) {
-   background-color: #2563eb;
-   border-color: #2563eb;
-   }
-   :deep(.fc .fc-button-active) {
-   background-color: #1e40af !important;
-   border-color: #1e40af !important;
-   }
-   :deep(.fc-theme-standard .fc-scrollgrid) {
-   border-color: #e5e7eb;
-   }
-   :deep(.fc-theme-standard td, .fc-theme-standard th) {
-   border-color: #e5e7eb;
-   }
-   :deep(.fc .fc-daygrid-day-number) {
-   color: #374151;
-   font-weight: 600;
-   }
-   :deep(.fc .fc-col-header-cell-cushion) {
-   color: #6b7280;
-   font-weight: 700;
-   text-transform: uppercase;
-   font-size: 0.75rem;
-   padding: 0.75rem 0;
-   }
-   :deep(.fc .fc-event) {
-   border-radius: 0.375rem;
-   padding: 0.25rem 0.5rem;
-   font-weight: 500;
-   font-size: 0.875rem;
-   cursor: pointer;
-   transition: transform 0.2s;
-   }
-   :deep(.fc .fc-event:hover) {
-   transform: scale(1.02);
-   }
-   :deep(.fc-daygrid-day.fc-day-today) {
-   background-color: rgba(59, 130, 246, 0.05) !important;
-   }
-   /* Modal transitions */
-   .fade-enter-active, .fade-leave-active {
-   transition: opacity 0.3s ease;
-   }
-   .fade-enter-from, .fade-leave-to {
-   opacity: 0;
-   }
-   .scale-enter-active, .scale-leave-active {
-   transition: all 0.3s ease;
-   }
-   .scale-enter-from, .scale-leave-to {
-   opacity: 0;
-   transform: scale(0.9);
-   }
+/* FullCalendar custom styling */
+:deep(.fc) {
+  /* Override FullCalendar default styles to match your design */
+  font-family: inherit;
+}
+
+:deep(.fc .fc-button) {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+  text-transform: capitalize;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+:deep(.fc .fc-button:hover) {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+:deep(.fc .fc-button-active) {
+  background-color: #1e40af !important;
+  border-color: #1e40af !important;
+}
+
+:deep(.fc-theme-standard .fc-scrollgrid) {
+  border-color: #e5e7eb;
+}
+
+:deep(.fc-theme-standard td, .fc-theme-standard th) {
+  border-color: #e5e7eb;
+}
+
+:deep(.fc .fc-daygrid-day-number) {
+  color: #374151;
+  font-weight: 600;
+}
+
+:deep(.fc .fc-col-header-cell-cushion) {
+  color: #6b7280;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 0.75rem 0;
+}
+
+:deep(.fc .fc-event) {
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+:deep(.fc .fc-event:hover) {
+  transform: scale(1.02);
+}
+
+:deep(.fc-daygrid-day.fc-day-today) {
+  background-color: rgba(59, 130, 246, 0.05) !important;
+}
+
+/* Modal transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.scale-enter-active,
+.scale-leave-active {
+  transition: all 0.3s ease;
+}
+
+.scale-enter-from,
+.scale-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
 </style>

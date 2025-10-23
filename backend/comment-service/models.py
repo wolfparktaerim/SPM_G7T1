@@ -108,17 +108,19 @@ class UpdateCommentRequest:
 
 @dataclass
 class ArchiveCommentRequest:
-    """Request model for archiving a comment thread"""
+    """Request model for archiving/reopening a comment thread"""
     type: str
     parent_id: str
     thread_index: int
+    active: bool 
     
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
             type=data.get("type", ""),
             parent_id=data.get("parentId", ""),
-            thread_index=data.get("threadIndex", -1)
+            thread_index=data.get("threadIndex", -1),
+            active=data.get("active", False)  
         )
     
     def validate(self):
@@ -130,6 +132,8 @@ class ArchiveCommentRequest:
             errors.append("parentId is required")
         if self.thread_index < 0:
             errors.append("threadIndex is required and must be >= 0")
+        if not isinstance(self.active, bool):  
+            errors.append("active must be a boolean")
         return errors
     
     def to_dict(self):
@@ -137,5 +141,6 @@ class ArchiveCommentRequest:
         return {
             'type': self.type,
             'parent_id': self.parent_id,
-            'thread_index': self.thread_index
+            'thread_index': self.thread_index,
+            'active': self.active  
         }

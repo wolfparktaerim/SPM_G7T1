@@ -143,140 +143,129 @@ class TaskService:
         
         new_start_ts = int(new_dt.timestamp())
         
-        if completion_time:
-            if new_start_ts < completion_time:
-                new_start_ts = completion_time
-        else:
-            if new_start_ts < now:
-                today_dt = datetime.fromtimestamp(now, tz=timezone.utc)
-                if schedule == "daily":
-                    new_dt = today_dt + timedelta(days=1)
-                elif schedule == "weekly":
-                    new_dt = today_dt + timedelta(weeks=1)
-                elif schedule == "monthly":
-                    month = today_dt.month + 1 if today_dt.month < 12 else 1
-                    year = today_dt.year if today_dt.month < 12 else today_dt.year + 1
-                    day = today_dt.day
-                    try:
-                        new_dt = datetime(year, month, day, tzinfo=timezone.utc)
-                    except ValueError:
-                        last_day = calendar.monthrange(year, month)[1]
-                        new_dt = datetime(year, month, last_day, tzinfo=timezone.utc)
-                elif schedule == "custom" and custom_schedule:
-                    new_dt = today_dt + timedelta(days=custom_schedule)
-                new_start_ts = int(new_dt.timestamp())
+        if new_start_ts < now:
+            today_dt = datetime.fromtimestamp(now, tz=timezone.utc)
+            if schedule == "daily":
+                new_dt = today_dt + timedelta(days=1)
+            elif schedule == "weekly":
+                new_dt = today_dt + timedelta(weeks=1)
+            elif schedule == "monthly":
+                month = today_dt.month + 1 if today_dt.month < 12 else 1
+                year = today_dt.year if today_dt.month < 12 else today_dt.year + 1
+                day = today_dt.day
+                try:
+                    new_dt = datetime(year, month, day, tzinfo=timezone.utc)
+                except ValueError:
+                    last_day = calendar.monthrange(year, month)[1]
+                    new_dt = datetime(year, month, last_day, tzinfo=timezone.utc)
+            elif schedule == "custom" and custom_schedule:
+                new_dt = today_dt + timedelta(days=custom_schedule)
+            
+            new_start_ts = int(new_dt.timestamp())
         
         return new_start_ts
     
     def create_task_with_params(self, task_data, completion_time=None):
-        """Create a new recurring task based on a completed task"""
-        now = current_timestamp()
+        """Create a recurring task based on existing task parameters"""
+        now = completion_time if completion_time else current_timestamp()
         
-        original_duration = task_data.get("deadline", now) - task_data.get("start_date", now)
+        old_start_date = task_data.get("start_date")
+        schedule = task_data.get("schedule", "daily")
+        custom_schedule = task_data.get("custom_schedule")
         
         new_start_date = self.calculate_new_start_date(
-            task_data.get("start_date", now),
-            task_data.get("schedule"),
-            task_data.get("custom_schedule"),
-            completion_time
+            old_start_date, 
+            schedule, 
+            custom_schedule, 
+            now
         )
         
-        new_deadline = new_start_date + original_duration
-        active_flag = self.should_task_be_active(new_start_date, now)
+        new_deadline_offset = task_data.get("deadline") - old_start_date
+        new_deadline = new_start_date + new_deadline_offset
         
         new_task_ref = self.tasks_ref.push()
-        new_task_data = dict(task_data)
         
-        new_task_data.update({
+        # Determine status and startedAt based on owner
+        owner_id = task_data.get("ownerId", "")
+        creator_id = task_data.get("creatorId", "")
+        
+        # If owner is not the creator, status should be 'ongoing' and startedAt should be set
+        if owner_id and owner_id != creator_id:
+            new_status = "ongoing"
+            new_started_at = now
+        else:
+            new_status = "unassigned"
+            new_started_at = None
+        
+        new_task_data = {
             "taskId": new_task_ref.key,
-            "start_date": new_start_date,
+            "title": task_data.get("title"),
+            "creatorId": creator_id,
             "deadline": new_deadline,
-            "active": active_flag,
-            "status": "ongoing",
+            "status": new_status,
+            "notes": task_data.get("notes", ""),
+            "attachments": task_data.get("attachments", []),
+            "collaborators": task_data.get("collaborators", []),
+            "projectId": task_data.get("projectId", ""),
+            "ownerId": owner_id if owner_id else creator_id,
+            "priority": task_data.get("priority", 0),
             "createdAt": now,
-            "updatedAt": now
-        })
-        
-        new_task_ref.set(new_task_data)
-        
-        # Create subtasks for the new task
-        original_task_id = task_data.get("taskId")
-        all_subtasks = self.subtasks_ref.get() or {}
-        
-        filtered_subtasks = {
-            subtask_id: subtask
-            for subtask_id, subtask in all_subtasks.items()
-            if subtask.get("taskId") == original_task_id
+            "updatedAt": now,
+            "start_date": new_start_date,
+            "active": self.should_task_be_active(new_start_date, now),
+            "scheduled": True,
+            "schedule": schedule,
+            "custom_schedule": custom_schedule,
+            "completedAt": None,
+            "startedAt": new_started_at
         }
         
-        for subtask_id, subtask in filtered_subtasks.items():
-            new_subtask = dict(subtask)
-            new_subtask.pop("subTaskId", None)
-            
-            subtask_original_duration = subtask.get("deadline", now) - subtask.get("start_date", now)
-            
-            new_subtask_start_date = self.calculate_new_start_date(
-                subtask.get("start_date", now),
-                subtask.get("schedule") if "schedule" in subtask else None,
-                subtask.get("custom_schedule") if "custom_schedule" in subtask else None,
-                completion_time
-            )
-            
-            new_subtask_deadline = new_subtask_start_date + subtask_original_duration
-            
-            new_subtask["start_date"] = new_subtask_start_date
-            new_subtask["deadline"] = new_subtask_deadline
-            new_subtask["taskId"] = new_task_ref.key
-            new_subtask["status"] = "ongoing"
-            new_subtask["active"] = self.should_task_be_active(new_subtask_start_date, now)
-            new_subtask["createdAt"] = now
-            new_subtask["updatedAt"] = now
-            
-            if "schedule" not in subtask:
-                new_subtask.pop("schedule", None)
-            if "custom_schedule" not in subtask:
-                new_subtask.pop("custom_schedule", None)
-            
-            new_subtask_ref = self.subtasks_ref.push()
-            new_subtask["subTaskId"] = new_subtask_ref.key
-            new_subtask_ref.set(new_subtask)
+        new_task_ref.set(new_task_data)
+        return Task.from_dict(new_task_data)
     
     def create_task(self, req: CreateTaskRequest):
         """Create a new task"""
+        new_task_ref = self.tasks_ref.push()
         current_time = current_timestamp()
         
         # Set owner_id to creator_id if not provided
         owner_id = req.owner_id if req.owner_id else req.creator_id
         
-        # Set start_date to current time if not provided
-        start_date = req.start_date if req.start_date else current_time
+        # Determine initial status and startedAt based on business rules
+        # If owner is different from creator, status = 'ongoing' and startedAt = current_time
+        # If owner is same as creator (or default), status = 'unassigned' and startedAt = None
+        if owner_id != req.creator_id:
+            initial_status = "ongoing"
+            started_at = current_time
+        else:
+            initial_status = "unassigned"
+            started_at = None
         
-        new_task_ref = self.tasks_ref.push()
-        task_id = new_task_ref.key
+        task_data = {
+            "taskId": new_task_ref.key,
+            "title": req.title,
+            "creatorId": req.creator_id,
+            "deadline": req.deadline,
+            "status": initial_status,
+            "notes": req.notes,
+            "attachments": req.attachments,
+            "collaborators": req.collaborators,
+            "projectId": req.project_id,
+            "ownerId": owner_id,
+            "priority": req.priority,
+            "createdAt": current_time,
+            "updatedAt": current_time,
+            "start_date": req.start_date if req.start_date else current_time,
+            "active": req.active,
+            "scheduled": req.scheduled,
+            "schedule": req.schedule,
+            "custom_schedule": req.custom_schedule,
+            "completedAt": None,
+            "startedAt": started_at
+        }
         
-        task = Task(
-            task_id=task_id,
-            title=req.title,
-            creator_id=req.creator_id,
-            deadline=req.deadline,
-            status=req.status,
-            notes=req.notes,
-            attachments=req.attachments,
-            collaborators=req.collaborators,
-            project_id=req.project_id,
-            owner_id=owner_id,
-            priority=req.priority,
-            created_at=current_time,
-            updated_at=current_time,
-            start_date=start_date,
-            active=bool(req.active),
-            scheduled=bool(req.scheduled),
-            schedule=req.schedule,
-            custom_schedule=req.custom_schedule
-        )
-        
-        new_task_ref.set(task.to_dict())
-        return task, None
+        new_task_ref.set(task_data)
+        return Task.from_dict(task_data), None
     
     def get_all_tasks(self):
         """Get all active tasks"""
@@ -311,11 +300,12 @@ class TaskService:
         
         now = current_timestamp()
         start_date = task_data.get("start_date")
+        
         if start_date is not None:
             should_be_active = self.should_task_be_active(start_date, now)
             if should_be_active != task_data.get("active", False):
                 task_ref.update({"active": should_be_active})
-            task_data["active"] = should_be_active
+                task_data["active"] = should_be_active
         
         return Task.from_dict(task_data), None
     
@@ -327,25 +317,50 @@ class TaskService:
         if not existing_task:
             return None, "Task not found"
         
-        prev_status = existing_task.get("status", "").lower()
-        
         update_data = {}
+        prev_status = existing_task.get("status", "").lower()
+        prev_owner_id = existing_task.get("ownerId", "")
+        creator_id = existing_task.get("creatorId", "")
         
+        # Handle title update
         if req.title is not None:
-            title = req.title.strip()
-            if not title:
+            if not req.title.strip():
                 return None, "Title cannot be empty"
-            update_data["title"] = title
+            update_data["title"] = req.title
         
+        # Handle deadline update
         if req.deadline is not None:
             update_data["deadline"] = req.deadline
         
+        # Handle status update and set completedAt/startedAt
         if req.status is not None:
-            update_data["status"] = req.status.lower()
+            new_status = req.status.lower()
+            update_data["status"] = new_status
+            
+            # Set completedAt when status changes to 'completed'
+            if prev_status != "completed" and new_status == "completed":
+                current_time = current_timestamp()
+                update_data["completedAt"] = current_time
+            
+            # Set startedAt when status changes from 'unassigned' to 'ongoing'
+            if prev_status == "unassigned" and new_status == "ongoing":
+                if existing_task.get("startedAt") is None:
+                    current_time = current_timestamp()
+                    update_data["startedAt"] = current_time
         
-        if req.priority is not None:
-            update_data["priority"] = req.priority
+        # Handle owner_id update - auto-change status to 'ongoing' if owner != creator
+        if req.owner_id is not None:
+            update_data["ownerId"] = req.owner_id
+            
+            # If owner is being changed to someone other than creator, and status is 'unassigned'
+            # then automatically change status to 'ongoing' and set startedAt
+            if req.owner_id != creator_id and prev_status == "unassigned":
+                update_data["status"] = "ongoing"
+                if existing_task.get("startedAt") is None:
+                    current_time = current_timestamp()
+                    update_data["startedAt"] = current_time
         
+        # Handle other fields
         if req.notes is not None:
             update_data["notes"] = req.notes
         
@@ -358,26 +373,21 @@ class TaskService:
         if req.project_id is not None:
             update_data["projectId"] = req.project_id
         
-        if req.owner_id is not None:
-            update_data["ownerId"] = req.owner_id
+        if req.priority is not None:
+            update_data["priority"] = req.priority
         
         if req.active is not None:
-            update_data["active"] = bool(req.active)
+            update_data["active"] = req.active
         
         if req.scheduled is not None:
-            update_data["scheduled"] = bool(req.scheduled)
+            update_data["scheduled"] = req.scheduled
         
         if req.schedule is not None:
             update_data["schedule"] = req.schedule
-            if req.schedule == "custom":
-                if req.custom_schedule is None:
-                    return None, "custom_schedule required when schedule is 'custom'"
+            if req.schedule == "custom" and req.custom_schedule:
                 update_data["custom_schedule"] = req.custom_schedule
             else:
                 update_data["custom_schedule"] = None
-        elif req.custom_schedule is not None:
-            if existing_task.get("schedule") == "custom":
-                update_data["custom_schedule"] = req.custom_schedule
         
         if req.start_date is not None:
             update_data["start_date"] = req.start_date
