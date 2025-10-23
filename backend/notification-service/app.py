@@ -264,6 +264,119 @@ def health_check():
     """Health check endpoint"""
     return jsonify(status="healthy", service="notification-service"), 200
 
+
+@app.route("/notifications/deadline-extension-request", methods=["POST"])
+def send_deadline_extension_request_notification():
+    """Send notification for deadline extension request"""
+    try:
+        data = request.json
+        
+        required_fields = ['ownerId', 'itemId', 'itemTitle', 'requesterId', 'itemType', 'extensionRequestId']  
+        for field in required_fields:
+            if field not in data:
+                return jsonify(error=f"Missing required field: {field}"), 400
+        
+        owner_id = data['ownerId']
+        item_id = data['itemId']
+        item_title = data['itemTitle']
+        requester_id = data['requesterId']
+        item_type = data['itemType']
+        extension_request_id = data['extensionRequestId'] 
+        
+        notification_id = notification_service.create_deadline_extension_request_notification(
+            owner_id, item_id, item_title, requester_id, item_type, extension_request_id 
+        )
+        
+        if notification_id:
+            return jsonify(
+                message="Extension request notification sent",
+                notificationId=notification_id
+            ), 200
+        else:
+            return jsonify(error="Failed to create notification"), 500
+            
+    except Exception as e:
+        logger.error(f"Failed to send extension request notification: {str(e)}")
+        return jsonify(error=f"Failed to send notification: {str(e)}"), 500
+
+@app.route("/notifications/deadline-extension-response", methods=["POST"])
+def send_deadline_extension_response_notification():
+    """Send notification for deadline extension response"""
+    try:
+        data = request.json
+        
+        required_fields = ['requesterId', 'itemId', 'itemType', 'status']
+        for field in required_fields:
+            if field not in data:
+                return jsonify(error=f"Missing required field: {field}"), 400
+        
+        requester_id = data['requesterId']
+        item_id = data['itemId']
+        item_type = data['itemType']
+        status = data['status']
+        rejection_reason = data.get('rejectionReason')
+        
+        # Get item title
+        if item_type == 'task':
+            item_ref = notification_service.db.reference(f"tasks/{item_id}")
+        else:
+            item_ref = notification_service.db.reference(f"subtasks/{item_id}")
+        
+        item_data = item_ref.get()
+        item_title = item_data.get('title', 'Untitled') if item_data else 'Untitled'
+        
+        notification_id = notification_service.create_deadline_extension_response_notification(
+            requester_id, item_id, item_type, item_title, status, rejection_reason
+        )
+        
+        if notification_id:
+            return jsonify(
+                message="Extension response notification sent",
+                notificationId=notification_id
+            ), 200
+        else:
+            return jsonify(error="Failed to create notification"), 500
+            
+    except Exception as e:
+        logger.error(f"Failed to send extension response notification: {str(e)}")
+        return jsonify(error=f"Failed to send notification: {str(e)}"), 500
+
+@app.route("/notifications/deadline-changed", methods=["POST"])
+def send_deadline_changed_notification():
+    """Send notification to all collaborators about deadline change"""
+    try:
+        data = request.json
+        
+        required_fields = ['itemId', 'itemTitle', 'itemType', 'collaboratorIds', 'newDeadline']
+        for field in required_fields:
+            if field not in data:
+                return jsonify(error=f"Missing required field: {field}"), 400
+        
+        item_id = data['itemId']
+        item_title = data['itemTitle']
+        item_type = data['itemType']
+        collaborator_ids = data['collaboratorIds']
+        new_deadline = data['newDeadline']
+        
+        notifications_sent = []
+        
+        for user_id in collaborator_ids:
+            notification_id = notification_service.create_deadline_changed_notification(
+                user_id, item_id, item_type, item_title, new_deadline
+            )
+            if notification_id:
+                notifications_sent.append(user_id)
+        
+        return jsonify(
+            message="Deadline change notifications sent",
+            notificationsSent=notifications_sent
+        ), 200
+            
+    except Exception as e:
+        logger.error(f"Failed to send deadline change notifications: {str(e)}")
+        return jsonify(error=f"Failed to send notifications: {str(e)}"), 500
+
+
 if __name__ == '__main__':
     # Start the background scheduler
     scheduler_service.start()

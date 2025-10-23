@@ -24,6 +24,17 @@ class Notification:
     comment_text: Optional[str] = None
     commenter_name: Optional[str] = None
     commenter_id: Optional[str] = None
+    # Extension request fields
+    actionable: Optional[bool] = None
+    extension_request_id: Optional[str] = None
+    requester_id: Optional[str] = None
+    requester_name: Optional[str] = None
+    item_id: Optional[str] = None
+    item_type: Optional[str] = None
+    item_title: Optional[str] = None
+    status: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    new_deadline: Optional[int] = None
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -47,7 +58,18 @@ class Notification:
             new_status=data.get("newStatus"),
             comment_text=data.get("commentText"),
             commenter_name=data.get("commenterName"),
-            commenter_id=data.get("commenterId")
+            commenter_id=data.get("commenterId"),
+            # Extension request fields
+            actionable=data.get("actionable"),
+            extension_request_id=data.get("extensionRequestId"),
+            requester_id=data.get("requesterId"),
+            requester_name=data.get("requesterName"),
+            item_id=data.get("itemId"),
+            item_type=data.get("itemType"),
+            item_title=data.get("itemTitle"),
+            status=data.get("status"),
+            rejection_reason=data.get("rejectionReason"),
+            new_deadline=data.get("newDeadline")
         )
     
     def to_dict(self):
@@ -66,6 +88,7 @@ class Notification:
             "readAt": self.read_at
         }
 
+        # Add optional fields if they exist
         if self.task_id:
             result["taskId"] = self.task_id
         if self.subtask_id:
@@ -82,6 +105,28 @@ class Notification:
             result["commenterName"] = self.commenter_name
         if self.commenter_id:
             result["commenterId"] = self.commenter_id
+        
+        # Extension request fields
+        if self.actionable is not None:
+            result["actionable"] = self.actionable
+        if self.extension_request_id:
+            result["extensionRequestId"] = self.extension_request_id
+        if self.requester_id:
+            result["requesterId"] = self.requester_id
+        if self.requester_name:
+            result["requesterName"] = self.requester_name
+        if self.item_id:
+            result["itemId"] = self.item_id
+        if self.item_type:
+            result["itemType"] = self.item_type
+        if self.item_title:
+            result["itemTitle"] = self.item_title
+        if self.status:
+            result["status"] = self.status
+        if self.rejection_reason:
+            result["rejectionReason"] = self.rejection_reason
+        if self.new_deadline:
+            result["newDeadline"] = self.new_deadline
 
         return result
 

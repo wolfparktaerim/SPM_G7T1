@@ -14,6 +14,7 @@ class NotificationService:
     """Service for managing notifications"""
     
     def __init__(self):
+        self.db = get_db_reference()
         self.notifications_ref = get_db_reference("notifications")
         self.notification_sent_ref = get_db_reference("notificationsSent")
     
@@ -359,3 +360,108 @@ class NotificationService:
             logger.error(f"Error checking duplicate comment notification: {str(e)}")
             return False
 
+    def create_deadline_extension_request_notification(self, owner_id: str, item_id: str, 
+                                                        item_title: str, requester_id: str, 
+                                                        item_type: str, extension_request_id: str):  # ADD this parameter
+        """Create notification for deadline extension request"""
+        import uuid
+        from datetime import datetime
+        
+        notification_id = str(uuid.uuid4())
+        current_time = int(datetime.now().timestamp())
+        
+        # Get requester name
+        requester_name = self._get_user_name(requester_id)
+        
+        notification_data = {
+            "notificationId": notification_id,
+            "userId": owner_id,
+            "type": "deadline_extension_request",
+            "itemId": item_id,
+            "itemType": item_type,
+            "itemTitle": item_title,
+            "message": f"{requester_name} has requested a deadline extension for {item_type}: {item_title}",
+            "requesterId": requester_id,
+            "requesterName": requester_name,
+            "extensionRequestId": extension_request_id,  
+            "actionable": True,
+            "read": False,
+            "createdAt": current_time,
+            "actionable": True
+        }
+        
+        self.notifications_ref.child(owner_id).child(notification_id).set(notification_data)
+        return notification_id
+    
+    def create_deadline_extension_response_notification(self, requester_id: str, item_id: str,
+                                                        item_type: str, item_title: str,
+                                                        status: str, rejection_reason: str = None):
+        """Create notification for deadline extension response"""
+        import uuid
+        from datetime import datetime
+        
+        notification_id = str(uuid.uuid4())
+        current_time = int(datetime.now().timestamp())
+        
+        if status == "approved":
+            message = f"Your deadline extension request for {item_type}: {item_title} has been approved"
+        else:
+            message = f"Your deadline extension request for {item_type}: {item_title} has been rejected"
+            if rejection_reason:
+                message += f" - Reason: {rejection_reason}"
+        
+        notification_data = {
+            "notificationId": notification_id,
+            "userId": requester_id,
+            "type": "deadline_extension_response",
+            "itemId": item_id,
+            "itemType": item_type,
+            "itemTitle": item_title,
+            "message": message,
+            "status": status,
+            "rejectionReason": rejection_reason,
+            "read": False,
+            "createdAt": current_time,
+            "actionable": False
+        }
+        
+        self.notifications_ref.child(requester_id).child(notification_id).set(notification_data)
+        return notification_id
+
+    def create_deadline_changed_notification(self, user_id: str, item_id: str, 
+                                            item_type: str, item_title: str, 
+                                            new_deadline: int):
+        """Create notification for deadline change (for all collaborators)"""
+        import uuid
+        from datetime import datetime
+        
+        notification_id = str(uuid.uuid4())
+        current_time = int(datetime.now().timestamp())
+        
+        # Format the new deadline
+        deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y")
+        
+        notification_data = {
+            "notificationId": notification_id,
+            "userId": user_id,
+            "type": "deadline_changed",
+            "itemId": item_id,
+            "itemType": item_type,
+            "itemTitle": item_title,
+            "message": f"The deadline for {item_type}: {item_title} has been extended to {deadline_str}",
+            "newDeadline": new_deadline,
+            "read": False,
+            "createdAt": current_time,
+            "actionable": False
+        }
+        
+        self.notifications_ref.child(user_id).child(notification_id).set(notification_data)
+        return notification_id
+
+    def _get_user_name(self, user_id: str):
+        """Helper to get user name from user_id"""
+        users_ref = get_db_reference("users") 
+        user_data = users_ref.child(user_id).get()
+        if user_data:
+            return user_data.get("name", "Unknown User")
+        return "Unknown User"

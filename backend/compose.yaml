@@ -13,6 +13,7 @@ services:
       - SUBTASK_SERVICE_URL=http://subtask-service:6003
       - NOTIFICATION_SERVICE_URL=http://notification-service:6004
       - COMMENT_SERVICE_URL=http://comment-service:6006
+      - EXTENSION_REQUEST_SERVICE_URL=http://extension-request-service:6007 
     command: >
       sh -c "
         apk add --no-cache gettext &&
@@ -113,3 +114,23 @@ services:
     environment:
       JSON_PATH: "/app/firebase.json"
       DATABASE_URL: "${DATABASE_URL}"
+
+
+  extension-request-service:
+    build:
+      context: .
+      dockerfile: extension-request-service/Dockerfile
+    ports:
+      - "6007:6007"
+    volumes:
+      - ./firebase-cred.json:/app/firebase.json:ro
+    environment:
+      JSON_PATH: "/app/firebase.json"
+      DATABASE_URL: "${DATABASE_URL}"
+      NOTIFICATION_SERVICE_URL: "${NOTIFICATION_SERVICE_URL}"
+      TASK_SERVICE_URL: "${SUBTASK_SERVICE_URL}"
+      SUBTASK_SERVICE_URL: "${DATABASE_URL}"
+    depends_on:
+      - notification-service
+      - task-service
+      - subtask-service

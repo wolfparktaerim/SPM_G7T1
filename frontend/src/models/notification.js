@@ -8,6 +8,9 @@ export class Notification {
     notificationId = '',
     userId = '',
     taskId = '',
+    itemId = '', // For extension requests
+    itemType = '', // 'task' or 'subtask' for extension requests
+    itemTitle = '', // For extension requests
     type = 'task_deadline_reminder',
     title = '',
     message = '',
@@ -23,14 +26,23 @@ export class Notification {
     commentText = null,
     commenterName = null,
     commenterId = null,
+    actionable = false, // For extension requests
+    requesterId = null, // For extension requests
+    requesterName = null, // For extension requests
+    extensionRequestId = null, // For extension requests
+    status = null, // For extension response (approved/rejected)
+    rejectionReason = null, // For extension response
   } = {}) {
     this.notificationId = notificationId
     this.userId = userId
-    this.taskId = taskId
+    this.taskId = taskId || itemId // Support both formats
+    this.itemId = itemId
+    this.itemType = itemType
+    this.itemTitle = itemTitle || taskTitle // Support both formats
     this.type = type
     this.title = title
     this.message = message
-    this.taskTitle = taskTitle
+    this.taskTitle = taskTitle || itemTitle // Support both formats
     this.taskDeadline = taskDeadline
     this.daysUntilDeadline = daysUntilDeadline
     this.read = read
@@ -42,6 +54,12 @@ export class Notification {
     this.commentText = commentText
     this.commenterName = commenterName
     this.commenterId = commenterId
+    this.actionable = actionable
+    this.requesterId = requesterId
+    this.requesterName = requesterName
+    this.extensionRequestId = extensionRequestId
+    this.status = status
+    this.rejectionReason = rejectionReason
   }
 
   /**
@@ -50,6 +68,30 @@ export class Notification {
    */
   isUnread() {
     return !this.read
+  }
+
+  /**
+   * Check if this is an extension request notification
+   * @returns {boolean}
+   */
+  isExtensionRequest() {
+    return this.type === 'deadline_extension_request'
+  }
+
+  /**
+   * Check if this is an extension response notification
+   * @returns {boolean}
+   */
+  isExtensionResponse() {
+    return this.type === 'deadline_extension_response'
+  }
+
+  /**
+   * Check if this is a deadline changed notification
+   * @returns {boolean}
+   */
+  isDeadlineChanged() {
+    return this.type === 'deadline_changed'
   }
 
   /**
@@ -138,29 +180,45 @@ export class Notification {
 
   /**
    * Create from Firebase/API data
+   * Handles both camelCase and snake_case field names
    * @param {Object} data
    * @returns {Notification}
    */
   static fromData(data) {
+    // Helper function to get value from either camelCase or snake_case
+    const get = (camelCase, snakeCase) => {
+      return data[camelCase] ?? data[snakeCase] ?? null
+    }
+
     return new Notification({
-      notificationId: data.notificationId || data.id,
-      userId: data.userId,
-      taskId: data.taskId,
+      notificationId: get('notificationId', 'notification_id') || data.id,
+      userId: get('userId', 'user_id'),
+      taskId: get('taskId', 'task_id') || get('itemId', 'item_id'),
+      itemId: get('itemId', 'item_id'),
+      itemType: get('itemType', 'item_type'),
+      itemTitle: get('itemTitle', 'item_title'),
       type: data.type,
       title: data.title,
       message: data.message,
-      taskTitle: data.taskTitle,
-      taskDeadline: data.taskDeadline,
-      daysUntilDeadline: data.daysUntilDeadline,
+      taskTitle: get('taskTitle', 'task_title') || get('itemTitle', 'item_title'),
+      taskDeadline: get('taskDeadline', 'task_deadline'),
+      daysUntilDeadline: get('daysUntilDeadline', 'days_until_deadline'),
       read: data.read || false,
-      createdAt: data.createdAt,
-      readAt: data.readAt,
-      parentTaskTitle: data.parentTaskTitle,
-      oldStatus: data.oldStatus,
-      newStatus: data.newStatus,
-      commentText: data.commentText,
-      commenterName: data.commenterName,
-      commenterId: data.commenterId,
+      createdAt: get('createdAt', 'created_at'),
+      readAt: get('readAt', 'read_at'),
+      parentTaskTitle: get('parentTaskTitle', 'parent_task_title'),
+      oldStatus: get('oldStatus', 'old_status'),
+      newStatus: get('newStatus', 'new_status'),
+      commentText: get('commentText', 'comment_text'),
+      commenterName: get('commenterName', 'commenter_name'),
+      commenterId: get('commenterId', 'commenter_id'),
+      actionable: data.actionable || false,
+      requesterId: get('requesterId', 'requester_id'),
+      requesterName: get('requesterName', 'requester_name'),
+      extensionRequestId:
+        get('extensionRequestId', 'extension_request_id') || get('requestId', 'request_id'),
+      status: data.status,
+      rejectionReason: get('rejectionReason', 'rejection_reason'),
     })
   }
 
@@ -173,6 +231,9 @@ export class Notification {
       notificationId: this.notificationId,
       userId: this.userId,
       taskId: this.taskId,
+      itemId: this.itemId,
+      itemType: this.itemType,
+      itemTitle: this.itemTitle,
       type: this.type,
       title: this.title,
       message: this.message,
@@ -188,6 +249,12 @@ export class Notification {
       commentText: this.commentText,
       commenterName: this.commenterName,
       commenterId: this.commenterId,
+      actionable: this.actionable,
+      requesterId: this.requesterId,
+      requesterName: this.requesterName,
+      extensionRequestId: this.extensionRequestId,
+      status: this.status,
+      rejectionReason: this.rejectionReason,
     }
   }
 }

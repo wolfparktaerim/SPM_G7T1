@@ -38,7 +38,7 @@ export const getUnreadNotifications = async (userId) => {
     const response = await axios.get(`${NOTIFICATION_SERVICE_URL}/notifications/${userId}/unread`)
     return {
       notifications: response.data.notifications || [],
-      count: response.data.count || 0
+      count: response.data.count || 0,
     }
   } catch (error) {
     console.error('Error fetching unread notifications:', error)
@@ -59,7 +59,7 @@ export const markNotificationAsRead = async (userId, notificationId) => {
 
   try {
     const response = await axios.patch(
-      `${NOTIFICATION_SERVICE_URL}/notifications/${userId}/${notificationId}/read`
+      `${NOTIFICATION_SERVICE_URL}/notifications/${userId}/${notificationId}/read`,
     )
     return response.data.notification
   } catch (error) {
@@ -80,7 +80,7 @@ export const markAllNotificationsAsRead = async (userId) => {
 
   try {
     const response = await axios.patch(
-      `${NOTIFICATION_SERVICE_URL}/notifications/${userId}/mark-all-read`
+      `${NOTIFICATION_SERVICE_URL}/notifications/${userId}/mark-all-read`,
     )
     return response.data.count || 0
   } catch (error) {
@@ -101,9 +101,7 @@ export const deleteNotification = async (userId, notificationId) => {
   }
 
   try {
-    await axios.delete(
-      `${NOTIFICATION_SERVICE_URL}/notifications/${userId}/${notificationId}`
-    )
+    await axios.delete(`${NOTIFICATION_SERVICE_URL}/notifications/${userId}/${notificationId}`)
   } catch (error) {
     console.error('Error deleting notification:', error)
     throw error
@@ -118,7 +116,7 @@ export const notificationService = {
   getUnreadNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
-  deleteNotification
+  deleteNotification,
 }
 
 export default notificationService

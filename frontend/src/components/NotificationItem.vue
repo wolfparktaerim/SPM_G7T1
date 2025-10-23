@@ -1,68 +1,92 @@
 <!-- src/components/NotificationItem.vue -->
 
 <template>
-  <div
-    @click="handleClick"
-    :class="[
-      'group relative p-4 rounded-xl transition-all duration-300 cursor-pointer',
-      'border-2',
-      notification.isUnread()
-        ? 'bg-blue-50/50 border-blue-200 hover:bg-blue-100/50'
-        : 'bg-white border-gray-200 hover:bg-gray-50',
-      'hover:shadow-md'
-    ]"
-  >
+  <div @click="handleClick" :class="[
+    'group relative p-4 rounded-xl transition-all duration-300 cursor-pointer',
+    'border-2',
+    notification.isUnread()
+      ? 'bg-blue-50/50 border-blue-200 hover:bg-blue-100/50'
+      : 'bg-white border-gray-200 hover:bg-gray-50',
+    'hover:shadow-md'
+  ]">
     <!-- Notification content -->
     <div class="flex items-start space-x-3">
-      <!-- Icon based on urgency -->
-      <div
-        :class="[
-          'flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center',
-          'transition-all duration-300 group-hover:scale-110',
-          getUrgencyIconBg()
-        ]"
-      >
-        <component
-          :is="getUrgencyIcon()"
-          :class="['w-5 h-5', getUrgencyIconColor()]"
-          :stroke-width="2"
-        />
+      <!-- Icon based on type/urgency -->
+      <div :class="[
+        'flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center',
+        'transition-all duration-300 group-hover:scale-110',
+        getIconBg()
+      ]">
+        <component :is="getIcon()" :class="['w-5 h-5', getIconColor()]" :stroke-width="2" />
       </div>
 
       <!-- Content -->
       <div class="flex-1 min-w-0">
         <!-- Title -->
         <div class="flex items-start justify-between">
-          <h4
-            :class="[
-              'text-sm font-semibold',
-              notification.isUnread() ? 'text-gray-900' : 'text-gray-600'
-            ]"
-          >
-            {{ notification.title }}
+          <h4 :class="[
+            'text-sm font-semibold',
+            notification.isUnread() ? 'text-gray-900' : 'text-gray-600'
+          ]">
+            {{ getNotificationTitle() }}
           </h4>
         </div>
 
-        <!-- Task title -->
-        <p
-          :class="[
-            'mt-1 text-sm font-medium',
-            notification.isUnread() ? 'text-gray-700' : 'text-gray-500'
-          ]"
-        >
-          {{ notification.taskTitle }}
+        <!-- Task/Item title -->
+        <p :class="[
+          'mt-1 text-sm font-medium',
+          notification.isUnread() ? 'text-gray-700' : 'text-gray-500'
+        ]">
+          {{ notification.taskTitle || notification.itemTitle }}
         </p>
 
         <!-- Parent task (for subtasks only) -->
-        <p
-          v-if="notification.parentTaskTitle"
-          class="mt-1 text-xs text-gray-500"
-        >
+        <p v-if="notification.parentTaskTitle" class="mt-1 text-xs text-gray-500">
           Part of task: <span class="font-medium text-gray-700">{{ notification.parentTaskTitle }}</span>
         </p>
 
+        <!-- Extension Request Display -->
+        <div v-if="notification.isExtensionRequest()" class="mt-3" @click.stop>
+
+          <ExtensionRequestAction v-if="notification.actionable && extensionRequestData"
+            :extension-request="extensionRequestData" :requester-name="notification.requesterName || 'User'"
+            :item-title="notification.itemTitle || notification.taskTitle || 'Untitled'"
+            @responded="handleExtensionResponse" />
+
+          <!-- Loading state -->
+          <div v-else-if="notification.actionable && !extensionRequestData" class="text-sm text-gray-500 italic">
+            Loading extension request details...
+          </div>
+        </div>
+
+        <!-- Extension Response Display -->
+        <div v-else-if="notification.isExtensionResponse()" class="mt-2">
+          <div :class="[
+            'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium',
+            notification.status === 'approved'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          ]">
+            <Check v-if="notification.status === 'approved'" class="w-4 h-4" />
+            <X v-else class="w-4 h-4" />
+            <span>{{ notification.status === 'approved' ? 'Approved' : 'Rejected' }}</span>
+          </div>
+          <div v-if="notification.rejectionReason" class="mt-2 text-xs text-gray-600 italic">
+            Reason: {{ notification.rejectionReason }}
+          </div>
+        </div>
+
+        <!-- Deadline Changed Display -->
+        <div v-else-if="notification.isDeadlineChanged()" class="mt-2">
+          <div
+            class="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-50 text-blue-800 border border-blue-200">
+            <Calendar class="w-4 h-4" />
+            <span>New Deadline: {{ getFormattedDeadline() }}</span>
+          </div>
+        </div>
+
         <!-- Status Update Info (for task/subtask status updates) -->
-        <div v-if="isStatusUpdateNotification()" class="mt-2 flex items-center space-x-2 text-xs">
+        <div v-else-if="isStatusUpdateNotification()" class="mt-2 flex items-center space-x-2 text-xs">
           <!-- Old status (crossed out) -->
           <span class="px-2 py-1 bg-gray-100 text-gray-500 rounded-lg line-through font-medium">
             {{ formatStatus(notification.oldStatus) }}
@@ -93,41 +117,42 @@
         </div>
 
         <!-- Deadline info (for deadline reminders only) -->
-        <div v-else class="mt-2 space-y-1 text-xs">
+        <div
+          v-else-if="!notification.isExtensionRequest() && !notification.isExtensionResponse() && !notification.isDeadlineChanged()"
+          class="mt-2 space-y-1 text-xs">
           <!-- Due date -->
-          <div class="flex items-center space-x-1 text-gray-600">
+          <div v-if="notification.taskDeadline" class="flex items-center space-x-1 text-gray-600">
             <Calendar class="w-3.5 h-3.5" :stroke-width="2" />
             <span>{{ notification.getFormattedDeadline() }}</span>
           </div>
 
           <!-- Time remaining with urgency badge -->
-          <div
-            :class="[
-              'flex items-center space-x-1 px-2 py-0.5 rounded-full font-medium w-fit',
-              getUrgencyBadgeClasses()
-            ]"
-          >
+          <div v-if="notification.daysUntilDeadline !== null" :class="[
+            'flex items-center space-x-1 px-2 py-0.5 rounded-full font-medium w-fit',
+            getUrgencyBadgeClasses()
+          ]">
             <Clock class="w-3.5 h-3.5" :stroke-width="2" />
             <span>{{ notification.getTimeRemainingText() }}</span>
           </div>
         </div>
+
+        <!-- Message (for extension requests and responses) -->
+        <div
+          v-if="notification.message && (notification.isExtensionRequest() || notification.isExtensionResponse() || notification.isDeadlineChanged())"
+          class="mt-2 text-xs text-gray-600">
+          {{ notification.message }}
+        </div>
       </div>
 
       <!-- Action button (Mark as read or Delete) -->
-      <button
-        v-if="notification.isUnread()"
-        @click.stop="handleMarkAsRead"
+      <button v-if="notification.isUnread()" @click.stop="handleMarkAsRead"
         class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-1.5 rounded-lg hover:bg-blue-100 text-gray-400 hover:text-blue-600"
-        title="Mark as read"
-      >
+        title="Mark as read">
         <Eye class="w-4 h-4" :stroke-width="2" />
       </button>
-      <button
-        v-else
-        @click.stop="handleDelete"
+      <button v-else @click.stop="handleDelete"
         class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-1.5 rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-600"
-        title="Delete notification"
-      >
+        title="Delete notification">
         <X class="w-4 h-4" :stroke-width="2" />
       </button>
     </div>
@@ -135,8 +160,11 @@
 </template>
 
 <script setup>
-import { Clock, Calendar, X, Eye, AlertCircle, Bell, AlertTriangle, MessageCircle } from 'lucide-vue-next'
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
+import { Clock, Calendar, X, Eye, AlertCircle, Bell, AlertTriangle, MessageCircle, Check } from 'lucide-vue-next'
 import { Notification } from '@/models/notification'
+import ExtensionRequestAction from './task/ExtensionRequestAction.vue'
 
 const props = defineProps({
   notification: {
@@ -145,7 +173,28 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['click', 'delete', 'markAsRead'])
+const emit = defineEmits(['click', 'delete', 'markAsRead', 'extensionResponded'])
+
+const API_BASE = (import.meta.env.VITE_BACKEND_API || '').replace(/\/+$/, '')
+
+const extensionRequestData = ref(null)
+
+onMounted(async () => {
+
+  try {
+
+    console.log("notification.extensionRequestId", props.notification.extensionRequestId)
+    // Fetch extension request details
+    const response = await axios.get(
+      `${API_BASE}/extension-requests/${props.notification.extensionRequestId}`
+    )
+    extensionRequestData.value = response.data
+    console.log("response data", response.data)
+  } catch (error) {
+    console.error('Failed to fetch extension request:', error)
+  }
+}
+)
 
 const handleClick = () => {
   emit('click', props.notification)
@@ -159,14 +208,55 @@ const handleMarkAsRead = () => {
   emit('markAsRead', props.notification)
 }
 
+const handleExtensionResponse = (response) => {
+  emit('extensionResponded', response)
+  // Mark as read after response
+  emit('markAsRead', props.notification)
+}
+
+const getNotificationTitle = () => {
+  if (props.notification.title) {
+    return props.notification.title
+  }
+
+  // Generate title based on type
+  if (props.notification.isExtensionRequest()) {
+    return 'Deadline Extension Request'
+  } else if (props.notification.isExtensionResponse()) {
+    return props.notification.status === 'approved'
+      ? 'Extension Request Approved'
+      : 'Extension Request Rejected'
+  } else if (props.notification.isDeadlineChanged()) {
+    return 'Deadline Updated'
+  } else if (isStatusUpdateNotification()) {
+    return 'Status Updated'
+  } else if (isCommentNotification()) {
+    return 'New Comment'
+  }
+
+  return 'Notification'
+}
+
+const getFormattedDeadline = () => {
+  if (!props.notification.taskDeadline) return 'N/A'
+  const date = new Date(props.notification.taskDeadline * 1000)
+  return date.toLocaleDateString('en-SG', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 const isStatusUpdateNotification = () => {
   return props.notification.type === 'task_status_update' ||
-         props.notification.type === 'subtask_status_update'
+    props.notification.type === 'subtask_status_update'
 }
 
 const isCommentNotification = () => {
   return props.notification.type === 'task_comment_notification' ||
-         props.notification.type === 'subtask_comment_notification'
+    props.notification.type === 'subtask_comment_notification'
 }
 
 const getCommentPreview = () => {
@@ -194,13 +284,28 @@ const getStatusBadgeClasses = (status) => {
   return statusColors[status] || 'bg-gray-100 text-gray-700'
 }
 
-const getUrgencyIcon = () => {
+const getIcon = () => {
+  // For extension requests, use clock icon
+  if (props.notification.isExtensionRequest()) {
+    return Clock
+  }
+
+  // For extension responses, use check/x icon
+  if (props.notification.isExtensionResponse()) {
+    return props.notification.status === 'approved' ? Check : X
+  }
+
+  // For deadline changed, use calendar icon
+  if (props.notification.isDeadlineChanged()) {
+    return Calendar
+  }
+
   // For comment notifications, use message icon
   if (isCommentNotification()) {
     return MessageCircle
   }
 
-  // For status updates, use a different icon
+  // For status updates, use bell icon
   if (isStatusUpdateNotification()) {
     return Bell
   }
@@ -218,7 +323,24 @@ const getUrgencyIcon = () => {
   }
 }
 
-const getUrgencyIconBg = () => {
+const getIconBg = () => {
+  // For extension requests, use amber background
+  if (props.notification.isExtensionRequest()) {
+    return 'bg-amber-100 group-hover:bg-amber-200'
+  }
+
+  // For extension responses, use appropriate color
+  if (props.notification.isExtensionResponse()) {
+    return props.notification.status === 'approved'
+      ? 'bg-emerald-100 group-hover:bg-emerald-200'
+      : 'bg-red-100 group-hover:bg-red-200'
+  }
+
+  // For deadline changed, use blue background
+  if (props.notification.isDeadlineChanged()) {
+    return 'bg-blue-100 group-hover:bg-blue-200'
+  }
+
   // For comment notifications, use green background
   if (isCommentNotification()) {
     return 'bg-green-100 group-hover:bg-green-200'
@@ -245,7 +367,24 @@ const getUrgencyIconBg = () => {
   }
 }
 
-const getUrgencyIconColor = () => {
+const getIconColor = () => {
+  // For extension requests, use amber color
+  if (props.notification.isExtensionRequest()) {
+    return 'text-amber-600'
+  }
+
+  // For extension responses, use appropriate color
+  if (props.notification.isExtensionResponse()) {
+    return props.notification.status === 'approved'
+      ? 'text-emerald-600'
+      : 'text-red-600'
+  }
+
+  // For deadline changed, use blue color
+  if (props.notification.isDeadlineChanged()) {
+    return 'text-blue-600'
+  }
+
   // For comment notifications, use green color
   if (isCommentNotification()) {
     return 'text-green-600'
@@ -288,6 +427,8 @@ const getUrgencyBadgeClasses = () => {
       return 'bg-gray-100 text-gray-700'
   }
 }
+
+
 </script>
 
 <style scoped>
