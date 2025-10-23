@@ -270,3 +270,92 @@ class NotificationService:
             logger.error(f"Error checking duplicate notification: {str(e)}")
             return False
 
+    def create_comment_notification(self, user_id, item_id, task_title, comment_text, commenter_name, commenter_id,
+                                    task_deadline=None, is_subtask=False, parent_task_title=None):
+        """Create a notification for a new comment on a task"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            new_notification_ref = user_notifications_ref.push()
+            notification_id = new_notification_ref.key
+
+            # Truncate comment if too long for notification
+            max_comment_length = 100
+            comment_preview = comment_text if len(comment_text) <= max_comment_length else comment_text[:max_comment_length] + "..."
+
+            # Create notification
+            if is_subtask:
+                notification_type = "subtask_comment_notification"
+                title = "New Comment on Subtask"
+                if parent_task_title:
+                    message = f"{commenter_name} commented on '{task_title}' (in {parent_task_title}): {comment_preview}"
+                else:
+                    message = f"{commenter_name} commented on '{task_title}': {comment_preview}"
+                item_id_field = "subTaskId"
+            else:
+                notification_type = "task_comment_notification"
+                title = "New Comment on Task"
+                message = f"{commenter_name} commented on '{task_title}': {comment_preview}"
+                item_id_field = "taskId"
+
+            notification_data = {
+                "notificationId": notification_id,
+                "userId": user_id,
+                item_id_field: item_id,
+                "type": notification_type,
+                "title": title,
+                "message": message,
+                "taskTitle": task_title,
+                "taskDeadline": task_deadline or 0,
+                "daysUntilDeadline": 0,
+                "commentText": comment_text,
+                "commenterName": commenter_name,
+                "commenterId": commenter_id,
+                "read": False,
+                "createdAt": current_timestamp(),
+                "readAt": None
+            }
+
+            if is_subtask and parent_task_title:
+                notification_data["parentTaskTitle"] = parent_task_title
+
+            new_notification_ref.set(notification_data)
+            logger.info(f"Created comment notification for user {user_id}")
+            return notification_id
+        except Exception as e:
+            logger.error(f"Failed to create comment notification: {str(e)}")
+            return None
+
+    def check_duplicate_comment_notification(self, user_id, item_id, commenter_id, is_subtask=False):
+        """Check if a similar comment notification was recently sent to prevent duplicates"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            all_notifications = user_notifications_ref.get() or {}
+
+            current_time = current_timestamp()
+            time_window = 60  # 1 minute in seconds - shorter window for comments
+
+            for notification in all_notifications.values():
+                # Check if it's a comment notification
+                notification_type = notification.get('type', '')
+                if not (notification_type == 'task_comment_notification' or notification_type == 'subtask_comment_notification'):
+                    continue
+
+                # Check if it's for the same item
+                item_id_field = 'subTaskId' if is_subtask else 'taskId'
+                if notification.get(item_id_field) != item_id:
+                    continue
+
+                # Check if it's from the same commenter
+                if notification.get('commenterId') != commenter_id:
+                    continue
+
+                # Check if it was created within the time window
+                created_at = notification.get('createdAt', 0)
+                if current_time - created_at < time_window:
+                    return True  # Duplicate found
+
+            return False  # No duplicate
+        except Exception as e:
+            logger.error(f"Error checking duplicate comment notification: {str(e)}")
+            return False
+

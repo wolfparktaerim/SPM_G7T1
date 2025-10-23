@@ -21,6 +21,9 @@ class Notification:
     parent_task_title: Optional[str] = None
     old_status: Optional[str] = None
     new_status: Optional[str] = None
+    comment_text: Optional[str] = None
+    commenter_name: Optional[str] = None
+    commenter_id: Optional[str] = None
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -41,7 +44,10 @@ class Notification:
             subtask_id=data.get("subTaskId"),
             parent_task_title=data.get("parentTaskTitle"),
             old_status=data.get("oldStatus"),
-            new_status=data.get("newStatus")
+            new_status=data.get("newStatus"),
+            comment_text=data.get("commentText"),
+            commenter_name=data.get("commenterName"),
+            commenter_id=data.get("commenterId")
         )
     
     def to_dict(self):
@@ -70,6 +76,12 @@ class Notification:
             result["oldStatus"] = self.old_status
         if self.new_status:
             result["newStatus"] = self.new_status
+        if self.comment_text:
+            result["commentText"] = self.comment_text
+        if self.commenter_name:
+            result["commenterName"] = self.commenter_name
+        if self.commenter_id:
+            result["commenterId"] = self.commenter_id
 
         return result
 

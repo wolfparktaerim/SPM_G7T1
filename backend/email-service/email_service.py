@@ -303,3 +303,92 @@ class EmailService:
         success = self.send_email(to_email, subject, html_content)
 
         return success
+
+    def create_comment_notification_email_html(self, task_title, comment_text, commenter_name,
+                                               is_subtask=False, parent_task_title=None, task_deadline=None):
+        """Create HTML email template for comment notifications"""
+
+        # Task type label
+        task_type = "Subtask" if is_subtask else "Task"
+
+        parent_task_html = ""
+        if parent_task_title:
+            parent_task_html = f'<p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">Part of task: <strong style="color: #111827;">{parent_task_title}</strong></p>'
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>New Comment on {task_type}</title>
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+            <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 40px 20px;">
+                        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                            <tr>
+                                <td style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">New Comment on {task_type}</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px 0;">
+                                    <div style="display: inline-block; background-color: #10b981; color: #ffffff; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;">
+                                        NEW COMMENT
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px;">
+                                    <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 20px; font-weight: 600;">{task_title}</h2>
+                                    {parent_task_html}
+                                    <div style="background-color: #f0f9ff; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 4px; margin-bottom: 12px;">
+                                        <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; font-weight: 500;">
+                                            Comment by <strong style="color: #111827;">{commenter_name}</strong>
+                                        </p>
+                                        <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6; font-style: italic; white-space: pre-wrap; word-wrap: break-word; padding-left: 0;">
+                                            "{comment_text}"
+                                        </p>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0 30px 30px;">
+                                    <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">
+                                        A new comment has been added to a {task_type.lower()} you are assigned to. Please review the comment and respond if necessary.
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color: #f9fafb; padding: 20px 30px; border-radius: 0 0 12px 12px; border-top: 1px solid #e5e7eb;">
+                                    <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
+                                        This is an automated notification from your Task Management System.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        return html
+
+    def send_comment_notification_email(self, to_email, task_title, comment_text, commenter_name,
+                                        is_subtask=False, parent_task_title=None, task_deadline=None):
+        """Send comment notification email"""
+
+        # Create subject
+        task_type = "Subtask" if is_subtask else "Task"
+        subject = f"New Comment on {task_type}: {task_title}"
+
+        # Create and send email
+        html_content = self.create_comment_notification_email_html(
+            task_title, comment_text, commenter_name, is_subtask, parent_task_title, task_deadline
+        )
+        success = self.send_email(to_email, subject, html_content)
+
+        return success

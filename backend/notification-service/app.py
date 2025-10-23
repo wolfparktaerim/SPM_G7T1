@@ -173,6 +173,92 @@ def send_task_update_notification():
         logger.error(f"Failed to send task update notifications: {str(e)}")
         return jsonify(error=f"Failed to send notifications: {str(e)}"), 500
 
+@app.route("/notifications/comment", methods=["POST"])
+def send_comment_notification():
+    """Send notification for new comment on task"""
+    try:
+        data = request.json
+
+        # Validate required fields
+        required_fields = ['itemId', 'taskTitle', 'commentText', 'commenterName', 'commenterId',
+                         'recipientIds', 'channel']
+        for field in required_fields:
+            if field not in data:
+                return jsonify(error=f"Missing required field: {field}"), 400
+
+        item_id = data['itemId']
+        task_title = data['taskTitle']
+        comment_text = data['commentText']
+        commenter_name = data['commenterName']
+        commenter_id = data['commenterId']
+        recipient_ids = data['recipientIds']  # List of user IDs to notify
+        channel = data['channel']
+        is_subtask = data.get('isSubtask', False)
+        parent_task_title = data.get('parentTaskTitle')
+        task_deadline = data.get('taskDeadline')
+        recipient_emails = data.get('recipientEmails', {})  # Dict mapping user_id to email
+
+        notifications_sent = []
+        emails_sent = []
+
+        # Send notifications to each recipient
+        for user_id in recipient_ids:
+            # Don't notify the commenter themselves
+            if user_id == commenter_id:
+                continue
+
+            # Check for duplicates
+            if notification_service.check_duplicate_comment_notification(user_id, item_id, commenter_id, is_subtask):
+                logger.info(f"Skipping duplicate comment notification for user {user_id}")
+                continue
+
+            # Send in-app notification if channel includes in-app
+            if channel in ['in-app', 'both']:
+                notification_id = notification_service.create_comment_notification(
+                    user_id, item_id, task_title, comment_text, commenter_name, commenter_id,
+                    task_deadline, is_subtask, parent_task_title
+                )
+                if notification_id:
+                    notifications_sent.append(user_id)
+
+            # Send email notification if channel includes email
+            if channel in ['email', 'both'] and user_id in recipient_emails:
+                try:
+                    import requests
+                    email_data = {
+                        "toEmail": recipient_emails[user_id],
+                        "taskTitle": task_title,
+                        "commentText": comment_text,
+                        "commenterName": commenter_name,
+                        "isSubtask": is_subtask,
+                        "parentTaskTitle": parent_task_title,
+                        "taskDeadline": task_deadline
+                    }
+
+                    response = requests.post(
+                        f"{email_service_url}/email/send-comment-notification",
+                        json=email_data,
+                        timeout=10
+                    )
+
+                    if response.status_code == 200:
+                        emails_sent.append(user_id)
+                        logger.info(f"Comment notification email sent to {recipient_emails[user_id]}")
+                    else:
+                        logger.error(f"Failed to send email: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error sending email: {str(e)}")
+
+        return jsonify(
+            message="Comment notifications sent",
+            notificationsSent=notifications_sent,
+            emailsSent=emails_sent
+        ), 200
+
+    except Exception as e:
+        logger.error(f"Failed to send comment notifications: {str(e)}")
+        return jsonify(error=f"Failed to send notifications: {str(e)}"), 500
+
 @app.route("/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""

@@ -98,6 +98,48 @@ def send_task_update():
     else:
         return jsonify(error="Failed to send task update email"), 500
 
+@app.route("/email/send-comment-notification", methods=["POST"])
+def send_comment_notification():
+    """Send comment notification email"""
+
+    try:
+        data = request.get_json(force=False, silent=False)
+    except Exception as e:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    # Handle missing body
+    if data is None or not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    # Validate required fields
+    required_fields = ['toEmail', 'taskTitle', 'commentText', 'commenterName']
+    for field in required_fields:
+        if field not in data:
+            return jsonify(error=f"Missing required field: {field}"), 400
+
+    # Extract data
+    to_email = data['toEmail']
+    task_title = data['taskTitle']
+    comment_text = data['commentText']
+    commenter_name = data['commenterName']
+    is_subtask = data.get('isSubtask', False)
+    parent_task_title = data.get('parentTaskTitle')
+    task_deadline = data.get('taskDeadline')
+
+    # Send email
+    success = email_service.send_comment_notification_email(
+        to_email, task_title, comment_text, commenter_name,
+        is_subtask, parent_task_title, task_deadline
+    )
+
+    if success:
+        return jsonify(
+            message="Comment notification email sent successfully",
+            sentAt=current_timestamp()
+        ), 200
+    else:
+        return jsonify(error="Failed to send comment notification email"), 500
+
 @app.route("/email/test", methods=["POST"])
 def test_email():
     """Test email configuration"""

@@ -79,6 +79,19 @@
           </span>
         </div>
 
+        <!-- Comment Info (for comment notifications) -->
+        <div v-else-if="isCommentNotification()" class="mt-2 text-xs">
+          <!-- Commenter name -->
+          <div class="text-gray-600 mb-1">
+            Comment by <span class="font-medium">{{ notification.commenterName }}</span>
+          </div>
+
+          <!-- Comment preview -->
+          <div class="text-gray-500 line-clamp-2 italic">
+            "{{ getCommentPreview() }}"
+          </div>
+        </div>
+
         <!-- Deadline info (for deadline reminders only) -->
         <div v-else class="mt-2 space-y-1 text-xs">
           <!-- Due date -->
@@ -122,7 +135,7 @@
 </template>
 
 <script setup>
-import { Clock, Calendar, X, Eye, AlertCircle, Bell, AlertTriangle } from 'lucide-vue-next'
+import { Clock, Calendar, X, Eye, AlertCircle, Bell, AlertTriangle, MessageCircle } from 'lucide-vue-next'
 import { Notification } from '@/models/notification'
 
 const props = defineProps({
@@ -151,6 +164,19 @@ const isStatusUpdateNotification = () => {
          props.notification.type === 'subtask_status_update'
 }
 
+const isCommentNotification = () => {
+  return props.notification.type === 'task_comment_notification' ||
+         props.notification.type === 'subtask_comment_notification'
+}
+
+const getCommentPreview = () => {
+  if (!props.notification.commentText) return ''
+  const maxLength = 100
+  return props.notification.commentText.length > maxLength
+    ? props.notification.commentText.substring(0, maxLength) + '...'
+    : props.notification.commentText
+}
+
 const formatStatus = (status) => {
   if (!status) return ''
   return status.replace(/_/g, ' ').split(' ').map(word =>
@@ -169,6 +195,11 @@ const getStatusBadgeClasses = (status) => {
 }
 
 const getUrgencyIcon = () => {
+  // For comment notifications, use message icon
+  if (isCommentNotification()) {
+    return MessageCircle
+  }
+
   // For status updates, use a different icon
   if (isStatusUpdateNotification()) {
     return Bell
@@ -188,6 +219,16 @@ const getUrgencyIcon = () => {
 }
 
 const getUrgencyIconBg = () => {
+  // For comment notifications, use green background
+  if (isCommentNotification()) {
+    return 'bg-green-100 group-hover:bg-green-200'
+  }
+
+  // For status updates, use purple background
+  if (isStatusUpdateNotification()) {
+    return 'bg-purple-100 group-hover:bg-purple-200'
+  }
+
   const urgency = props.notification.getUrgencyLevel()
 
   switch (urgency) {
@@ -205,6 +246,16 @@ const getUrgencyIconBg = () => {
 }
 
 const getUrgencyIconColor = () => {
+  // For comment notifications, use green color
+  if (isCommentNotification()) {
+    return 'text-green-600'
+  }
+
+  // For status updates, use purple color
+  if (isStatusUpdateNotification()) {
+    return 'text-purple-600'
+  }
+
   const urgency = props.notification.getUrgencyLevel()
 
   switch (urgency) {

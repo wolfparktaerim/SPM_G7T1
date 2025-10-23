@@ -19,7 +19,10 @@ export class Notification {
     readAt = null,
     parentTaskTitle = null,
     oldStatus = null,
-    newStatus = null
+    newStatus = null,
+    commentText = null,
+    commenterName = null,
+    commenterId = null
   } = {}) {
     this.notificationId = notificationId
     this.userId = userId
@@ -36,6 +39,9 @@ export class Notification {
     this.parentTaskTitle = parentTaskTitle
     this.oldStatus = oldStatus
     this.newStatus = newStatus
+    this.commentText = commentText
+    this.commenterName = commenterName
+    this.commenterId = commenterId
   }
 
   /**
@@ -151,7 +157,10 @@ export class Notification {
       readAt: data.readAt,
       parentTaskTitle: data.parentTaskTitle,
       oldStatus: data.oldStatus,
-      newStatus: data.newStatus
+      newStatus: data.newStatus,
+      commentText: data.commentText,
+      commenterName: data.commenterName,
+      commenterId: data.commenterId
     })
   }
 
@@ -175,7 +184,10 @@ export class Notification {
       readAt: this.readAt,
       parentTaskTitle: this.parentTaskTitle,
       oldStatus: this.oldStatus,
-      newStatus: this.newStatus
+      newStatus: this.newStatus,
+      commentText: this.commentText,
+      commenterName: this.commenterName,
+      commenterId: this.commenterId
     }
   }
 }
