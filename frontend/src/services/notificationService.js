@@ -2,7 +2,7 @@
 
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_API 
+const API_BASE_URL = import.meta.env.VITE_BACKEND_API
 const NOTIFICATION_SERVICE_URL = `${API_BASE_URL}notification`
 
 /**

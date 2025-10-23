@@ -44,7 +44,8 @@ def sample_project():
         description="Test Description",
         deadline=1700000000,
         creation_date=1600000000,
-        department="Engineering"
+        department="Engineering",
+        archived=False
     )
 
 class TestProjectModels:
@@ -60,7 +61,8 @@ class TestProjectModels:
             "description": "Test",
             "deadline": 1700000000,
             "creationDate": 1600000000,
-            "department": "Engineering"
+            "department": "Engineering",
+            "archived": False
         }
         project = Project.from_dict(data)
         
@@ -68,6 +70,7 @@ class TestProjectModels:
         assert project.title == "Test Project"
         assert len(project.collaborators) == 2
         assert project.department == "Engineering"
+        assert project.archived == False
     
     def test_project_to_dict(self, sample_project):
         """Test converting Project to dictionary"""
@@ -77,6 +80,7 @@ class TestProjectModels:
         assert data["title"] == "Test Project"
         assert data["ownerId"] == "u1"
         assert len(data["collaborators"]) == 2
+        assert data["archived"] == False
     
     def test_create_project_request_validate_success(self):
         """Test validation with valid data"""
@@ -185,6 +189,7 @@ class TestProjectService:
         assert project.department == "Engineering"
         assert "user1" in project.collaborators
         assert "user2" in project.collaborators
+        assert project.archived == False
         mock_new_ref.set.assert_called_once()
     
     def test_create_project_user_not_found(self, mock_db):
@@ -223,7 +228,8 @@ class TestProjectService:
                 "description": "Desc",
                 "deadline": 1700000000,
                 "creationDate": 1600000000,
-                "department": "Eng"
+                "department": "Eng",
+                "archived": False
             },
             "p2": {
                 "projectId": "p2",
@@ -233,7 +239,8 @@ class TestProjectService:
                 "description": "Desc2",
                 "deadline": 1700000000,
                 "creationDate": 1600000000,
-                "department": "HR"
+                "department": "HR",
+                "archived": False
             }
         }
         
@@ -257,7 +264,8 @@ class TestProjectService:
                 "description": "",
                 "deadline": 0,
                 "creationDate": 0,
-                "department": "Engineering"
+                "department": "Engineering",
+                "archived": False
             },
             "p2": {
                 "projectId": "p2",
@@ -267,7 +275,8 @@ class TestProjectService:
                 "description": "",
                 "deadline": 0,
                 "creationDate": 0,
-                "department": "HR"
+                "department": "HR",
+                "archived": False
             }
         }
         
@@ -291,7 +300,8 @@ class TestProjectService:
                 "description": "",
                 "deadline": 0,
                 "creationDate": 0,
-                "department": ""
+                "department": "",
+                "archived": False
             },
             "p2": {
                 "projectId": "p2",
@@ -301,7 +311,8 @@ class TestProjectService:
                 "description": "",
                 "deadline": 0,
                 "creationDate": 0,
-                "department": ""
+                "department": "",
+                "archived": False
             }
         }
         
@@ -326,7 +337,8 @@ class TestProjectService:
             "description": "Old Desc",
             "deadline": 1600000000,
             "creationDate": 1500000000,
-            "department": "Eng"
+            "department": "Eng",
+            "archived": False
         }
         mock_projects.child.return_value = mock_project_ref
         
@@ -437,6 +449,166 @@ class TestProjectService:
         assert project is None
         assert "manager" in error.lower()
 
+    def test_archive_project(self, mock_db):
+        """Test archiving a project"""
+        mock_projects = Mock()
+        mock_db.return_value = mock_projects
+        
+        mock_project_ref = Mock()
+        mock_project_ref.get.side_effect = [
+            {  # First call - before archive
+                "projectId": "p1",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "title": "Test Project",
+                "archived": False
+            },
+            {  # Second call - after archive
+                "projectId": "p1",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "title": "Test Project",
+                "archived": True
+            }
+        ]
+        mock_projects.child.return_value = mock_project_ref
+        
+        service = ProjectService()
+        project, error = service.archive_project("u1", "p1")
+        
+        assert error is None
+        assert project.archived == True
+        mock_project_ref.update.assert_called_once_with({"archived": True})
+
+    def test_archive_project_not_owner(self, mock_db):
+        """Test archiving project by non-owner"""
+        mock_projects = Mock()
+        mock_db.return_value = mock_projects
+        
+        mock_project_ref = Mock()
+        mock_project_ref.get.return_value = {
+            "projectId": "p1",
+            "ownerId": "u1",
+            "collaborators": ["u1", "u2"],
+            "archived": False
+        }
+        mock_projects.child.return_value = mock_project_ref
+        
+        service = ProjectService()
+        project, error = service.archive_project("u2", "p1")  # u2 is not owner
+        
+        assert project is None
+        assert "owner" in error.lower()
+        mock_project_ref.update.assert_not_called()
+
+    def test_unarchive_project(self, mock_db):
+        """Test unarchiving a project"""
+        mock_projects = Mock()
+        mock_db.return_value = mock_projects
+        
+        mock_project_ref = Mock()
+        mock_project_ref.get.side_effect = [
+            {  # First call - before unarchive
+                "projectId": "p1",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "title": "Test Project",
+                "archived": True
+            },
+            {  # Second call - after unarchive
+                "projectId": "p1",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "title": "Test Project",
+                "archived": False
+            }
+        ]
+        mock_projects.child.return_value = mock_project_ref
+        
+        service = ProjectService()
+        project, error = service.unarchive_project("u1", "p1")
+        
+        assert error is None
+        assert project.archived == False
+        mock_project_ref.update.assert_called_once_with({"archived": False})
+
+    def test_get_user_projects_excludes_archived(self, mock_db):
+        """Test that get_user_projects excludes archived projects"""
+        mock_projects = Mock()
+        mock_db.return_value = mock_projects
+        
+        mock_projects.get.return_value = {
+            "p1": {
+                "projectId": "p1",
+                "title": "Active Project",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "description": "",
+                "deadline": 0,
+                "creationDate": 0,
+                "department": "",
+                "archived": False
+            },
+            "p2": {
+                "projectId": "p2",
+                "title": "Archived Project",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "description": "",
+                "deadline": 0,
+                "creationDate": 0,
+                "department": "",
+                "archived": True
+            }
+        }
+        
+        service = ProjectService()
+        projects = service.get_user_projects("u1")
+        
+        # Should only return the active project
+        assert len(projects) == 1
+        assert projects[0].project_id == "p1"
+        assert projects[0].archived == False
+
+    def test_get_archived_projects(self, mock_db):
+        """Test getting archived projects"""
+        mock_projects = Mock()
+        mock_db.return_value = mock_projects
+        
+        mock_projects.get.return_value = {
+            "p1": {
+                "projectId": "p1",
+                "title": "Active Project",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "description": "",
+                "deadline": 0,
+                "creationDate": 0,
+                "department": "",
+                "archived": False
+            },
+            "p2": {
+                "projectId": "p2",
+                "title": "Archived Project",
+                "ownerId": "u1",
+                "collaborators": ["u1"],
+                "description": "",
+                "deadline": 0,
+                "creationDate": 0,
+                "department": "",
+                "archived": True
+            }
+        }
+        
+        service = ProjectService()
+        projects = service.get_archived_projects("u1")
+        
+        # Should only return archived projects owned by user
+        assert len(projects) == 1
+        assert projects[0].project_id == "p2"
+        assert projects[0].archived == True
+
+
 class TestProjectEndpoints:
     """Test Flask endpoints"""
     
@@ -521,6 +693,49 @@ class TestProjectEndpoints:
         assert response.status_code == 200
         data = response.get_json()
         assert 'users' in data
+    
+    @patch('app.project_service.archive_project')
+    def test_archive_project_endpoint(self, mock_archive, client, sample_project):
+        """Test archive endpoint"""
+        sample_project.archived = True
+        mock_archive.return_value = (sample_project, None)
+        
+        response = client.post('/project/archive', json={
+            "userid": "u1",
+            "projectId": "p1"
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'message' in data
+        assert data['project']['archived'] == True
+
+    @patch('app.project_service.unarchive_project')
+    def test_unarchive_project_endpoint(self, mock_unarchive, client, sample_project):
+        """Test unarchive endpoint"""
+        mock_unarchive.return_value = (sample_project, None)
+        
+        response = client.post('/project/unarchive', json={
+            "userid": "u1",
+            "projectId": "p1"
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'message' in data
+        assert data['project']['archived'] == False
+
+    @patch('app.project_service.get_archived_projects')
+    def test_get_archived_projects_endpoint(self, mock_get_archived, client):
+        """Test get archived projects endpoint"""
+        mock_get_archived.return_value = []
+        
+        response = client.get('/project/archived/u1')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'projects' in data
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
