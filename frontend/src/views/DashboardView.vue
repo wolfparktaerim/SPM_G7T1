@@ -639,12 +639,6 @@ const recentTasks = computed(() =>
     .slice(0, 5)
 )
 
-const getCollaboratorUsers = (task) => {
-  if (!task?.collaborators?.length || !allUsers.value?.length) return []
-  return allUsers.value.filter(u =>
-    task.collaborators.includes(u.uid)
-  )
-}
 const getCollaboratorsForTask = (task) => {
   if (!task?.collaborators?.length) return []
   return task.collaborators
@@ -653,9 +647,6 @@ const getCollaboratorsForTask = (task) => {
 }
 
 
-const tasksWithoutProject = computed(() =>
-  tasks.value.filter(t => !t.projectId || t.projectId.trim() === '')
-)
 
 /* ========================
    Fetch Data
@@ -890,10 +881,7 @@ async function fetchUsers() {
     console.error('Error fetching users:', error)
   }
 }
-const getUserNameById = (uid) => {
-  const user = allUsers.value.find(u => u.uid === uid)
-  return user?.name || user?.displayName || user?.email || uid
-}
+
 /* ========================
    Lifecycle
 ======================== */
