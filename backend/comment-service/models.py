@@ -112,7 +112,7 @@ class ArchiveCommentRequest:
     type: str
     parent_id: str
     thread_index: int
-    active: bool 
+    active: bool = False
     
     @classmethod
     def from_dict(cls, data: dict):

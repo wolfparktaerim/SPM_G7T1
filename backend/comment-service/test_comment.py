@@ -243,7 +243,8 @@ class TestCommentModels:
         req = ArchiveCommentRequest(
             type="task",
             parent_id="t1",
-            thread_index=0
+            thread_index=0,
+            active=False
         )
         errors = req.validate()
         assert len(errors) == 0
@@ -456,7 +457,8 @@ class TestCommentService:
         archive_data = {
             'type': 'task',
             'parent_id': 't1',
-            'thread_index': 0
+            'thread_index': 0,
+            'active': False
         }
         
         thread, error = service.archive_comment_thread(archive_data)
@@ -480,7 +482,8 @@ class TestCommentService:
         archive_data = {
             'type': 'task',
             'parent_id': 't1',
-            'thread_index': 99
+            'thread_index': 99,
+            'active': False
         }
         
         thread, error = service.archive_comment_thread(archive_data)
@@ -554,7 +557,7 @@ class TestCommentEndpoints:
     
     def test_create_comment_missing_body(self, client):
         """Test creating comment without body"""
-        response = client.post('/comments')
+        response = client.post('/comments', json=None)
         assert response.status_code == 415
     
     @patch('app.comment_service.create_comment')
