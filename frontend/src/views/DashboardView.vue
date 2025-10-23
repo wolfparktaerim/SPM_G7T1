@@ -501,7 +501,7 @@ import { useAuthStore } from '@/stores/auth'
 import NavigationBar from '@/components/NavigationBar.vue'
 import axios from 'axios'
 import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
+import html2canvas from 'html2canvas-pro'
 
 const route = useRoute()
 const router = useRouter()
