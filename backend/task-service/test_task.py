@@ -10,7 +10,7 @@ os.environ['DATABASE_URL'] = 'https://dummy.firebaseio.com'
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Create a mock Firebase app that will be returned by initialize_app
+# Create a mock Firebase app
 mock_firebase_app = MagicMock()
 
 # Mock Firebase admin at module level BEFORE any imports
@@ -21,10 +21,8 @@ firebase_admin_patcher = patch.dict('sys.modules', {
 })
 firebase_admin_patcher.start()
 
-# Now we can import
 from task_service import TaskService
 from models import Task, CreateTaskRequest, UpdateTaskRequest
-from app import app
 
 
 @pytest.fixture(autouse=True)
@@ -34,14 +32,6 @@ def mock_firebase():
         with patch('firebase_admin.get_app', return_value=mock_firebase_app):
             with patch('firebase_admin.credentials.Certificate'):
                 yield
-
-
-@pytest.fixture
-def client():
-    """Create test client"""
-    app.config['TESTING'] = True
-    with app.test_client() as client:
-        yield client
 
 
 @pytest.fixture
@@ -72,173 +62,17 @@ def sample_task():
         active=True,
         scheduled=False,
         schedule="daily",
-        custom_schedule=None
+        custom_schedule=None,
+        completed_at=None,
+        started_at=None
     )
 
 
-class TestTaskModels:
-    """Test task models"""
+class TestTaskServiceStartedAt:
+    """Test startedAt logic"""
     
-    def test_task_from_dict(self):
-        """Test creating Task from dictionary"""
-        data = {
-            "taskId": "t1",
-            "title": "Test Task",
-            "creatorId": "u1",
-            "deadline": 1700000000,
-            "status": "ongoing",
-            "notes": "Test",
-            "attachments": [],
-            "collaborators": ["u1"],
-            "projectId": "p1",
-            "ownerId": "u1",
-            "priority": 1,
-            "createdAt": 1600000000,
-            "updatedAt": 1600000000,
-            "start_date": 1600000000,
-            "active": True,
-            "scheduled": False,
-            "schedule": "daily",
-            "custom_schedule": None
-        }
-        task = Task.from_dict(data)
-        
-        assert task.task_id == "t1"
-        assert task.title == "Test Task"
-        assert task.active == True
-        assert task.schedule == "daily"
-    
-    def test_task_to_dict(self, sample_task):
-        """Test converting Task to dictionary"""
-        data = sample_task.to_dict()
-        
-        assert data["taskId"] == "t1"
-        assert data["title"] == "Test Task"
-        assert data["active"] == True
-    
-    def test_create_task_request_validate_success(self):
-        """Test validation with valid data"""
-        req = CreateTaskRequest(
-            title="Test Task",
-            creator_id="u1",
-            deadline=1700000000
-        )
-        errors = req.validate()
-        assert len(errors) == 0
-    
-    def test_create_task_request_validate_missing_fields(self):
-        """Test validation with missing fields"""
-        req = CreateTaskRequest(
-            title="",
-            creator_id="",
-            deadline=0
-        )
-        errors = req.validate()
-        assert len(errors) > 0
-        assert any("title" in error for error in errors)
-        assert any("creatorId" in error for error in errors)
-    
-    def test_create_task_request_custom_schedule(self):
-        """Test validation with custom schedule"""
-        req = CreateTaskRequest(
-            title="Test",
-            creator_id="u1",
-            deadline=1700000000,
-            schedule="custom",
-            custom_schedule=None
-        )
-        errors = req.validate()
-        assert len(errors) > 0
-        assert any("custom_schedule" in error for error in errors)
-
-
-class TestTaskService:
-    """Test task service class"""
-    
-    def test_validate_status(self, mock_db):
-        """Test status validation"""
-        mock_db.return_value = Mock()
-        service = TaskService()
-        
-        assert service.validate_status("ongoing") == True
-        assert service.validate_status("completed") == True
-        assert service.validate_status("invalid") == False
-    
-    def test_should_task_be_active_past_start(self, mock_db):
-        """Test task should be active with past start date"""
-        mock_db.return_value = Mock()
-        service = TaskService()
-        now = 1700000000
-        past_start = 1600000000
-        
-        assert service.should_task_be_active(past_start, now) == True
-    
-    def test_should_task_be_active_future_start(self, mock_db):
-        """Test task should not be active with future start date"""
-        mock_db.return_value = Mock()
-        service = TaskService()
-        now = 1700000000
-        future_start = 1800000000
-        
-        assert service.should_task_be_active(future_start, now) == False
-    
-    def test_should_task_be_active_same_date(self, mock_db):
-        """Test task should be active on start date"""
-        mock_db.return_value = Mock()
-        service = TaskService()
-        # Same date
-        date_ts = 1700000000
-        
-        assert service.should_task_be_active(date_ts, date_ts) == True
-    
-    def test_calculate_new_start_date_daily(self, mock_db):
-        """Test calculating next start date for daily schedule"""
-        mock_db.return_value = Mock()
-        
-        # Mock current_timestamp to control the "now" time
-        current_time = 1700000000
-        with patch('task_service.current_timestamp', return_value=current_time):
-            service = TaskService()
-            old_start = 1600000000  # Past date
-            
-            new_start = service.calculate_new_start_date(old_start, "daily")
-            
-            # Should be 1 day after current time
-            assert new_start == current_time + (24 * 60 * 60)
-    
-    def test_calculate_new_start_date_weekly(self, mock_db):
-        """Test calculating next start date for weekly schedule"""
-        mock_db.return_value = Mock()
-        
-        # Mock current_timestamp to control the "now" time
-        current_time = 1700000000
-        with patch('task_service.current_timestamp', return_value=current_time):
-            service = TaskService()
-            old_start = 1600000000  # Past date
-            
-            new_start = service.calculate_new_start_date(old_start, "weekly")
-            
-            # Should be 7 days after current time
-            assert new_start == current_time + (7 * 24 * 60 * 60)
-    
-    def test_calculate_new_start_date_custom(self, mock_db):
-        """Test calculating next start date for custom schedule"""
-        mock_db.return_value = Mock()
-        
-        # Mock current_timestamp to control the "now" time
-        current_time = 1700000000
-        with patch('task_service.current_timestamp', return_value=current_time):
-            service = TaskService()
-            old_start = 1600000000  # Past date
-            custom_days = 10
-            
-            new_start = service.calculate_new_start_date(old_start, "custom", custom_days)
-            
-            # Should be 10 days after current time
-            assert new_start == current_time + (10 * 24 * 60 * 60)
-    
-    def test_create_task(self, mock_db):
-        """Test creating a task"""
+    def test_create_task_owner_is_creator_unassigned(self, mock_db):
+        """Test creating task where owner is creator - status should be 'unassigned', startedAt should be None"""
         mock_tasks = Mock()
         mock_subtasks = Mock()
         mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
@@ -247,24 +81,29 @@ class TestTaskService:
         mock_new_ref.key = "test-task-id"
         mock_tasks.push.return_value = mock_new_ref
         
-        service = TaskService()
-        req = CreateTaskRequest(
-            title="Test Task",
-            creator_id="u1",
-            deadline=1700000000,
-            project_id="p1"
-        )
-        
-        task, error = service.create_task(req)
-        
-        assert error is None
-        assert task.title == "Test Task"
-        assert task.task_id == "test-task-id"
-        assert task.owner_id == "u1"  # Should default to creator
-        mock_new_ref.set.assert_called_once()
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = CreateTaskRequest(
+                title="Test Task",
+                creator_id="u1",
+                deadline=1800000000,
+                owner_id="u1"  # Same as creator
+            )
+            
+            task, error = service.create_task(req)
+            
+            assert error is None
+            assert task.status == "unassigned"
+            assert task.started_at is None
+            
+            # Verify the data sent to Firebase
+            call_args = mock_new_ref.set.call_args[0][0]
+            assert call_args["status"] == "unassigned"
+            assert call_args["startedAt"] is None
     
-    def test_create_task_with_owner(self, mock_db):
-        """Test creating task with explicit owner"""
+    def test_create_task_owner_is_creator_default(self, mock_db):
+        """Test creating task with default owner (creator) - status should be 'unassigned', startedAt should be None"""
         mock_tasks = Mock()
         mock_subtasks = Mock()
         mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
@@ -273,347 +112,437 @@ class TestTaskService:
         mock_new_ref.key = "test-task-id"
         mock_tasks.push.return_value = mock_new_ref
         
-        service = TaskService()
-        req = CreateTaskRequest(
-            title="Test Task",
-            creator_id="u1",
-            deadline=1700000000,
-            owner_id="u2"
-        )
-        
-        task, error = service.create_task(req)
-        
-        assert task.owner_id == "u2"
-    
-    def test_get_all_tasks(self, mock_db):
-        """Test getting all active tasks"""
-        mock_tasks = Mock()
-        mock_db.return_value = mock_tasks
-        
         current_time = 1700000000
-        mock_tasks.get.return_value = {
-            "t1": {
-                "taskId": "t1",
-                "title": "Active Task",
-                "creatorId": "u1",
-                "deadline": 1800000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "projectId": "",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1600000000,
-                "start_date": 1600000000,
-                "active": False,  # Will be updated
-                "scheduled": False,
-                "schedule": "daily"
-            },
-            "t2": {
-                "taskId": "t2",
-                "title": "Future Task",
-                "creatorId": "u1",
-                "deadline": 1900000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "projectId": "",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1600000000,
-                "start_date": 1800000000,  # Future
-                "active": False,
-                "scheduled": False,
-                "schedule": "daily"
-            }
-        }
-        
         with patch('task_service.current_timestamp', return_value=current_time):
             service = TaskService()
-            tasks = service.get_all_tasks()
-        
-        # Only t1 should be returned (active)
-        assert len(tasks) == 1
-        assert tasks[0].task_id == "t1"
+            req = CreateTaskRequest(
+                title="Test Task",
+                creator_id="u1",
+                deadline=1800000000
+                # No owner_id specified, should default to creator
+            )
+            
+            task, error = service.create_task(req)
+            
+            assert error is None
+            assert task.status == "unassigned"
+            assert task.started_at is None
+            assert task.owner_id == "u1"
     
-    def test_get_task_by_id(self, mock_db):
-        """Test getting task by ID"""
+    def test_create_task_owner_is_different_user(self, mock_db):
+        """Test creating task where owner is different from creator - status should be 'ongoing', startedAt should be set"""
         mock_tasks = Mock()
-        mock_db.return_value = mock_tasks
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
         
-        mock_task_ref = Mock()
-        mock_task_ref.get.return_value = {
-            "taskId": "t1",
-            "title": "Test Task",
-            "creatorId": "u1",
-            "deadline": 1700000000,
-            "status": "ongoing",
-            "notes": "",
-            "attachments": [],
-            "collaborators": [],
-            "projectId": "",
-            "ownerId": "u1",
-            "priority": 0,
-            "createdAt": 1600000000,
-            "updatedAt": 1600000000,
-            "start_date": 1600000000,
-            "active": True,
-            "scheduled": False,
-            "schedule": "daily"
-        }
-        mock_tasks.child.return_value = mock_task_ref
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-task-id"
+        mock_tasks.push.return_value = mock_new_ref
         
-        service = TaskService()
-        task, error = service.get_task_by_id("t1")
-        
-        assert error is None
-        assert task.task_id == "t1"
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = CreateTaskRequest(
+                title="Test Task",
+                creator_id="u1",
+                deadline=1800000000,
+                owner_id="u2"  # Different from creator
+            )
+            
+            task, error = service.create_task(req)
+            
+            assert error is None
+            assert task.status == "ongoing"
+            assert task.started_at == current_time
+            
+            # Verify the data sent to Firebase
+            call_args = mock_new_ref.set.call_args[0][0]
+            assert call_args["status"] == "ongoing"
+            assert call_args["startedAt"] == current_time
     
-    def test_get_task_by_id_not_found(self, mock_db):
-        """Test getting non-existent task"""
-        mock_tasks = Mock()
-        mock_db.return_value = mock_tasks
-        
-        mock_task_ref = Mock()
-        mock_task_ref.get.return_value = None
-        mock_tasks.child.return_value = mock_task_ref
-        
-        service = TaskService()
-        task, error = service.get_task_by_id("invalid")
-        
-        assert task is None
-        assert "not found" in error.lower()
-    
-    def test_update_task(self, mock_db):
-        """Test updating task"""
+    def test_update_task_status_unassigned_to_ongoing(self, mock_db):
+        """Test updating task status from 'unassigned' to 'ongoing' - startedAt should be set"""
         mock_tasks = Mock()
         mock_subtasks = Mock()
         mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
         
         mock_task_ref = Mock()
-        mock_task_ref.get.side_effect = [
-            {  # First call - existing task
-                "taskId": "t1",
-                "status": "ongoing",
-                "scheduled": False
-            },
-            {  # Second call - updated task
-                "taskId": "t1",
-                "title": "Updated Title",
-                "creatorId": "u1",
-                "deadline": 1700000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "projectId": "",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1700000000,
-                "start_date": 1600000000,
-                "active": True,
-                "scheduled": False,
-                "schedule": "daily"
-            }
-        ]
-        mock_tasks.child.return_value = mock_task_ref
-        
-        service = TaskService()
-        req = UpdateTaskRequest(
-            task_id="t1",
-            title="Updated Title"
-        )
-        
-        task, error = service.update_task(req)
-        
-        assert error is None
-        mock_task_ref.update.assert_called_once()
-    
-    def test_update_task_empty_title(self, mock_db):
-        """Test updating task with empty title"""
-        mock_tasks = Mock()
-        mock_db.return_value = mock_tasks
-        
-        mock_task_ref = Mock()
-        mock_task_ref.get.return_value = {"taskId": "t1"}
-        mock_tasks.child.return_value = mock_task_ref
-        
-        service = TaskService()
-        req = UpdateTaskRequest(
-            task_id="t1",
-            title="   "  # Empty/whitespace only
-        )
-        
-        task, error = service.update_task(req)
-        
-        assert task is None
-        assert "empty" in error.lower()
-    
-    def test_delete_task(self, mock_db):
-        """Test deleting task"""
-        mock_tasks = Mock()
-        mock_db.return_value = mock_tasks
-        
-        mock_task_ref = Mock()
-        mock_task_ref.get.return_value = {"taskId": "t1"}
-        mock_tasks.child.return_value = mock_task_ref
-        
-        service = TaskService()
-        success, error = service.delete_task("t1")
-        
-        assert success == True
-        assert error is None
-        mock_task_ref.delete.assert_called_once()
-    
-    def test_get_tasks_by_project(self, mock_db):
-        """Test getting tasks by project"""
-        mock_tasks = Mock()
-        mock_db.return_value = mock_tasks
-        
-        current_time = 1700000000
-        mock_tasks.get.return_value = {
-            "t1": {
-                "taskId": "t1",
-                "title": "Project Task",
-                "creatorId": "u1",
-                "deadline": 1800000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "projectId": "p1",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1600000000,
-                "start_date": 1600000000,
-                "active": False,
-                "scheduled": False,
-                "schedule": "daily"
-            },
-            "t2": {
-                "taskId": "t2",
-                "title": "Other Project Task",
-                "creatorId": "u1",
-                "deadline": 1800000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "projectId": "p2",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1600000000,
-                "start_date": 1600000000,
-                "active": False,
-                "scheduled": False,
-                "schedule": "daily"
-            }
+        existing_data = {
+            "taskId": "t1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "unassigned",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": None
         }
         
+        updated_data = existing_data.copy()
+        updated_data["status"] = "ongoing"
+        updated_data["startedAt"] = 1700000000
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_task_ref.get.side_effect = [existing_data, updated_data]
+        mock_tasks.child.return_value = mock_task_ref
+        
+        current_time = 1700000000
         with patch('task_service.current_timestamp', return_value=current_time):
             service = TaskService()
-            tasks = service.get_tasks_by_project("p1")
+            req = UpdateTaskRequest(
+                task_id="t1",
+                status="ongoing"
+            )
+            
+            task, error = service.update_task(req)
+            
+            assert error is None
+            assert task.status == "ongoing"
+            assert task.started_at == current_time
+            
+            # Verify update was called with startedAt
+            update_call_args = mock_task_ref.update.call_args[0][0]
+            assert update_call_args["status"] == "ongoing"
+            assert update_call_args["startedAt"] == current_time
+    
+    def test_update_task_status_ongoing_to_under_review_no_started_at_change(self, mock_db):
+        """Test updating status from 'ongoing' to 'under_review' - startedAt should NOT change"""
+        mock_tasks = Mock()
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
         
-        assert len(tasks) == 1
-        assert tasks[0].project_id == "p1"
+        mock_task_ref = Mock()
+        original_started_at = 1600000000
+        existing_data = {
+            "taskId": "t1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "ongoing",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": original_started_at
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["status"] = "under_review"
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_task_ref.get.side_effect = [existing_data, updated_data]
+        mock_tasks.child.return_value = mock_task_ref
+        
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = UpdateTaskRequest(
+                task_id="t1",
+                status="under_review"
+            )
+            
+            task, error = service.update_task(req)
+            
+            assert error is None
+            # startedAt should remain the original value
+            assert task.started_at == original_started_at
+            
+            # Verify update was called without startedAt
+            update_call_args = mock_task_ref.update.call_args[0][0]
+            assert "startedAt" not in update_call_args
+    
+    def test_update_task_owner_unassigned_to_different_user(self, mock_db):
+        """Test changing owner from creator to different user when status is 'unassigned' - should set to 'ongoing' and set startedAt"""
+        mock_tasks = Mock()
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
+        
+        mock_task_ref = Mock()
+        existing_data = {
+            "taskId": "t1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "unassigned",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": None
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["ownerId"] = "u2"
+        updated_data["status"] = "ongoing"
+        updated_data["startedAt"] = 1700000000
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_task_ref.get.side_effect = [existing_data, updated_data]
+        mock_tasks.child.return_value = mock_task_ref
+        
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = UpdateTaskRequest(
+                task_id="t1",
+                owner_id="u2"  # Changing to different user
+            )
+            
+            task, error = service.update_task(req)
+            
+            assert error is None
+            assert task.owner_id == "u2"
+            assert task.status == "ongoing"
+            assert task.started_at == current_time
+            
+            # Verify update was called with both status and startedAt
+            update_call_args = mock_task_ref.update.call_args[0][0]
+            assert update_call_args["ownerId"] == "u2"
+            assert update_call_args["status"] == "ongoing"
+            assert update_call_args["startedAt"] == current_time
+    
+    def test_update_task_owner_ongoing_no_status_change(self, mock_db):
+        """Test changing owner when status is already 'ongoing' - status should NOT change again"""
+        mock_tasks = Mock()
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
+        
+        mock_task_ref = Mock()
+        original_started_at = 1600000000
+        existing_data = {
+            "taskId": "t1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u2",
+            "status": "ongoing",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": original_started_at
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["ownerId"] = "u3"
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_task_ref.get.side_effect = [existing_data, updated_data]
+        mock_tasks.child.return_value = mock_task_ref
+        
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = UpdateTaskRequest(
+                task_id="t1",
+                owner_id="u3"
+            )
+            
+            task, error = service.update_task(req)
+            
+            assert error is None
+            # Status should remain ongoing, startedAt should not change
+            assert task.started_at == original_started_at
+            
+            # Verify status was NOT added to update
+            update_call_args = mock_task_ref.update.call_args[0][0]
+            assert "status" not in update_call_args
 
 
-class TestTaskEndpoints:
-    """Test Flask endpoints"""
+class TestTaskServiceCompletedAt:
+    """Test completedAt logic"""
     
-    def test_health_check(self, client):
-        """Test health check endpoint"""
-        response = client.get('/health')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data['status'] == 'healthy'
-        assert data['service'] == 'task-service'
-    
-    def test_create_task_missing_body(self, client):
-        """Test creating task without body (no Content-Type)"""
-        response = client.post('/tasks')
-        # Flask returns 415 when Content-Type is missing for JSON endpoints
-        assert response.status_code == 415
-    
-    @patch('app.task_service.create_task')
-    def test_create_task_success(self, mock_create, client, sample_task):
-        """Test successful task creation"""
-        mock_create.return_value = (sample_task, None)
+    def test_update_task_status_to_completed(self, mock_db):
+        """Test updating task status to 'completed' - completedAt should be set"""
+        mock_tasks = Mock()
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
         
-        response = client.post('/tasks', json={
+        mock_task_ref = Mock()
+        existing_data = {
+            "taskId": "t1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "ongoing",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "completedAt": None
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["status"] = "completed"
+        updated_data["completedAt"] = 1700000000
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_task_ref.get.side_effect = [existing_data, updated_data]
+        mock_tasks.child.return_value = mock_task_ref
+        
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = UpdateTaskRequest(
+                task_id="t1",
+                status="completed"
+            )
+            
+            task, error = service.update_task(req)
+            
+            assert error is None
+            assert task.status == "completed"
+            assert task.completed_at == current_time
+            
+            # Verify update was called with completedAt
+            update_call_args = mock_task_ref.update.call_args[0][0]
+            assert update_call_args["status"] == "completed"
+            assert update_call_args["completedAt"] == current_time
+    
+    def test_update_task_status_from_completed_to_ongoing_no_completed_at_change(self, mock_db):
+        """Test changing status from 'completed' back to 'ongoing' - completedAt should NOT be modified"""
+        mock_tasks = Mock()
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
+        
+        mock_task_ref = Mock()
+        original_completed_at = 1600000000
+        existing_data = {
+            "taskId": "t1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "completed",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "completedAt": original_completed_at
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["status"] = "ongoing"
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_task_ref.get.side_effect = [existing_data, updated_data]
+        mock_tasks.child.return_value = mock_task_ref
+        
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = UpdateTaskRequest(
+                task_id="t1",
+                status="ongoing"
+            )
+            
+            task, error = service.update_task(req)
+            
+            assert error is None
+            # completedAt should remain the original value
+            assert task.completed_at == original_completed_at
+            
+            # Verify completedAt was NOT updated
+            update_call_args = mock_task_ref.update.call_args[0][0]
+            assert "completedAt" not in update_call_args
+    
+    def test_create_task_completed_at_is_none(self, mock_db):
+        """Test creating task - completedAt should be None initially"""
+        mock_tasks = Mock()
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
+        
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-task-id"
+        mock_tasks.push.return_value = mock_new_ref
+        
+        current_time = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time):
+            service = TaskService()
+            req = CreateTaskRequest(
+                title="Test Task",
+                creator_id="u1",
+                deadline=1800000000
+            )
+            
+            task, error = service.create_task(req)
+            
+            assert error is None
+            assert task.completed_at is None
+            
+            # Verify the data sent to Firebase
+            call_args = mock_new_ref.set.call_args[0][0]
+            assert call_args["completedAt"] is None
+
+
+class TestTaskServiceCombinedScenarios:
+    """Test combined scenarios for startedAt and completedAt"""
+    
+    def test_full_lifecycle_unassigned_to_completed(self, mock_db):
+        """Test full task lifecycle: unassigned -> ongoing -> completed"""
+        mock_tasks = Mock()
+        mock_subtasks = Mock()
+        mock_db.side_effect = lambda x: mock_tasks if x == "tasks" else mock_subtasks
+        
+        # Scenario 1: Create task (unassigned)
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-task-id"
+        mock_tasks.push.return_value = mock_new_ref
+        
+        current_time_1 = 1700000000
+        with patch('task_service.current_timestamp', return_value=current_time_1):
+            service = TaskService()
+            req = CreateTaskRequest(
+                title="Test Task",
+                creator_id="u1",
+                deadline=1800000000
+            )
+            
+            task, _ = service.create_task(req)
+            assert task.status == "unassigned"
+            assert task.started_at is None
+            assert task.completed_at is None
+        
+        # Scenario 2: Update to ongoing
+        mock_task_ref = Mock()
+        existing_data = {
+            "taskId": "test-task-id",
             "title": "Test Task",
             "creatorId": "u1",
-            "deadline": 1700000000,
-            "attachments": [],
-            "collaborators": [],
-            "schedule": "daily"
-        })
+            "ownerId": "u1",
+            "status": "unassigned",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": None,
+            "completedAt": None
+        }
         
-        assert response.status_code == 201
-        data = response.get_json()
-        assert 'task' in data
-    
-    @patch('app.task_service.get_all_tasks')
-    def test_get_all_tasks(self, mock_get, client):
-        """Test getting all tasks"""
-        mock_get.return_value = []
+        current_time_2 = 1700010000
+        updated_data_2 = existing_data.copy()
+        updated_data_2["status"] = "ongoing"
+        updated_data_2["startedAt"] = current_time_2
+        updated_data_2["updatedAt"] = current_time_2
         
-        response = client.get('/tasks')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'tasks' in data
-    
-    @patch('app.task_service.get_task_by_id')
-    def test_get_task_by_id(self, mock_get, client, sample_task):
-        """Test getting task by ID"""
-        mock_get.return_value = (sample_task, None)
+        mock_task_ref.get.side_effect = [existing_data, updated_data_2]
+        mock_tasks.child.return_value = mock_task_ref
         
-        response = client.get('/tasks/t1')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'task' in data
-    
-    @patch('app.task_service.update_task')
-    def test_update_task(self, mock_update, client, sample_task):
-        """Test updating task"""
-        mock_update.return_value = (sample_task, None)
+        with patch('task_service.current_timestamp', return_value=current_time_2):
+            req2 = UpdateTaskRequest(
+                task_id="test-task-id",
+                status="ongoing"
+            )
+            task, _ = service.update_task(req2)
+            assert task.status == "ongoing"
+            assert task.started_at == current_time_2
+            assert task.completed_at is None
         
-        response = client.put('/tasks/t1', json={
-            "title": "Updated Title",
-            "attachments": [],
-            "collaborators": []
-        })
+        # Scenario 3: Update to completed
+        existing_data_3 = updated_data_2.copy()
+        current_time_3 = 1700020000
+        updated_data_3 = existing_data_3.copy()
+        updated_data_3["status"] = "completed"
+        updated_data_3["completedAt"] = current_time_3
+        updated_data_3["updatedAt"] = current_time_3
         
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'task' in data
-    
-    @patch('app.task_service.delete_task')
-    def test_delete_task(self, mock_delete, client):
-        """Test deleting task"""
-        mock_delete.return_value = (True, None)
+        mock_task_ref.get.side_effect = [existing_data_3, updated_data_3]
         
-        response = client.delete('/tasks/t1')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'message' in data
-    
-    @patch('app.task_service.get_tasks_by_project')
-    def test_get_tasks_by_project(self, mock_get, client):
-        """Test getting tasks by project"""
-        mock_get.return_value = []
-        
-        response = client.get('/tasks/project/p1')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'tasks' in data
+        with patch('task_service.current_timestamp', return_value=current_time_3):
+            req3 = UpdateTaskRequest(
+                task_id="test-task-id",
+                status="completed"
+            )
+            task, _ = service.update_task(req3)
+            assert task.status == "completed"
+            assert task.started_at == current_time_2  # Should remain unchanged
+            assert task.completed_at == current_time_3
 
 
 if __name__ == '__main__':

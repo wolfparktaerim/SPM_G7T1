@@ -488,7 +488,7 @@ function getRoleBadgeClass(role) {
 function formatDate(timestamp) {
   if (!timestamp) return 'Unknown'
   const date = new Date(timestamp)
-  return date.toLocaleString('en-US', {
+  return date.toLocaleString('en-SG', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',

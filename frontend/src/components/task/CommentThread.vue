@@ -49,7 +49,7 @@
     <!-- Initial Comment -->
     <div class="ml-[52px]">
       <div class="text-gray-700 text-base leading-relaxed whitespace-pre-wrap break-words mb-3">{{ thread.comments[0][1]
-        }}</div>
+      }}</div>
       <div v-if="thread.mention && thread.mention.length > 0"
         class="flex items-start gap-2 px-3 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl text-xs text-blue-900">
         <Users class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -314,7 +314,7 @@ function formatTimestamp(timestamp) {
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return date.toLocaleDateString('en-SG', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function toggleReplyInput() {

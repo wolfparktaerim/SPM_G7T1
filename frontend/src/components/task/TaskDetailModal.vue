@@ -164,6 +164,26 @@
                 {{ formatDateTime(taskData?.updatedAt) }}
               </div>
             </div>
+
+            <div v-if="taskData?.startedAt" class="info-item">
+              <label class="info-label">
+                <Clock class="w-4 h-4" />
+                Started
+              </label>
+              <div class="info-value">
+                {{ formatDateTime(taskData.startedAt) }}
+              </div>
+            </div>
+
+            <div v-if="taskData?.completedAt" class="info-item">
+              <label class="info-label">
+                <Clock class="w-4 h-4" />
+                Completed
+              </label>
+              <div class="info-value">
+                {{ formatDateTime(taskData.completedAt) }}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -496,7 +516,7 @@ function getStatusClass(status) {
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline set'
   const date = new Date(deadline * 1000)
-  return date.toLocaleString('en-US', {
+  return date.toLocaleString('en-SG', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -508,7 +528,7 @@ function formatDeadline(deadline) {
 function formatDateTime(timestamp) {
   if (!timestamp) return 'Unknown'
   const date = new Date(timestamp * 1000)
-  return date.toLocaleString('en-US', {
+  return date.toLocaleString('en-SG', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

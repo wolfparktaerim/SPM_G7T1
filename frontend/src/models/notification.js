@@ -17,7 +17,7 @@ export class Notification {
     read = false,
     createdAt = Date.now(),
     readAt = null,
-    parentTaskTitle = null
+    parentTaskTitle = null,
   } = {}) {
     this.notificationId = notificationId
     this.userId = userId
@@ -50,12 +50,12 @@ export class Notification {
     if (!this.taskDeadline) return 'N/A'
 
     const date = new Date(this.taskDeadline * 1000) // Convert epoch to milliseconds
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-SG', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     })
   }
 
@@ -120,9 +120,9 @@ export class Notification {
     if (diffHours < 24) return `${diffHours}h ago`
     if (diffDays < 7) return `${diffDays}d ago`
 
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-SG', {
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     })
   }
 
@@ -145,7 +145,7 @@ export class Notification {
       read: data.read || false,
       createdAt: data.createdAt,
       readAt: data.readAt,
-      parentTaskTitle: data.parentTaskTitle
+      parentTaskTitle: data.parentTaskTitle,
     })
   }
 
@@ -167,7 +167,7 @@ export class Notification {
       read: this.read,
       createdAt: this.createdAt,
       readAt: this.readAt,
-      parentTaskTitle: this.parentTaskTitle
+      parentTaskTitle: this.parentTaskTitle,
     }
   }
 }
