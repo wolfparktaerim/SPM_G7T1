@@ -275,10 +275,13 @@ class ExtensionRequestService:
         try:
             if item_type == "subtask":
                 subtask_data = self.subtasks_ref.child(item_id).get()
-                if subtask_data and subtask_data.get("parentId"):
-                    parent_task = self.tasks_ref.child(subtask_data.get("parentId")).get()
-                    if parent_task:
-                        return parent_task.get("title")
+                if subtask_data:
+                    # Try both taskId and parentId (taskId is the correct field for subtasks)
+                    parent_id = subtask_data.get("taskId") or subtask_data.get("parentId")
+                    if parent_id:
+                        parent_task = self.tasks_ref.child(parent_id).get()
+                        if parent_task:
+                            return parent_task.get("title")
             return None
         except Exception as e:
             print(f"Error fetching parent task title: {str(e)}")

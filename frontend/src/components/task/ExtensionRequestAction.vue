@@ -79,7 +79,7 @@
 
       <!-- Reject Button -->
       <button v-if="!showRejectionInput" @click="showRejectionInput = true" :disabled="isProcessing"
-        class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-white text-red-600 border border-red-300 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+        class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-red-500 text-white hover:bg-red-600 active:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow">
         <X class="w-3.5 h-3.5" />
         <span>Reject</span>
       </button>

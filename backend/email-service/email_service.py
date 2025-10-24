@@ -407,45 +407,87 @@ class EmailService:
         item_display = "Subtask" if item_type == "subtask" else "Task"
         subject = f"Deadline Extension Request for {item_display}: {item_title}"
 
+        # Parent task HTML
+        parent_task_html = ""
+        if parent_task_title:
+            parent_task_html = f'<p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">Part of task: <strong style="color: #111827;">{parent_task_title}</strong></p>'
+
+        # Reason HTML
+        reason_html = ""
+        if reason:
+            reason_html = f"""
+            <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; font-weight: 500;">Reason:</p>
+                <p style="margin: 0; color: #111827; font-size: 14px; line-height: 1.6;">{reason}</p>
+            </div>
+            """
+
         # Create HTML content
         html_content = f"""
+        <!DOCTYPE html>
         <html>
         <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background-color: #3b82f6; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
-                .content {{ background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
-                .info-box {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #3b82f6; }}
-                .reason-box {{ background-color: #fef3c7; padding: 15px; margin: 15px 0; border-left: 4px solid #f59e0b; }}
-                .footer {{ background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; }}
-                .label {{ font-weight: bold; color: #374151; }}
-                .value {{ color: #1f2937; }}
-            </style>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Deadline Extension Request</title>
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h2 style="margin: 0;">⏰ Deadline Extension Request</h2>
-                </div>
-                <div class="content">
-                    <p><strong>{requester_name}</strong> has requested a deadline extension.</p>
-
-                    <div class="info-box">
-                        <p><span class="label">{item_display}:</span> <span class="value">{item_title}</span></p>
-                        {"<p><span class='label'>Part of Task:</span> <span class='value'>" + parent_task_title + "</span></p>" if parent_task_title else ""}
-                        <p><span class="label">Current Deadline:</span> <span class="value">{current_deadline_str}</span></p>
-                        <p><span class="label">Proposed Deadline:</span> <span class="value">{proposed_deadline_str}</span></p>
-                    </div>
-
-                    {"<div class='reason-box'><p><span class='label'>Reason:</span></p><p>" + reason + "</p></div>" if reason else ""}
-
-                    <p style="margin-top: 20px;">Please review this request in your <strong>in-app notification inbox</strong> to approve or reject it.</p>
-                </div>
-                <div class="footer">
-                    <p>This is an automated notification from the Task Management System.</p>
-                </div>
-            </div>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+            <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 40px 20px;">
+                        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                            <tr>
+                                <td style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">Deadline Extension Request</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px 0;">
+                                    <div style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;">
+                                        EXTENSION REQUESTED
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px;">
+                                    <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 20px; font-weight: 600;">{item_title}</h2>
+                                    {parent_task_html}
+                                    <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px;">
+                                        <strong style="color: #111827;">{requester_name}</strong> has requested a deadline extension.
+                                    </p>
+                                    <div style="background-color: #f9fafb; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                                        <table role="presentation" style="width: 100%;">
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #6b7280; font-size: 14px; font-weight: 500;">Current Deadline:</td>
+                                                <td style="padding: 8px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">{current_deadline_str}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #6b7280; font-size: 14px; font-weight: 500;">Proposed Deadline:</td>
+                                                <td style="padding: 8px 0; color: #3b82f6; font-size: 14px; font-weight: 600; text-align: right;">{proposed_deadline_str}</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                    {reason_html}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0 30px 30px;">
+                                    <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">
+                                        Please review this request in your in-app notification inbox to approve or reject it.
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color: #f9fafb; padding: 20px 30px; border-radius: 0 0 12px 12px; border-top: 1px solid #e5e7eb;">
+                                    <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
+                                        This is an automated notification from your Task Management System.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
         """
@@ -468,47 +510,94 @@ class EmailService:
         if status == "approved" and new_deadline:
             new_deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y at %I:%M %p")
 
-        # Create HTML content
+        # Colors and badge based on status
         bg_color = "#dcfce7" if status == "approved" else "#fee2e2"
         border_color = "#10b981" if status == "approved" else "#ef4444"
-        icon = "✅" if status == "approved" else "❌"
+        badge_text = "APPROVED" if status == "approved" else "REJECTED"
 
+        # Parent task HTML
+        parent_task_html = ""
+        if parent_task_title:
+            parent_task_html = f'<p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">Part of task: <strong style="color: #111827;">{parent_task_title}</strong></p>'
+
+        # Status message
+        status_message = f"Your deadline extension request has been <strong>{status.lower()}</strong>."
+
+        # Details HTML
+        details_html = ""
+        if status == "approved" and new_deadline_str:
+            details_html = f"""
+            <div style="background-color: #f9fafb; border-left: 4px solid {border_color}; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                <table role="presentation" style="width: 100%;">
+                    <tr>
+                        <td style="padding: 8px 0; color: #6b7280; font-size: 14px; font-weight: 500;">New Deadline:</td>
+                        <td style="padding: 8px 0; color: {border_color}; font-size: 14px; font-weight: 600; text-align: right;">{new_deadline_str}</td>
+                    </tr>
+                </table>
+            </div>
+            """
+        elif status == "rejected" and rejection_reason:
+            details_html = f"""
+            <div style="background-color: #fee2e2; border-left: 4px solid {border_color}; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; font-weight: 500;">Rejection Reason:</p>
+                <p style="margin: 0; color: #111827; font-size: 14px; line-height: 1.6;">{rejection_reason}</p>
+            </div>
+            """
+
+        # Create HTML content
         html_content = f"""
+        <!DOCTYPE html>
         <html>
         <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background-color: {border_color}; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
-                .content {{ background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
-                .status-box {{ background-color: {bg_color}; padding: 15px; margin: 15px 0; border-left: 4px solid {border_color}; }}
-                .info-box {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #3b82f6; }}
-                .footer {{ background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; }}
-                .label {{ font-weight: bold; color: #374151; }}
-                .value {{ color: #1f2937; }}
-            </style>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Extension Request {status_text}</title>
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h2 style="margin: 0;">{icon} Extension Request {status_text}</h2>
-                </div>
-                <div class="content">
-                    <div class="status-box">
-                        <p style="margin: 0; font-size: 16px;">Your deadline extension request has been <strong>{status.lower()}</strong>.</p>
-                    </div>
-
-                    <div class="info-box">
-                        <p><span class="label">{item_display}:</span> <span class="value">{item_title}</span></p>
-                        {"<p><span class='label'>Part of Task:</span> <span class='value'>" + parent_task_title + "</span></p>" if parent_task_title else ""}
-                        {"<p><span class='label'>New Deadline:</span> <span class='value'>" + new_deadline_str + "</span></p>" if new_deadline_str else ""}
-                        {"<p><span class='label'>Rejection Reason:</span> <span class='value'>" + rejection_reason + "</span></p>" if rejection_reason else ""}
-                    </div>
-                </div>
-                <div class="footer">
-                    <p>This is an automated notification from the Task Management System.</p>
-                </div>
-            </div>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+            <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 40px 20px;">
+                        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                            <tr>
+                                <td style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">Extension Request {status_text}</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px 0;">
+                                    <div style="display: inline-block; background-color: {border_color}; color: #ffffff; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;">
+                                        {badge_text}
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px;">
+                                    <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 20px; font-weight: 600;">{item_title}</h2>
+                                    {parent_task_html}
+                                    <div style="background-color: {bg_color}; border-left: 4px solid {border_color}; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                                        <p style="margin: 0; color: #111827; font-size: 14px;">{status_message}</p>
+                                    </div>
+                                    {details_html}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0 30px 30px;">
+                                    <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">
+                                        {'The new deadline is now in effect.' if status == 'approved' else 'Please plan accordingly with the original deadline.'}
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color: #f9fafb; padding: 20px 30px; border-radius: 0 0 12px 12px; border-top: 1px solid #e5e7eb;">
+                                    <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
+                                        This is an automated notification from your Task Management System.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
         """
@@ -528,39 +617,77 @@ class EmailService:
         item_display = "Subtask" if item_type == "subtask" else "Task"
         subject = f"Deadline Extended for {item_display}: {item_title}"
 
+        # Parent task HTML
+        parent_task_html = ""
+        if parent_task_title:
+            parent_task_html = f'<p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">Part of task: <strong style="color: #111827;">{parent_task_title}</strong></p>'
+
+        # Requester info
+        requester_info = ""
+        if requester_name:
+            requester_info = f' on request by <strong style="color: #111827;">{requester_name}</strong>'
+
         # Create HTML content
         html_content = f"""
+        <!DOCTYPE html>
         <html>
         <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background-color: #3b82f6; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
-                .content {{ background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
-                .info-box {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #3b82f6; }}
-                .footer {{ background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; }}
-                .label {{ font-weight: bold; color: #374151; }}
-                .value {{ color: #1f2937; }}
-            </style>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Deadline Extended</title>
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h2 style="margin: 0;">📅 Deadline Extended</h2>
-                </div>
-                <div class="content">
-                    <p>The deadline has been extended{" on request by <strong>" + requester_name + "</strong>" if requester_name else ""}.</p>
-
-                    <div class="info-box">
-                        <p><span class="label">{item_display}:</span> <span class="value">{item_title}</span></p>
-                        {"<p><span class='label'>Part of Task:</span> <span class='value'>" + parent_task_title + "</span></p>" if parent_task_title else ""}
-                        <p><span class="label">New Deadline:</span> <span class="value">{new_deadline_str}</span></p>
-                    </div>
-                </div>
-                <div class="footer">
-                    <p>This is an automated notification from the Task Management System.</p>
-                </div>
-            </div>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+            <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 40px 20px;">
+                        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                            <tr>
+                                <td style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">Deadline Extended</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px 0;">
+                                    <div style="display: inline-block; background-color: #3b82f6; color: #ffffff; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;">
+                                        DEADLINE UPDATED
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 30px;">
+                                    <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 20px; font-weight: 600;">{item_title}</h2>
+                                    {parent_task_html}
+                                    <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px;">
+                                        The deadline has been extended{requester_info}.
+                                    </p>
+                                    <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                                        <table role="presentation" style="width: 100%;">
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #6b7280; font-size: 14px; font-weight: 500;">New Deadline:</td>
+                                                <td style="padding: 8px 0; color: #3b82f6; font-size: 14px; font-weight: 600; text-align: right;">{new_deadline_str}</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0 30px 30px;">
+                                    <p style="margin: 0 0 16px 0; color: #6b7280; font-size: 14px;">
+                                        The new deadline is now in effect. Please plan your work accordingly.
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color: #f9fafb; padding: 20px 30px; border-radius: 0 0 12px 12px; border-top: 1px solid #e5e7eb;">
+                                    <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
+                                        This is an automated notification from your Task Management System.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
         """
