@@ -45,6 +45,13 @@
               <span class="btn-text">Delete</span>
             </button>
 
+            <button v-if="canRequestExtension" @click="showExtensionRequestModal = true"
+              class="action-btn bg-amber-500 hover:bg-amber-600 text-white font-medium px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+              title="Request Extension">
+              <Clock class="w-5 h-5" />
+              <span class="btn-text">Request Extension</span>
+            </button>
+
             <button @click="$emit('close')" class="action-btn close-btn">
               <X class="w-5 h-5" />
             </button>
@@ -344,12 +351,19 @@
         @thread-created="handleCommentThreadCreated" @thread-updated="handleCommentThreadUpdated"
         @thread-resolved="handleCommentThreadResolved" />
     </div>
+
+    <!-- Deadline extension modal -->
+    <!-- Deadline Extension Request Modal -->
+    <DeadlineExtensionRequestModal :show="showExtensionRequestModal" :task-id="getTaskId"
+      :task-title="taskData?.title || 'Untitled'" :current-deadline="taskData?.deadline || 0" :is-subtask="isSubtask"
+      :owner-id="taskData?.ownerId || ''" :owner-name="getOwnerName" @close="showExtensionRequestModal = false"
+      @success="handleExtensionRequestSuccess" />
   </div>
 </template>
 
 <script setup>
 import axios from 'axios'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import {
@@ -373,6 +387,7 @@ import {
 } from 'lucide-vue-next'
 
 import CommentSection from './CommentSection.vue'
+import DeadlineExtensionRequestModal from './DeadlineExtensionRequestModal.vue'
 
 const props = defineProps({
   show: {
@@ -393,7 +408,9 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'edit', 'delete', 'view-subtask'])
+const emit = defineEmits(['close', 'edit', 'delete', 'view-subtask', 'extension-requested'])
+
+const showExtensionRequestModal = ref(false)
 
 // Composables
 const authStore = useAuthStore()
@@ -433,6 +450,38 @@ const isDueSoon = computed(() => {
   const daysUntilDue = (props.taskData.deadline * 1000 - Date.now()) / (1000 * 60 * 60 * 24)
   return daysUntilDue <= 7
 })
+
+const canRequestExtension = computed(() => {
+  const status = (props.taskData?.status ?? '').toLowerCase()
+  // Must be collaborator, must NOT be owner, and task must not be completed
+  return isCollaborator.value && !isOwner.value && status !== 'completed'
+})
+
+const getTaskId = computed(() => {
+  if (props.isSubtask) {
+    return props.taskData?.subtaskId || props.taskData?.subTaskId || ''
+  }
+  return props.taskData?.taskId || ''
+})
+
+const getOwnerName = computed(() => {
+  return formatOwner(props.taskData?.ownerId)
+})
+
+const handleGlobalDeadlineUpdate = (event) => {
+  // Check if this task/subtask was updated
+  const { itemId, itemType } = event.detail || {}
+  const currentItemId = props.isSubtask
+    ? props.taskData?.subtaskId || props.taskData?.subTaskId
+    : props.taskData?.taskId
+  const currentItemType = props.isSubtask ? 'subtask' : 'task'
+
+  if (itemId === currentItemId && itemType === currentItemType) {
+    // Emit event to parent to refresh data
+    toast.info('Deadline has been updated')
+    emit('refresh-needed')
+  }
+}
 
 // Methods
 function handleBackdropClick() {
@@ -741,6 +790,25 @@ function viewSubtask(subtask) {
   emit('close')
   emit('view-subtask', subtask)
 }
+
+const handleExtensionRequestSuccess = (request) => {
+  toast.success('Extension request submitted successfully')
+  showExtensionRequestModal.value = false
+  // Optionally refresh the task data or emit an event
+  emit('extension-requested', request)
+}
+
+// ✅ Add listener on mount
+onMounted(() => {
+  window.addEventListener('deadline-updated', handleGlobalDeadlineUpdate)
+})
+
+// ✅ Remove listener on unmount
+onUnmounted(() => {
+  window.removeEventListener('deadline-updated', handleGlobalDeadlineUpdate)
+})
+
+
 </script>
 
 <style scoped>
@@ -1493,5 +1561,7 @@ function viewSubtask(subtask) {
   .footer-info {
     text-align: center;
   }
+
+
 }
 </style>

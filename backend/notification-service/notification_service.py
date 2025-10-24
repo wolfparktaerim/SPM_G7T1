@@ -14,6 +14,7 @@ class NotificationService:
     """Service for managing notifications"""
     
     def __init__(self):
+        self.db = get_db_reference()
         self.notifications_ref = get_db_reference("notifications")
         self.notification_sent_ref = get_db_reference("notificationsSent")
     
@@ -185,3 +186,337 @@ class NotificationService:
         except Exception as e:
             logger.error(f"Error marking notification as sent: {str(e)}")
 
+    def create_task_update_notification(self, user_id, item_id, task_title, old_status, new_status, is_subtask=False, parent_task_title=None):
+        """Create a notification for task status update"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            new_notification_ref = user_notifications_ref.push()
+            notification_id = new_notification_ref.key
+
+            # Format status for display
+            def format_status(status):
+                return status.replace('_', ' ').title()
+
+            # Create notification
+            if is_subtask:
+                notification_type = "subtask_status_update"
+                title = "Subtask Status Updated"
+                if parent_task_title:
+                    message = f"'{task_title}' (in {parent_task_title}) status changed from {format_status(old_status)} to {format_status(new_status)}"
+                else:
+                    message = f"'{task_title}' status changed from {format_status(old_status)} to {format_status(new_status)}"
+                item_id_field = "subTaskId"
+            else:
+                notification_type = "task_status_update"
+                title = "Task Status Updated"
+                message = f"'{task_title}' status changed from {format_status(old_status)} to {format_status(new_status)}"
+                item_id_field = "taskId"
+
+            notification_data = {
+                "notificationId": notification_id,
+                "userId": user_id,
+                item_id_field: item_id,
+                "type": notification_type,
+                "title": title,
+                "message": message,
+                "taskTitle": task_title,
+                "oldStatus": old_status,
+                "newStatus": new_status,
+                "read": False,
+                "createdAt": current_timestamp(),
+                "readAt": None
+            }
+
+            if is_subtask and parent_task_title:
+                notification_data["parentTaskTitle"] = parent_task_title
+
+            new_notification_ref.set(notification_data)
+            logger.info(f"Created task update notification for user {user_id}")
+            return notification_id
+        except Exception as e:
+            logger.error(f"Failed to create task update notification: {str(e)}")
+            return None
+
+    def check_duplicate_update_notification(self, user_id, item_id, new_status, is_subtask=False):
+        """Check if a similar notification was recently sent to prevent duplicates"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            all_notifications = user_notifications_ref.get() or {}
+
+            current_time = current_timestamp()
+            time_window = 300  # 5 minutes in seconds
+
+            for notification in all_notifications.values():
+                # Check if it's a status update notification
+                notification_type = notification.get('type', '')
+                if not (notification_type == 'task_status_update' or notification_type == 'subtask_status_update'):
+                    continue
+
+                # Check if it's for the same item
+                item_id_field = 'subTaskId' if is_subtask else 'taskId'
+                if notification.get(item_id_field) != item_id:
+                    continue
+
+                # Check if it's the same status change
+                if notification.get('newStatus') != new_status:
+                    continue
+
+                # Check if it was created within the time window
+                created_at = notification.get('createdAt', 0)
+                if current_time - created_at < time_window:
+                    return True  # Duplicate found
+
+            return False  # No duplicate
+        except Exception as e:
+            logger.error(f"Error checking duplicate notification: {str(e)}")
+            return False
+
+    def create_comment_notification(self, user_id, item_id, task_title, comment_text, commenter_name, commenter_id,
+                                    task_deadline=None, is_subtask=False, parent_task_title=None):
+        """Create a notification for a new comment on a task"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            new_notification_ref = user_notifications_ref.push()
+            notification_id = new_notification_ref.key
+
+            # Truncate comment if too long for notification
+            max_comment_length = 100
+            comment_preview = comment_text if len(comment_text) <= max_comment_length else comment_text[:max_comment_length] + "..."
+
+            # Create notification
+            if is_subtask:
+                notification_type = "subtask_comment_notification"
+                title = "New Comment on Subtask"
+                if parent_task_title:
+                    message = f"{commenter_name} commented on '{task_title}' (in {parent_task_title}): {comment_preview}"
+                else:
+                    message = f"{commenter_name} commented on '{task_title}': {comment_preview}"
+                item_id_field = "subTaskId"
+            else:
+                notification_type = "task_comment_notification"
+                title = "New Comment on Task"
+                message = f"{commenter_name} commented on '{task_title}': {comment_preview}"
+                item_id_field = "taskId"
+
+            notification_data = {
+                "notificationId": notification_id,
+                "userId": user_id,
+                item_id_field: item_id,
+                "type": notification_type,
+                "title": title,
+                "message": message,
+                "taskTitle": task_title,
+                "taskDeadline": task_deadline or 0,
+                "daysUntilDeadline": 0,
+                "commentText": comment_text,
+                "commenterName": commenter_name,
+                "commenterId": commenter_id,
+                "read": False,
+                "createdAt": current_timestamp(),
+                "readAt": None
+            }
+
+            if is_subtask and parent_task_title:
+                notification_data["parentTaskTitle"] = parent_task_title
+
+            new_notification_ref.set(notification_data)
+            logger.info(f"Created comment notification for user {user_id}")
+            return notification_id
+        except Exception as e:
+            logger.error(f"Failed to create comment notification: {str(e)}")
+            return None
+
+    def check_duplicate_comment_notification(self, user_id, item_id, commenter_id, is_subtask=False):
+        """Check if a similar comment notification was recently sent to prevent duplicates"""
+        try:
+            user_notifications_ref = self.notifications_ref.child(user_id)
+            all_notifications = user_notifications_ref.get() or {}
+
+            current_time = current_timestamp()
+            time_window = 60  # 1 minute in seconds - shorter window for comments
+
+            for notification in all_notifications.values():
+                # Check if it's a comment notification
+                notification_type = notification.get('type', '')
+                if not (notification_type == 'task_comment_notification' or notification_type == 'subtask_comment_notification'):
+                    continue
+
+                # Check if it's for the same item
+                item_id_field = 'subTaskId' if is_subtask else 'taskId'
+                if notification.get(item_id_field) != item_id:
+                    continue
+
+                # Check if it's from the same commenter
+                if notification.get('commenterId') != commenter_id:
+                    continue
+
+                # Check if it was created within the time window
+                created_at = notification.get('createdAt', 0)
+                if current_time - created_at < time_window:
+                    return True  # Duplicate found
+
+            return False  # No duplicate
+        except Exception as e:
+            logger.error(f"Error checking duplicate comment notification: {str(e)}")
+            return False
+
+    def create_deadline_extension_request_notification(self, owner_id: str, item_id: str,
+                                                        item_title: str, requester_id: str,
+                                                        item_type: str, extension_request_id: str):  # ADD this parameter
+        """Create notification for deadline extension request"""
+        import uuid
+
+        notification_id = str(uuid.uuid4())
+        current_time = current_timestamp()
+
+        # Get requester name
+        requester_name = self._get_user_name(requester_id)
+
+        # Get parent task title if this is a subtask
+        parent_task_title = None
+        if item_type == "subtask":
+            subtasks_ref = get_db_reference("subtasks")
+            subtask_data = subtasks_ref.child(item_id).get()
+            if subtask_data and subtask_data.get("taskId"):
+                tasks_ref = get_db_reference("tasks")
+                task_data = tasks_ref.child(subtask_data.get("taskId")).get()
+                if task_data:
+                    parent_task_title = task_data.get("title")
+
+        notification_data = {
+            "notificationId": notification_id,
+            "userId": owner_id,
+            "type": "deadline_extension_request",
+            "itemId": item_id,
+            "itemType": item_type,
+            "itemTitle": item_title,
+            "message": f"{requester_name} has requested a deadline extension for {item_type}: {item_title}",
+            "requesterId": requester_id,
+            "requesterName": requester_name,
+            "extensionRequestId": extension_request_id,
+            "actionable": True,
+            "read": False,
+            "createdAt": current_time,
+            "actionable": True
+        }
+
+        if parent_task_title:
+            notification_data["parentTaskTitle"] = parent_task_title
+        
+        self.notifications_ref.child(owner_id).child(notification_id).set(notification_data)
+        return notification_id
+    
+    def create_deadline_extension_response_notification(self, requester_id: str, item_id: str,
+                                                        item_type: str, item_title: str,
+                                                        status: str, rejection_reason: str = None,
+                                                        new_deadline: int = None):
+        """Create notification for deadline extension response"""
+        import uuid
+        from datetime import datetime
+
+        notification_id = str(uuid.uuid4())
+        current_time = current_timestamp()
+
+        # Get parent task title if this is a subtask
+        parent_task_title = None
+        if item_type == "subtask":
+            subtasks_ref = get_db_reference("subtasks")
+            subtask_data = subtasks_ref.child(item_id).get()
+            if subtask_data and subtask_data.get("taskId"):
+                tasks_ref = get_db_reference("tasks")
+                task_data = tasks_ref.child(subtask_data.get("taskId")).get()
+                if task_data:
+                    parent_task_title = task_data.get("title")
+
+        if status == "approved":
+            if new_deadline:
+                deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y")
+                message = f"Your deadline extension request for {item_type}: {item_title} to {deadline_str} has been approved"
+            else:
+                message = f"Your deadline extension request for {item_type}: {item_title} has been approved"
+        else:
+            message = f"Your deadline extension request for {item_type}: {item_title} has been rejected"
+
+        notification_data = {
+            "notificationId": notification_id,
+            "userId": requester_id,
+            "type": "deadline_extension_response",
+            "itemId": item_id,
+            "itemType": item_type,
+            "itemTitle": item_title,
+            "message": message,
+            "status": status,
+            "rejectionReason": rejection_reason,
+            "newDeadline": new_deadline,
+            "read": False,
+            "createdAt": current_time,
+            "actionable": False
+        }
+
+        if parent_task_title:
+            notification_data["parentTaskTitle"] = parent_task_title
+        
+        self.notifications_ref.child(requester_id).child(notification_id).set(notification_data)
+        return notification_id
+
+    def create_deadline_changed_notification(self, user_id: str, item_id: str,
+                                            item_type: str, item_title: str,
+                                            new_deadline: int, requester_id: str = None):
+        """Create notification for deadline change (for all collaborators)"""
+        import uuid
+        from datetime import datetime
+
+        notification_id = str(uuid.uuid4())
+        current_time = current_timestamp()
+
+        # Get requester name if provided
+        requester_name = None
+        if requester_id:
+            requester_name = self._get_user_name(requester_id)
+
+        # Get parent task title if this is a subtask
+        parent_task_title = None
+        if item_type == "subtask":
+            subtasks_ref = get_db_reference("subtasks")
+            subtask_data = subtasks_ref.child(item_id).get()
+            if subtask_data and subtask_data.get("taskId"):
+                tasks_ref = get_db_reference("tasks")
+                task_data = tasks_ref.child(subtask_data.get("taskId")).get()
+                if task_data:
+                    parent_task_title = task_data.get("title")
+
+        # Build message with requester name if available
+        if requester_name:
+            message = f"The deadline for {item_type}: {item_title} has been extended on request by {requester_name}"
+        else:
+            message = f"The deadline for {item_type}: {item_title} has been extended"
+
+        notification_data = {
+            "notificationId": notification_id,
+            "userId": user_id,
+            "type": "deadline_changed",
+            "itemId": item_id,
+            "itemType": item_type,
+            "itemTitle": item_title,
+            "message": message,
+            "newDeadline": new_deadline,
+            "requesterId": requester_id,
+            "requesterName": requester_name,
+            "read": False,
+            "createdAt": current_time,
+            "actionable": False
+        }
+
+        if parent_task_title:
+            notification_data["parentTaskTitle"] = parent_task_title
+
+        self.notifications_ref.child(user_id).child(notification_id).set(notification_data)
+        return notification_id
+
+    def _get_user_name(self, user_id: str):
+        """Helper to get user name from user_id"""
+        users_ref = get_db_reference("users") 
+        user_data = users_ref.child(user_id).get()
+        if user_data:
+            return user_data.get("name", "Unknown User")
+        return "Unknown User"

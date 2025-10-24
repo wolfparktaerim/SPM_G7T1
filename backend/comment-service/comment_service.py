@@ -2,17 +2,24 @@
 
 import sys
 import os
+import logging
+import requests
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from shared import get_db_reference, current_timestamp
 
+logger = logging.getLogger(__name__)
+
 class CommentService:
     """Service for managing comments"""
-    
+
     def __init__(self):
         self.tasks_ref = get_db_reference("tasks")
         self.subtasks_ref = get_db_reference("subtasks")
+        self.users_ref = get_db_reference("users")
+        self.notification_prefs_ref = get_db_reference("notificationPreferences")
+        self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:6004")
     
     def create_comment(self, comment_data):
         """
@@ -77,7 +84,17 @@ class CommentService:
         
         # Update parent with new comment thread
         parent_ref.update({'comment_thread': comment_threads})
-        
+
+        # Send notifications after successfully creating comment
+        self.send_comment_notifications(
+            parent_id=parent_id,
+            parent_data=parent_data,
+            comment_type=comment_type,
+            commenter_id=user_id,
+            comment_text=comment_text,
+            mentioned_users=mention
+        )
+
         return new_thread, None
     
     def update_comment_thread(self, update_data):
@@ -146,13 +163,25 @@ class CommentService:
             existing_mentions = set(thread.get('mention', []))
             new_mentions = set(mention)
             thread['mention'] = list(existing_mentions.union(new_mentions))
-        
+
         # Update the thread in the list
         comment_threads[thread_index] = thread
-        
+
         # Update parent with modified comment threads
         parent_ref.update({'comment_thread': comment_threads})
-        
+
+        # Send notifications after successfully adding reply
+        # Combine existing mentions with new mentions for notification
+        all_mentioned_users = list(set(thread.get('mention', [])))
+        self.send_comment_notifications(
+            parent_id=parent_id,
+            parent_data=parent_data,
+            comment_type=comment_type,
+            commenter_id=user_id,
+            comment_text=comment_text,
+            mentioned_users=all_mentioned_users
+        )
+
         return thread, None
     
     def archive_comment_thread(self, archive_data):
@@ -244,3 +273,154 @@ class CommentService:
         comment_threads = parent_data.get('comment_thread', [])
         
         return comment_threads, None
+
+    def send_comment_notifications(self, parent_id, parent_data, comment_type, commenter_id, comment_text, mentioned_users):
+        """
+        Send notifications for a new comment
+
+        Args:
+            parent_id: str (task_id or subtask_id)
+            parent_data: dict (task or subtask data)
+            comment_type: str ("task" or "subtask")
+            commenter_id: str (user ID of the person who commented)
+            comment_text: str (the comment content)
+            mentioned_users: list of str (user IDs mentioned in comment)
+        """
+        try:
+            # Get task/subtask details
+            task_title = parent_data.get('title', 'Untitled')
+            task_deadline = parent_data.get('deadline')
+            parent_task_title = None
+
+            # For subtasks, get parent task info
+            if comment_type == 'subtask':
+                task_id = parent_data.get('taskId')
+                if task_id:
+                    task_data = self.tasks_ref.child(task_id).get()
+                    if task_data:
+                        parent_task_title = task_data.get('title')
+
+            # Get commenter name (try 'name' first, then 'displayName', then email, then default)
+            commenter_data = self.users_ref.child(commenter_id).get()
+            if commenter_data:
+                commenter_name = (
+                    commenter_data.get('name') or
+                    commenter_data.get('displayName') or
+                    commenter_data.get('email', '').split('@')[0] or
+                    'Unknown User'
+                )
+            else:
+                commenter_name = 'Unknown User'
+
+            # Determine recipients:
+            # 1. Task owner and collaborators (if their taskCommentNotifications setting is enabled)
+            # 2. Mentioned users (ALWAYS notified, even if taskCommentNotifications is disabled)
+
+            owner_id = parent_data.get('owner_id') or parent_data.get('ownerId')
+            collaborators = parent_data.get('collaborators', [])
+
+            # Combine owner and collaborators
+            assigned_users = set()
+            if owner_id:
+                assigned_users.add(owner_id)
+            if collaborators:
+                assigned_users.update(collaborators)
+
+            # Recipients who should be notified
+            recipients_to_notify = {}  # {user_id: {'channel': channel, 'email': email}}
+
+            # Check notification preferences for assigned users
+            for user_id in assigned_users:
+                if user_id == commenter_id:
+                    continue  # Don't notify the commenter
+
+                # Get user's notification preferences
+                prefs = self.notification_prefs_ref.child(user_id).get()
+                if not prefs:
+                    continue
+
+                # Check if notifications are enabled and taskCommentNotifications is enabled
+                if not prefs.get('enabled', False):
+                    continue
+
+                if not prefs.get('taskCommentNotifications', True):
+                    # Skip if comment notifications are disabled, unless they're mentioned
+                    if user_id not in mentioned_users:
+                        continue
+
+                # Get user email and channel preference
+                user_data = self.users_ref.child(user_id).get()
+                if user_data:
+                    recipients_to_notify[user_id] = {
+                        'channel': prefs.get('channel', 'both'),
+                        'email': user_data.get('email', '')
+                    }
+
+            # Add mentioned users (always notify, even if taskCommentNotifications is disabled)
+            for user_id in mentioned_users:
+                if user_id == commenter_id:
+                    continue  # Don't notify the commenter
+
+                if user_id not in recipients_to_notify:
+                    # Get user's notification preferences
+                    prefs = self.notification_prefs_ref.child(user_id).get()
+                    if not prefs or not prefs.get('enabled', False):
+                        continue
+
+                    # Get user email and channel preference
+                    user_data = self.users_ref.child(user_id).get()
+                    if user_data:
+                        recipients_to_notify[user_id] = {
+                            'channel': prefs.get('channel', 'both'),
+                            'email': user_data.get('email', '')
+                        }
+
+            # If no one to notify, return early
+            if not recipients_to_notify:
+                logger.info(f"No recipients to notify for comment on {comment_type} {parent_id}")
+                return
+
+            # Prepare notification data
+            recipient_ids = list(recipients_to_notify.keys())
+            recipient_emails = {uid: info['email'] for uid, info in recipients_to_notify.items() if info['email']}
+
+            # Determine channel - use 'both' if any user has 'both', otherwise use the most common
+            channels = [info['channel'] for info in recipients_to_notify.values()]
+            if 'both' in channels:
+                channel = 'both'
+            else:
+                channel = max(set(channels), key=channels.count)
+
+            notification_data = {
+                'itemId': parent_id,
+                'taskTitle': task_title,
+                'commentText': comment_text,
+                'commenterName': commenter_name,
+                'commenterId': commenter_id,
+                'recipientIds': recipient_ids,
+                'channel': channel,
+                'isSubtask': comment_type == 'subtask',
+                'recipientEmails': recipient_emails
+            }
+
+            if parent_task_title:
+                notification_data['parentTaskTitle'] = parent_task_title
+            if task_deadline:
+                notification_data['taskDeadline'] = task_deadline
+
+            # Send notification request
+            response = requests.post(
+                f"{self.notification_service_url}/notifications/comment",
+                json=notification_data,
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"Comment notifications sent: {result.get('notificationsSent', [])}")
+            else:
+                logger.error(f"Failed to send comment notifications: {response.text}")
+
+        except Exception as e:
+            logger.error(f"Error sending comment notifications: {str(e)}")
+            # Don't fail the comment creation if notification fails

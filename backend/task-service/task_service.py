@@ -2,6 +2,8 @@
 import sys
 import os
 import calendar
+import logging
+import requests
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -9,17 +11,96 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from shared import get_db_reference, current_timestamp, validate_epoch_timestamp
 from models import Task, CreateTaskRequest, UpdateTaskRequest
 
+logger = logging.getLogger(__name__)
+
 class TaskService:
     """Service for managing tasks"""
-    
+
     def __init__(self):
         self.tasks_ref = get_db_reference("tasks")
         self.subtasks_ref = get_db_reference("subtasks")
+        self.users_ref = get_db_reference("users")
+        self.notification_prefs_ref = get_db_reference("notificationPreferences")
+        self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:6004")
     
     def validate_status(self, status):
         """Validate status is one of the allowed values"""
         allowed_statuses = ["ongoing", "unassigned", "under review", "completed"]
         return status.lower() in [s.lower() for s in allowed_statuses]
+
+    def send_task_update_notification(self, task_id, task_title, old_status, new_status, owner_id, collaborators):
+        """Send task status update notifications to owner and collaborators"""
+        try:
+            # Combine owner and collaborators (assigned staff)
+            user_ids = [owner_id] + (collaborators if collaborators else [])
+            user_ids = list(set(user_ids))  # Remove duplicates
+
+            # Fetch user emails and notification preferences for EACH user
+            user_preferences = {}
+            for user_id in user_ids:
+                try:
+                    # Get user email
+                    user_data = self.users_ref.child(user_id).get()
+                    user_email = user_data.get('email') if user_data else None
+
+                    # Get user preferences
+                    prefs = self.notification_prefs_ref.child(user_id).get()
+                    if prefs:
+                        # Check if task update reminders are enabled
+                        if prefs.get('taskUpdateReminders', True):
+                            user_preferences[user_id] = {
+                                'email': user_email,
+                                'channel': prefs.get('channel', 'both')
+                            }
+                    else:
+                        # No preferences set, use default (enabled with both channels)
+                        user_preferences[user_id] = {
+                            'email': user_email,
+                            'channel': 'both'
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to fetch preferences for user {user_id}: {str(e)}")
+                    # Default to sending notification
+                    user_data = self.users_ref.child(user_id).get()
+                    user_email = user_data.get('email') if user_data else None
+                    user_preferences[user_id] = {
+                        'email': user_email,
+                        'channel': 'both'
+                    }
+
+            if not user_preferences:
+                logger.info("No users to notify for task update")
+                return
+
+            # Send notifications for each user with their individual preferences
+            for user_id, prefs in user_preferences.items():
+                try:
+                    notification_data = {
+                        'itemId': task_id,
+                        'taskTitle': task_title,
+                        'oldStatus': old_status,
+                        'newStatus': new_status,
+                        'userIds': [user_id],  # Send to one user at a time
+                        'channel': prefs['channel'],
+                        'isSubtask': False,
+                        'userEmails': {user_id: prefs['email']} if prefs['email'] else {}
+                    }
+
+                    response = requests.post(
+                        f"{self.notification_service_url}/notifications/task-update",
+                        json=notification_data,
+                        timeout=5
+                    )
+
+                    if response.status_code == 200:
+                        logger.info(f"Task update notification sent for task {task_id} to user {user_id}")
+                    else:
+                        logger.error(f"Failed to send task update notification to {user_id}: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error sending notification to user {user_id}: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Error sending task update notification: {str(e)}")
     
     def is_same_date(self, timestamp1, timestamp2):
         """Check if two timestamps are on the same calendar date (UTC)"""
@@ -318,14 +399,28 @@ class TaskService:
             return None, "No valid fields provided for update"
         
         task_ref.update(update_data)
-        
-        # Check for recurring task creation
+
+        # Get updated task
+        updated_task = task_ref.get()
+
+        # Check for status change and send notifications
         new_status = req.status.lower() if req.status else prev_status
+        if new_status != prev_status:
+            # Send notification to owner and collaborators
+            self.send_task_update_notification(
+                req.task_id,
+                updated_task.get('title', 'Untitled'),
+                prev_status,
+                new_status,
+                updated_task.get('ownerId'),
+                updated_task.get('collaborators', [])
+            )
+
+        # Check for recurring task creation
         if prev_status != "completed" and new_status == "completed" and existing_task.get("scheduled"):
-            updated_task = task_ref.get()
             self.create_task_with_params(updated_task, completion_time=current_time)
-        
-        return Task.from_dict(task_ref.get()), None
+
+        return Task.from_dict(updated_task), None
     
     def delete_task(self, task_id):
         """Delete a task by ID"""

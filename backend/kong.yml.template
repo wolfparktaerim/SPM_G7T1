@@ -34,6 +34,14 @@ services:
         paths: [/comments]
         strip_path: false
 
+  - name: extension-request-service
+    url: ${EXTENSION_REQUEST_SERVICE_URL}  
+    routes:
+      - name: extension-request-route
+        paths: [/extension-requests, /extension-requests/]
+        strip_path: false
+        methods: [GET, POST, PATCH, OPTIONS]
+
 
 plugins:
   # Global CORS Plugin

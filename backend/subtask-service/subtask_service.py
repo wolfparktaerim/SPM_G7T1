@@ -2,6 +2,8 @@
 import sys
 import os
 import calendar
+import logging
+import requests
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -9,16 +11,105 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from shared import get_db_reference, current_timestamp, validate_epoch_timestamp
 from models import Subtask, CreateSubtaskRequest, UpdateSubtaskRequest
 
+logger = logging.getLogger(__name__)
+
 class SubtaskService:
     """Service for managing subtasks"""
-    
+
     def __init__(self):
         self.subtasks_ref = get_db_reference("subtasks")
         self.tasks_ref = get_db_reference("tasks")
+        self.users_ref = get_db_reference("users")
+        self.notification_prefs_ref = get_db_reference("notificationPreferences")
+        self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:6004")
     
     def validate_status(self, status):
         allowed_statuses = ["ongoing", "unassigned", "under_review", "completed"]
         return status.lower() in allowed_statuses
+
+    def send_subtask_update_notification(self, subtask_id, subtask_title, old_status, new_status, owner_id, collaborators, parent_task_id):
+        """Send subtask status update notifications to owner and collaborators"""
+        try:
+            # Combine owner and collaborators (assigned staff)
+            user_ids = [owner_id] + (collaborators if collaborators else [])
+            user_ids = list(set(user_ids))  # Remove duplicates
+
+            # Get parent task title
+            parent_task_title = None
+            try:
+                parent_task_data = self.tasks_ref.child(parent_task_id).get()
+                if parent_task_data:
+                    parent_task_title = parent_task_data.get('title', 'Untitled Task')
+            except Exception as e:
+                logger.error(f"Failed to fetch parent task {parent_task_id}: {str(e)}")
+
+            # Fetch user emails and notification preferences for EACH user
+            user_preferences = {}
+            for user_id in user_ids:
+                try:
+                    # Get user email
+                    user_data = self.users_ref.child(user_id).get()
+                    user_email = user_data.get('email') if user_data else None
+
+                    # Get user preferences
+                    prefs = self.notification_prefs_ref.child(user_id).get()
+                    if prefs:
+                        # Check if task update reminders are enabled
+                        if prefs.get('taskUpdateReminders', True):
+                            user_preferences[user_id] = {
+                                'email': user_email,
+                                'channel': prefs.get('channel', 'both')
+                            }
+                    else:
+                        # No preferences set, use default (enabled with both channels)
+                        user_preferences[user_id] = {
+                            'email': user_email,
+                            'channel': 'both'
+                        }
+                except Exception as e:
+                    logger.error(f"Failed to fetch preferences for user {user_id}: {str(e)}")
+                    # Default to sending notification
+                    user_data = self.users_ref.child(user_id).get()
+                    user_email = user_data.get('email') if user_data else None
+                    user_preferences[user_id] = {
+                        'email': user_email,
+                        'channel': 'both'
+                    }
+
+            if not user_preferences:
+                logger.info("No users to notify for subtask update")
+                return
+
+            # Send notifications for each user with their individual preferences
+            for user_id, prefs in user_preferences.items():
+                try:
+                    notification_data = {
+                        'itemId': subtask_id,
+                        'taskTitle': subtask_title,
+                        'oldStatus': old_status,
+                        'newStatus': new_status,
+                        'userIds': [user_id],  # Send to one user at a time
+                        'channel': prefs['channel'],
+                        'isSubtask': True,
+                        'parentTaskTitle': parent_task_title,
+                        'userEmails': {user_id: prefs['email']} if prefs['email'] else {}
+                    }
+
+                    response = requests.post(
+                        f"{self.notification_service_url}/notifications/task-update",
+                        json=notification_data,
+                        timeout=5
+                    )
+
+                    if response.status_code == 200:
+                        logger.info(f"Subtask update notification sent for subtask {subtask_id} to user {user_id}")
+                    else:
+                        logger.error(f"Failed to send subtask update notification to {user_id}: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error sending notification to user {user_id}: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Error sending subtask update notification: {str(e)}")
     
     def calculate_new_start_date(self, old_start_date, schedule, custom_schedule=None):
         now = current_timestamp()
@@ -295,14 +386,30 @@ class SubtaskService:
             return None, "No valid fields provided for update"
         
         subtask_ref.update(update_data)
-        
-        # Check for recurring subtask
+
+        # Get updated subtask
+        updated_subtask = subtask_ref.get()
+
+        # Check for status change and send notifications
         new_status = update_data.get("status", prev_status)
+        if new_status != prev_status:
+            # Send notification to owner and collaborators
+            self.send_subtask_update_notification(
+                req.subtask_id,
+                updated_subtask.get('title', 'Untitled'),
+                prev_status,
+                new_status,
+                updated_subtask.get('ownerId'),
+                updated_subtask.get('collaborators', []),
+                updated_subtask.get('taskId')
+            )
+
+        # Check for recurring subtask
         if prev_status != "completed" and new_status == "completed" and existing_subtask.get("scheduled"):
-            updated_subtask = subtask_ref.get()
             self.create_subtask_with_params(updated_subtask)
-        
-        return Subtask.from_dict(subtask_ref.get()), None
+
+        return Subtask.from_dict(updated_subtask), None
+
     
     def delete_subtask(self, subtask_id):
         subtask_ref = self.subtasks_ref.child(subtask_id)
