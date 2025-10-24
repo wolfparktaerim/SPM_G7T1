@@ -190,7 +190,11 @@ class TaskService:
         creator_id = task_data.get("creatorId", "")
         
         # If owner is not the creator, status should be 'ongoing' and startedAt should be set
+
         if owner_id and owner_id != creator_id:
+            new_status = "ongoing"
+            new_started_at = now
+        elif task_data.get("status") == "ongoing":
             new_status = "ongoing"
             new_started_at = now
         else:
@@ -235,6 +239,9 @@ class TaskService:
         # If owner is different from creator, status = 'ongoing' and startedAt = current_time
         # If owner is same as creator (or default), status = 'unassigned' and startedAt = None
         if owner_id != req.creator_id:
+            initial_status = "ongoing"
+            started_at = current_time
+        elif req.status == "ongoing":
             initial_status = "ongoing"
             started_at = current_time
         else:
