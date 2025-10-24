@@ -32,6 +32,7 @@ export class Notification {
     extensionRequestId = null, // For extension requests
     status = null, // For extension response (approved/rejected)
     rejectionReason = null, // For extension response
+    newDeadline = null, // For deadline_changed notifications
   } = {}) {
     this.notificationId = notificationId
     this.userId = userId
@@ -60,6 +61,7 @@ export class Notification {
     this.extensionRequestId = extensionRequestId
     this.status = status
     this.rejectionReason = rejectionReason
+    this.newDeadline = newDeadline
   }
 
   /**
@@ -219,6 +221,7 @@ export class Notification {
         get('extensionRequestId', 'extension_request_id') || get('requestId', 'request_id'),
       status: data.status,
       rejectionReason: get('rejectionReason', 'rejection_reason'),
+      newDeadline: get('newDeadline', 'new_deadline'),
     })
   }
 
@@ -255,6 +258,7 @@ export class Notification {
       extensionRequestId: this.extensionRequestId,
       status: this.status,
       rejectionReason: this.rejectionReason,
+      newDeadline: this.newDeadline,
     }
   }
 }

@@ -368,10 +368,21 @@ class NotificationService:
 
         notification_id = str(uuid.uuid4())
         current_time = current_timestamp()
-        
+
         # Get requester name
         requester_name = self._get_user_name(requester_id)
-        
+
+        # Get parent task title if this is a subtask
+        parent_task_title = None
+        if item_type == "subtask":
+            subtasks_ref = get_db_reference("subtasks")
+            subtask_data = subtasks_ref.child(item_id).get()
+            if subtask_data and subtask_data.get("taskId"):
+                tasks_ref = get_db_reference("tasks")
+                task_data = tasks_ref.child(subtask_data.get("taskId")).get()
+                if task_data:
+                    parent_task_title = task_data.get("title")
+
         notification_data = {
             "notificationId": notification_id,
             "userId": owner_id,
@@ -382,32 +393,50 @@ class NotificationService:
             "message": f"{requester_name} has requested a deadline extension for {item_type}: {item_title}",
             "requesterId": requester_id,
             "requesterName": requester_name,
-            "extensionRequestId": extension_request_id,  
+            "extensionRequestId": extension_request_id,
             "actionable": True,
             "read": False,
             "createdAt": current_time,
             "actionable": True
         }
+
+        if parent_task_title:
+            notification_data["parentTaskTitle"] = parent_task_title
         
         self.notifications_ref.child(owner_id).child(notification_id).set(notification_data)
         return notification_id
     
     def create_deadline_extension_response_notification(self, requester_id: str, item_id: str,
                                                         item_type: str, item_title: str,
-                                                        status: str, rejection_reason: str = None):
+                                                        status: str, rejection_reason: str = None,
+                                                        new_deadline: int = None):
         """Create notification for deadline extension response"""
         import uuid
+        from datetime import datetime
 
         notification_id = str(uuid.uuid4())
         current_time = current_timestamp()
-        
+
+        # Get parent task title if this is a subtask
+        parent_task_title = None
+        if item_type == "subtask":
+            subtasks_ref = get_db_reference("subtasks")
+            subtask_data = subtasks_ref.child(item_id).get()
+            if subtask_data and subtask_data.get("taskId"):
+                tasks_ref = get_db_reference("tasks")
+                task_data = tasks_ref.child(subtask_data.get("taskId")).get()
+                if task_data:
+                    parent_task_title = task_data.get("title")
+
         if status == "approved":
-            message = f"Your deadline extension request for {item_type}: {item_title} has been approved"
+            if new_deadline:
+                deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y")
+                message = f"Your deadline extension request for {item_type}: {item_title} to {deadline_str} has been approved"
+            else:
+                message = f"Your deadline extension request for {item_type}: {item_title} has been approved"
         else:
             message = f"Your deadline extension request for {item_type}: {item_title} has been rejected"
-            if rejection_reason:
-                message += f" - Reason: {rejection_reason}"
-        
+
         notification_data = {
             "notificationId": notification_id,
             "userId": requester_id,
@@ -418,27 +447,50 @@ class NotificationService:
             "message": message,
             "status": status,
             "rejectionReason": rejection_reason,
+            "newDeadline": new_deadline,
             "read": False,
             "createdAt": current_time,
             "actionable": False
         }
+
+        if parent_task_title:
+            notification_data["parentTaskTitle"] = parent_task_title
         
         self.notifications_ref.child(requester_id).child(notification_id).set(notification_data)
         return notification_id
 
     def create_deadline_changed_notification(self, user_id: str, item_id: str,
                                             item_type: str, item_title: str,
-                                            new_deadline: int):
+                                            new_deadline: int, requester_id: str = None):
         """Create notification for deadline change (for all collaborators)"""
         import uuid
         from datetime import datetime
 
         notification_id = str(uuid.uuid4())
         current_time = current_timestamp()
-        
-        # Format the new deadline
-        deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y")
-        
+
+        # Get requester name if provided
+        requester_name = None
+        if requester_id:
+            requester_name = self._get_user_name(requester_id)
+
+        # Get parent task title if this is a subtask
+        parent_task_title = None
+        if item_type == "subtask":
+            subtasks_ref = get_db_reference("subtasks")
+            subtask_data = subtasks_ref.child(item_id).get()
+            if subtask_data and subtask_data.get("taskId"):
+                tasks_ref = get_db_reference("tasks")
+                task_data = tasks_ref.child(subtask_data.get("taskId")).get()
+                if task_data:
+                    parent_task_title = task_data.get("title")
+
+        # Build message with requester name if available
+        if requester_name:
+            message = f"The deadline for {item_type}: {item_title} has been extended on request by {requester_name}"
+        else:
+            message = f"The deadline for {item_type}: {item_title} has been extended"
+
         notification_data = {
             "notificationId": notification_id,
             "userId": user_id,
@@ -446,13 +498,18 @@ class NotificationService:
             "itemId": item_id,
             "itemType": item_type,
             "itemTitle": item_title,
-            "message": f"The deadline for {item_type}: {item_title} has been extended to {deadline_str}",
+            "message": message,
             "newDeadline": new_deadline,
+            "requesterId": requester_id,
+            "requesterName": requester_name,
             "read": False,
             "createdAt": current_time,
             "actionable": False
         }
-        
+
+        if parent_task_title:
+            notification_data["parentTaskTitle"] = parent_task_title
+
         self.notifications_ref.child(user_id).child(notification_id).set(notification_data)
         return notification_id
 

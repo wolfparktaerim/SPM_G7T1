@@ -136,9 +136,9 @@
           </div>
         </div>
 
-        <!-- Message (for extension requests and responses) -->
+        <!-- Message (for deadline changed and approved extension responses) -->
         <div
-          v-if="notification.message && (notification.isExtensionRequest() || notification.isExtensionResponse() || notification.isDeadlineChanged())"
+          v-if="notification.message && (notification.isDeadlineChanged() || (notification.isExtensionResponse() && notification.status === 'approved'))"
           class="mt-2 text-xs text-gray-600">
           {{ notification.message }}
         </div>
@@ -227,7 +227,7 @@ const getNotificationTitle = () => {
       ? 'Extension Request Approved'
       : 'Extension Request Rejected'
   } else if (props.notification.isDeadlineChanged()) {
-    return 'Deadline Updated'
+    return 'Deadline Extended'
   } else if (isStatusUpdateNotification()) {
     return 'Status Updated'
   } else if (isCommentNotification()) {
@@ -238,8 +238,13 @@ const getNotificationTitle = () => {
 }
 
 const getFormattedDeadline = () => {
-  if (!props.notification.taskDeadline) return 'N/A'
-  const date = new Date(props.notification.taskDeadline * 1000)
+  // For deadline_changed notifications, use newDeadline
+  const deadline = props.notification.isDeadlineChanged()
+    ? props.notification.newDeadline
+    : props.notification.taskDeadline
+
+  if (!deadline) return 'N/A'
+  const date = new Date(deadline * 1000)
   return date.toLocaleDateString('en-SG', {
     month: 'short',
     day: 'numeric',

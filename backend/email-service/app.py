@@ -140,6 +140,108 @@ def send_comment_notification():
     else:
         return jsonify(error="Failed to send comment notification email"), 500
 
+@app.route("/email/send-deadline-extension-request", methods=["POST"])
+def send_deadline_extension_request():
+    """Send deadline extension request email"""
+    try:
+        data = request.get_json(force=False, silent=False)
+    except Exception as e:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    if data is None or not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    required_fields = ['toEmail', 'itemTitle', 'requesterName', 'currentDeadline', 'proposedDeadline']
+    for field in required_fields:
+        if field not in data:
+            return jsonify(error=f"Missing required field: {field}"), 400
+
+    to_email = data['toEmail']
+    item_title = data['itemTitle']
+    requester_name = data['requesterName']
+    current_deadline = data['currentDeadline']
+    proposed_deadline = data['proposedDeadline']
+    reason = data.get('reason', '')
+    item_type = data.get('itemType', 'task')
+    parent_task_title = data.get('parentTaskTitle')
+
+    success = email_service.send_deadline_extension_request_email(
+        to_email, item_title, requester_name, current_deadline, proposed_deadline,
+        reason, item_type, parent_task_title
+    )
+
+    if success:
+        return jsonify(message="Deadline extension request email sent successfully"), 200
+    else:
+        return jsonify(error="Failed to send deadline extension request email"), 500
+
+@app.route("/email/send-deadline-extension-response", methods=["POST"])
+def send_deadline_extension_response():
+    """Send deadline extension response email"""
+    try:
+        data = request.get_json(force=False, silent=False)
+    except Exception as e:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    if data is None or not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    required_fields = ['toEmail', 'itemTitle', 'status']
+    for field in required_fields:
+        if field not in data:
+            return jsonify(error=f"Missing required field: {field}"), 400
+
+    to_email = data['toEmail']
+    item_title = data['itemTitle']
+    status = data['status']
+    new_deadline = data.get('newDeadline')
+    rejection_reason = data.get('rejectionReason')
+    item_type = data.get('itemType', 'task')
+    parent_task_title = data.get('parentTaskTitle')
+
+    success = email_service.send_deadline_extension_response_email(
+        to_email, item_title, status, new_deadline, rejection_reason,
+        item_type, parent_task_title
+    )
+
+    if success:
+        return jsonify(message="Deadline extension response email sent successfully"), 200
+    else:
+        return jsonify(error="Failed to send deadline extension response email"), 500
+
+@app.route("/email/send-deadline-changed", methods=["POST"])
+def send_deadline_changed():
+    """Send deadline changed email"""
+    try:
+        data = request.get_json(force=False, silent=False)
+    except Exception as e:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    if data is None or not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    required_fields = ['toEmail', 'itemTitle', 'newDeadline']
+    for field in required_fields:
+        if field not in data:
+            return jsonify(error=f"Missing required field: {field}"), 400
+
+    to_email = data['toEmail']
+    item_title = data['itemTitle']
+    new_deadline = data['newDeadline']
+    requester_name = data.get('requesterName')
+    item_type = data.get('itemType', 'task')
+    parent_task_title = data.get('parentTaskTitle')
+
+    success = email_service.send_deadline_changed_email(
+        to_email, item_title, new_deadline, requester_name,
+        item_type, parent_task_title
+    )
+
+    if success:
+        return jsonify(message="Deadline changed email sent successfully"), 200
+    else:
+        return jsonify(error="Failed to send deadline changed email"), 500
+
 @app.route("/email/test", methods=["POST"])
 def test_email():
     """Test email configuration"""

@@ -392,3 +392,178 @@ class EmailService:
         success = self.send_email(to_email, subject, html_content)
 
         return success
+
+    def send_deadline_extension_request_email(self, to_email, item_title, requester_name,
+                                              current_deadline, proposed_deadline, reason,
+                                              item_type="task", parent_task_title=None):
+        """Send deadline extension request email"""
+        from datetime import datetime
+
+        # Format deadlines
+        current_deadline_str = datetime.fromtimestamp(current_deadline).strftime("%B %d, %Y at %I:%M %p")
+        proposed_deadline_str = datetime.fromtimestamp(proposed_deadline).strftime("%B %d, %Y at %I:%M %p")
+
+        # Create subject
+        item_display = "Subtask" if item_type == "subtask" else "Task"
+        subject = f"Deadline Extension Request for {item_display}: {item_title}"
+
+        # Create HTML content
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #3b82f6; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
+                .content {{ background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
+                .info-box {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #3b82f6; }}
+                .reason-box {{ background-color: #fef3c7; padding: 15px; margin: 15px 0; border-left: 4px solid #f59e0b; }}
+                .footer {{ background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; }}
+                .label {{ font-weight: bold; color: #374151; }}
+                .value {{ color: #1f2937; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2 style="margin: 0;">⏰ Deadline Extension Request</h2>
+                </div>
+                <div class="content">
+                    <p><strong>{requester_name}</strong> has requested a deadline extension.</p>
+
+                    <div class="info-box">
+                        <p><span class="label">{item_display}:</span> <span class="value">{item_title}</span></p>
+                        {"<p><span class='label'>Part of Task:</span> <span class='value'>" + parent_task_title + "</span></p>" if parent_task_title else ""}
+                        <p><span class="label">Current Deadline:</span> <span class="value">{current_deadline_str}</span></p>
+                        <p><span class="label">Proposed Deadline:</span> <span class="value">{proposed_deadline_str}</span></p>
+                    </div>
+
+                    {"<div class='reason-box'><p><span class='label'>Reason:</span></p><p>" + reason + "</p></div>" if reason else ""}
+
+                    <p style="margin-top: 20px;">Please review this request in your <strong>in-app notification inbox</strong> to approve or reject it.</p>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from the Task Management System.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        success = self.send_email(to_email, subject, html_content)
+        return success
+
+    def send_deadline_extension_response_email(self, to_email, item_title, status, new_deadline=None,
+                                               rejection_reason=None, item_type="task", parent_task_title=None):
+        """Send deadline extension response email (approved/rejected)"""
+        from datetime import datetime
+
+        # Create subject
+        item_display = "Subtask" if item_type == "subtask" else "Task"
+        status_text = "Approved" if status == "approved" else "Rejected"
+        subject = f"Deadline Extension Request {status_text} for {item_display}: {item_title}"
+
+        # Format new deadline if approved
+        new_deadline_str = ""
+        if status == "approved" and new_deadline:
+            new_deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y at %I:%M %p")
+
+        # Create HTML content
+        bg_color = "#dcfce7" if status == "approved" else "#fee2e2"
+        border_color = "#10b981" if status == "approved" else "#ef4444"
+        icon = "✅" if status == "approved" else "❌"
+
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: {border_color}; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
+                .content {{ background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
+                .status-box {{ background-color: {bg_color}; padding: 15px; margin: 15px 0; border-left: 4px solid {border_color}; }}
+                .info-box {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #3b82f6; }}
+                .footer {{ background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; }}
+                .label {{ font-weight: bold; color: #374151; }}
+                .value {{ color: #1f2937; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2 style="margin: 0;">{icon} Extension Request {status_text}</h2>
+                </div>
+                <div class="content">
+                    <div class="status-box">
+                        <p style="margin: 0; font-size: 16px;">Your deadline extension request has been <strong>{status.lower()}</strong>.</p>
+                    </div>
+
+                    <div class="info-box">
+                        <p><span class="label">{item_display}:</span> <span class="value">{item_title}</span></p>
+                        {"<p><span class='label'>Part of Task:</span> <span class='value'>" + parent_task_title + "</span></p>" if parent_task_title else ""}
+                        {"<p><span class='label'>New Deadline:</span> <span class='value'>" + new_deadline_str + "</span></p>" if new_deadline_str else ""}
+                        {"<p><span class='label'>Rejection Reason:</span> <span class='value'>" + rejection_reason + "</span></p>" if rejection_reason else ""}
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from the Task Management System.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        success = self.send_email(to_email, subject, html_content)
+        return success
+
+    def send_deadline_changed_email(self, to_email, item_title, new_deadline, requester_name=None,
+                                    item_type="task", parent_task_title=None):
+        """Send deadline changed email"""
+        from datetime import datetime
+
+        # Format new deadline
+        new_deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y at %I:%M %p")
+
+        # Create subject
+        item_display = "Subtask" if item_type == "subtask" else "Task"
+        subject = f"Deadline Extended for {item_display}: {item_title}"
+
+        # Create HTML content
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #3b82f6; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
+                .content {{ background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
+                .info-box {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #3b82f6; }}
+                .footer {{ background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; }}
+                .label {{ font-weight: bold; color: #374151; }}
+                .value {{ color: #1f2937; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2 style="margin: 0;">📅 Deadline Extended</h2>
+                </div>
+                <div class="content">
+                    <p>The deadline has been extended{" on request by <strong>" + requester_name + "</strong>" if requester_name else ""}.</p>
+
+                    <div class="info-box">
+                        <p><span class="label">{item_display}:</span> <span class="value">{item_title}</span></p>
+                        {"<p><span class='label'>Part of Task:</span> <span class='value'>" + parent_task_title + "</span></p>" if parent_task_title else ""}
+                        <p><span class="label">New Deadline:</span> <span class="value">{new_deadline_str}</span></p>
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from the Task Management System.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        success = self.send_email(to_email, subject, html_content)
+        return success

@@ -270,31 +270,82 @@ def send_deadline_extension_request_notification():
     """Send notification for deadline extension request"""
     try:
         data = request.json
-        
-        required_fields = ['ownerId', 'itemId', 'itemTitle', 'requesterId', 'itemType', 'extensionRequestId']  
+        logger.info(f"🔔 Received deadline extension request notification data: {data}")
+
+        required_fields = ['ownerId', 'itemId', 'itemTitle', 'requesterId', 'itemType', 'extensionRequestId']
         for field in required_fields:
             if field not in data:
                 return jsonify(error=f"Missing required field: {field}"), 400
-        
+
         owner_id = data['ownerId']
         item_id = data['itemId']
         item_title = data['itemTitle']
         requester_id = data['requesterId']
         item_type = data['itemType']
-        extension_request_id = data['extensionRequestId'] 
-        
-        notification_id = notification_service.create_deadline_extension_request_notification(
-            owner_id, item_id, item_title, requester_id, item_type, extension_request_id 
-        )
-        
-        if notification_id:
+        extension_request_id = data['extensionRequestId']
+        channel = data.get('channel', 'in-app')
+        owner_email = data.get('ownerEmail')
+        requester_name = data.get('requesterName')
+        current_deadline = data.get('currentDeadline')
+        proposed_deadline = data.get('proposedDeadline')
+        reason = data.get('reason')
+        parent_task_title = data.get('parentTaskTitle')
+
+        logger.info(f"📧 Channel: {channel}, Owner Email: {owner_email}")
+
+        notification_sent = False
+        email_sent = False
+
+        # Send in-app notification if channel includes in-app
+        if channel in ['in-app', 'both']:
+            notification_id = notification_service.create_deadline_extension_request_notification(
+                owner_id, item_id, item_title, requester_id, item_type, extension_request_id
+            )
+            if notification_id:
+                notification_sent = True
+
+        # Send email notification if channel includes email
+        logger.info(f"🔍 Checking email condition: channel='{channel}' in ['email', 'both']? {channel in ['email', 'both']}, owner_email={owner_email}")
+        if channel in ['email', 'both'] and owner_email:
+            try:
+                logger.info(f"📤 Attempting to send email to {owner_email}")
+                import requests
+                email_data = {
+                    "toEmail": owner_email,
+                    "itemTitle": item_title,
+                    "requesterName": requester_name,
+                    "currentDeadline": current_deadline,
+                    "proposedDeadline": proposed_deadline,
+                    "reason": reason,
+                    "itemType": item_type,
+                    "parentTaskTitle": parent_task_title
+                }
+
+                response = requests.post(
+                    f"{email_service_url}/email/send-deadline-extension-request",
+                    json=email_data,
+                    timeout=10
+                )
+
+                if response.status_code == 200:
+                    email_sent = True
+                    logger.info(f"✅ Deadline extension request email sent to {owner_email}")
+                else:
+                    logger.error(f"❌ Failed to send email: {response.text}")
+            except Exception as e:
+                logger.error(f"❌ Error sending email: {str(e)}")
+        else:
+            logger.info(f"⏭️ Skipping email: channel={channel}, owner_email={owner_email}")
+
+        if notification_sent or email_sent:
             return jsonify(
                 message="Extension request notification sent",
-                notificationId=notification_id
+                notificationSent=notification_sent,
+                emailSent=email_sent
             ), 200
         else:
-            return jsonify(error="Failed to create notification"), 500
-            
+            return jsonify(error="Failed to send notification"), 500
+
     except Exception as e:
         logger.error(f"Failed to send extension request notification: {str(e)}")
         return jsonify(error=f"Failed to send notification: {str(e)}"), 500
@@ -315,6 +366,10 @@ def send_deadline_extension_response_notification():
         item_type = data['itemType']
         status = data['status']
         rejection_reason = data.get('rejectionReason')
+        new_deadline = data.get('newDeadline')
+        channel = data.get('channel', 'in-app')
+        requester_email = data.get('requesterEmail')
+        parent_task_title = data.get('parentTaskTitle')
 
         # Get item title from request data if provided, otherwise fetch from database
         item_title = data.get('itemTitle')
@@ -327,17 +382,53 @@ def send_deadline_extension_response_notification():
             item_data = item_ref.get()
             item_title = item_data.get('title', 'Untitled') if item_data else 'Untitled'
 
-        notification_id = notification_service.create_deadline_extension_response_notification(
-            requester_id, item_id, item_type, item_title, status, rejection_reason
-        )
+        notification_sent = False
+        email_sent = False
 
-        if notification_id:
+        # Send in-app notification if channel includes in-app
+        if channel in ['in-app', 'both']:
+            notification_id = notification_service.create_deadline_extension_response_notification(
+                requester_id, item_id, item_type, item_title, status, rejection_reason, new_deadline
+            )
+            if notification_id:
+                notification_sent = True
+
+        # Send email notification if channel includes email
+        if channel in ['email', 'both'] and requester_email:
+            try:
+                import requests
+                email_data = {
+                    "toEmail": requester_email,
+                    "itemTitle": item_title,
+                    "status": status,
+                    "newDeadline": new_deadline,
+                    "rejectionReason": rejection_reason,
+                    "itemType": item_type,
+                    "parentTaskTitle": parent_task_title
+                }
+
+                response = requests.post(
+                    f"{email_service_url}/email/send-deadline-extension-response",
+                    json=email_data,
+                    timeout=10
+                )
+
+                if response.status_code == 200:
+                    email_sent = True
+                    logger.info(f"Deadline extension response email sent to {requester_email}")
+                else:
+                    logger.error(f"Failed to send email: {response.text}")
+            except Exception as e:
+                logger.error(f"Error sending email: {str(e)}")
+
+        if notification_sent or email_sent:
             return jsonify(
                 message="Extension response notification sent",
-                notificationId=notification_id
+                notificationSent=notification_sent,
+                emailSent=email_sent
             ), 200
         else:
-            return jsonify(error="Failed to create notification"), 500
+            return jsonify(error="Failed to send notification"), 500
 
     except Exception as e:
         logger.error(f"Failed to send extension response notification: {str(e)}")
@@ -348,32 +439,68 @@ def send_deadline_changed_notification():
     """Send notification to all collaborators about deadline change"""
     try:
         data = request.json
-        
+
         required_fields = ['itemId', 'itemTitle', 'itemType', 'collaboratorIds', 'newDeadline']
         for field in required_fields:
             if field not in data:
                 return jsonify(error=f"Missing required field: {field}"), 400
-        
+
         item_id = data['itemId']
         item_title = data['itemTitle']
         item_type = data['itemType']
         collaborator_ids = data['collaboratorIds']
         new_deadline = data['newDeadline']
-        
+        requester_id = data.get('requesterId')  # Optional field
+        channel = data.get('channel', 'in-app')
+        user_emails = data.get('userEmails', {})  # Dict mapping user_id to email
+        requester_name = data.get('requesterName')
+        parent_task_title = data.get('parentTaskTitle')
+
         notifications_sent = []
-        
+        emails_sent = []
+
         for user_id in collaborator_ids:
-            notification_id = notification_service.create_deadline_changed_notification(
-                user_id, item_id, item_type, item_title, new_deadline
-            )
-            if notification_id:
-                notifications_sent.append(user_id)
-        
+            # Send in-app notification if channel includes in-app
+            if channel in ['in-app', 'both']:
+                notification_id = notification_service.create_deadline_changed_notification(
+                    user_id, item_id, item_type, item_title, new_deadline, requester_id
+                )
+                if notification_id:
+                    notifications_sent.append(user_id)
+
+            # Send email notification if channel includes email
+            if channel in ['email', 'both'] and user_id in user_emails:
+                try:
+                    import requests
+                    email_data = {
+                        "toEmail": user_emails[user_id],
+                        "itemTitle": item_title,
+                        "newDeadline": new_deadline,
+                        "requesterName": requester_name,
+                        "itemType": item_type,
+                        "parentTaskTitle": parent_task_title
+                    }
+
+                    response = requests.post(
+                        f"{email_service_url}/email/send-deadline-changed",
+                        json=email_data,
+                        timeout=10
+                    )
+
+                    if response.status_code == 200:
+                        emails_sent.append(user_id)
+                        logger.info(f"Deadline changed email sent to {user_emails[user_id]}")
+                    else:
+                        logger.error(f"Failed to send email: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error sending email: {str(e)}")
+
         return jsonify(
             message="Deadline change notifications sent",
-            notificationsSent=notifications_sent
+            notificationsSent=notifications_sent,
+            emailsSent=emails_sent
         ), 200
-            
+
     except Exception as e:
         logger.error(f"Failed to send deadline change notifications: {str(e)}")
         return jsonify(error=f"Failed to send notifications: {str(e)}"), 500

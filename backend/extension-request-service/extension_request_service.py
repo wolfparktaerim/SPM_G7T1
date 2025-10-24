@@ -22,8 +22,9 @@ class ExtensionRequestService:
         self.requests_ref = get_db_reference("deadlineExtensionRequests")
         self.tasks_ref = get_db_reference("tasks")
         self.subtasks_ref = get_db_reference("subtasks")
-        self.users_ref = get_db_reference("users") 
-        
+        self.users_ref = get_db_reference("users")
+        self.notification_prefs_ref = get_db_reference("notificationPreferences")
+
         # Service URLs from environment variables
         self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL")
         self.task_service_url = os.getenv("TASK_SERVICE_URL")
@@ -92,7 +93,9 @@ class ExtensionRequestService:
             requester_id=req.requester_id,
             item_type=req.item_type,
             request_id=request_id,
-            current_deadline=current_deadline
+            current_deadline=current_deadline,
+            proposed_deadline=req.proposed_deadline,
+            reason=req.reason
         )
         
         return ExtensionRequest.from_dict(request_data), None
@@ -215,7 +218,8 @@ class ExtensionRequestService:
                     item_title=item_title,
                     item_type=request_data.get("itemType"),
                     user_ids=all_users,
-                    new_deadline=request_data.get("proposedDeadline")
+                    new_deadline=request_data.get("proposedDeadline"),
+                    requester_id=request_data.get("requesterId")
                 )
         
         # Send notification to requester about the response
@@ -243,46 +247,93 @@ class ExtensionRequestService:
         except Exception as e:
             print(f"Error fetching user name: {str(e)}")
             return "User"
+
+    def _get_user_email(self, user_id: str) -> Optional[str]:
+        """Get user's email from Firebase"""
+        try:
+            user_data = self.users_ref.child(user_id).get()
+            if user_data:
+                return user_data.get("email")
+            return None
+        except Exception as e:
+            print(f"Error fetching user email: {str(e)}")
+            return None
+
+    def _get_user_notification_preference(self, user_id: str) -> str:
+        """Get user's notification channel preference from notificationPreferences collection"""
+        try:
+            prefs_data = self.notification_prefs_ref.child(user_id).get()
+            if prefs_data and prefs_data.get("enabled", False):
+                return prefs_data.get("channel", "in-app")
+            return "in-app"
+        except Exception as e:
+            print(f"Error fetching notification preference: {str(e)}")
+            return "in-app"
+
+    def _get_parent_task_title(self, item_id: str, item_type: str) -> Optional[str]:
+        """Get parent task title if item is a subtask"""
+        try:
+            if item_type == "subtask":
+                subtask_data = self.subtasks_ref.child(item_id).get()
+                if subtask_data and subtask_data.get("parentId"):
+                    parent_task = self.tasks_ref.child(subtask_data.get("parentId")).get()
+                    if parent_task:
+                        return parent_task.get("title")
+            return None
+        except Exception as e:
+            print(f"Error fetching parent task title: {str(e)}")
+            return None
     
-    def _send_extension_request_notification(self, owner_id: str, item_id: str, 
-                                            item_title: str, requester_id: str, 
-                                            item_type: str, request_id: str, 
-                                            current_deadline: int):
+    def _send_extension_request_notification(self, owner_id: str, item_id: str,
+                                            item_title: str, requester_id: str,
+                                            item_type: str, request_id: str,
+                                            current_deadline: int, proposed_deadline: int,
+                                            reason: str):
         """Send notification to owner about new extension request"""
-        
+
         if not self.notification_service_url:
             print("⚠️  Skipping notification: NOTIFICATION_SERVICE_URL not configured")
             return
-        
+
         try:
             requester_name = self._get_user_name(requester_id)
-            
+            owner_email = self._get_user_email(owner_id)
+            channel = self._get_user_notification_preference(owner_id)
+            parent_task_title = self._get_parent_task_title(item_id, item_type)
+
             notification_data = {
-                "ownerId": owner_id,              # ✅ Correct field name
+                "ownerId": owner_id,
                 "itemId": item_id,
                 "itemTitle": item_title,
                 "requesterId": requester_id,
                 "itemType": item_type,
-                "extensionRequestId": request_id  # ✅ Correct field name
+                "extensionRequestId": request_id,
+                "channel": channel,
+                "ownerEmail": owner_email,
+                "requesterName": requester_name,
+                "currentDeadline": current_deadline,
+                "proposedDeadline": proposed_deadline,
+                "reason": reason,
+                "parentTaskTitle": parent_task_title
             }
-            
+
             print(f"🔔 Creating notification for owner: {owner_id}")
             print(f"📍 URL: {self.notification_service_url}/notifications/deadline-extension-request")
             print(f"📦 Data: {notification_data}")
-            
+
             # ✅ CORRECT ENDPOINT
             response = requests.post(
                 f"{self.notification_service_url}/notifications/deadline-extension-request",
                 json=notification_data,
                 timeout=10
             )
-            
+
             print(f"✅ Response status: {response.status_code}")
             print(f"📄 Response body: {response.text}")
-            
+
             if response.status_code not in [200, 201]:
                 print(f"❌ Failed to send notification: {response.text}")
-                
+
         except Exception as e:
             print(f"❌ Error sending notification: {str(e)}")
             import traceback
@@ -300,16 +351,26 @@ class ExtensionRequestService:
             return
 
         try:
+            requester_email = self._get_user_email(requester_id)
+            channel = self._get_user_notification_preference(requester_id)
+            parent_task_title = self._get_parent_task_title(item_id, item_type)
+
             notification_data = {
                 "requesterId": requester_id,
                 "itemId": item_id,
                 "itemTitle": item_title,
                 "itemType": item_type,
-                "status": status
+                "status": status,
+                "channel": channel,
+                "requesterEmail": requester_email,
+                "parentTaskTitle": parent_task_title
             }
 
             if rejection_reason:
                 notification_data["rejectionReason"] = rejection_reason
+
+            if new_deadline:
+                notification_data["newDeadline"] = new_deadline
 
             print(f"🔔 Creating response notification for requester: {requester_id}")
 
@@ -330,37 +391,60 @@ class ExtensionRequestService:
             import traceback
             traceback.print_exc()
 
-    def _notify_deadline_change(self, item_id: str, item_title: str, item_type: str, 
-                           user_ids: List[str], new_deadline: int):
+    def _notify_deadline_change(self, item_id: str, item_title: str, item_type: str,
+                           user_ids: List[str], new_deadline: int, requester_id: str):
         """Notify all specified users about deadline change"""
-        
+
         if not self.notification_service_url:
             print("⚠️  Skipping notification: NOTIFICATION_SERVICE_URL not configured")
             return
-        
+
         try:
+            # Get requester name
+            requester_name = self._get_user_name(requester_id)
+            parent_task_title = self._get_parent_task_title(item_id, item_type)
+
+            # Build user emails dict
+            user_emails = {}
+            channel = "in-app"  # Default to in-app
+
+            for user_id in user_ids:
+                email = self._get_user_email(user_id)
+                if email:
+                    user_emails[user_id] = email
+
+                # Use the first user's preference as the channel (or could check if any user has email enabled)
+                user_channel = self._get_user_notification_preference(user_id)
+                if user_channel in ['email', 'both']:
+                    channel = 'both'
+
             notification_data = {
                 "itemId": item_id,
                 "itemTitle": item_title,
                 "itemType": item_type,
-                "collaboratorIds": user_ids,  # ✅ Correct field name
-                "newDeadline": new_deadline
+                "collaboratorIds": user_ids,
+                "newDeadline": new_deadline,
+                "requesterId": requester_id,
+                "channel": channel,
+                "userEmails": user_emails,
+                "requesterName": requester_name,
+                "parentTaskTitle": parent_task_title
             }
-            
+
             print(f"🔔 Creating deadline change notifications for {len(user_ids)} users")
-            
+
             # ✅ CORRECT ENDPOINT
             response = requests.post(
                 f"{self.notification_service_url}/notifications/deadline-changed",
                 json=notification_data,
                 timeout=10
             )
-            
+
             print(f"✅ Response status: {response.status_code}")
-            
+
             if response.status_code not in [200, 201]:
                 print(f"❌ Failed to send notifications: {response.text}")
-                        
+
         except Exception as e:
             print(f"❌ Error sending notifications: {str(e)}")
             import traceback
