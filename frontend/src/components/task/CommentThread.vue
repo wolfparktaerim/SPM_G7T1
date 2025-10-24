@@ -47,45 +47,57 @@
     </div>
 
     <!-- Initial Comment -->
-    <div class="ml-[52px]">
-      <div class="text-gray-700 text-base leading-relaxed whitespace-pre-wrap break-words mb-3">{{ thread.comments[0][1]
-      }}</div>
-      <div v-if="thread.mention && thread.mention.length > 0"
-        class="flex items-start gap-2 px-3 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl text-xs text-blue-900">
-        <Users class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-        <div class="flex flex-col gap-1">
-          <span class="font-semibold">Mentioned:</span>
-          <div class="flex flex-wrap gap-1">
-            <span v-for="(userId, idx) in thread.mention" :key="userId" class="font-medium">
-              {{ getAuthorName(userId) }}{{ idx < thread.mention.length - 1 ? ', ' : '' }} </span>
-          </div>
-        </div>
-      </div>
+<div class="ml-[52px]">
+  <div class="text-gray-700 text-base leading-relaxed whitespace-pre-wrap break-words mb-3">
+    {{ thread.comments[0][1] }}
+  </div>
+
+  <!-- Show mention notice only to the mentioned, i.e., current user -->
+  <div
+    v-if="Array.isArray(thread.mention) && thread.mention.includes(currentUserId)"
+    class="flex items-start gap-2 px-3 py-2.5 bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl text-xs text-blue-900">
+    <Users class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+    <div class="flex flex-col gap-1">
+      <span class="font-semibold">You were mentioned</span>
+      <span class="text-blue-800">Only visible to you</span>
     </div>
+  </div>
+</div>
+
 
     <!-- Replies -->
     <div v-if="thread.comments.length > 1"
       class="ml-[52px] pl-5 border-l-[3px] border-gray-300 flex flex-col gap-3.5 mt-4">
-      <div class="flex items-center gap-2 text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
-        <CornerDownRight class="w-4 h-4" />
-        <span>{{ thread.comments.length - 1 }} {{ thread.comments.length - 1 === 1 ? 'Reply' : 'Replies' }}</span>
+      <div class="flex items-center justify-between gap-2 text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+        <div class="flex items-center gap-2 cursor-pointer select-none" @click="repliesCollapsed = !repliesCollapsed">
+          <CornerDownRight class="w-4 h-4" />
+          <span>{{ thread.comments.length - 1 }} {{ thread.comments.length - 1 === 1 ? 'Reply' : 'Replies' }}</span>
+        </div>
+        <button @click="repliesCollapsed = !repliesCollapsed"
+          class="px-2 py-1 border border-gray-300 rounded-md text-[11px] font-semibold text-gray-700 hover:bg-gray-50 transition">
+          {{ repliesCollapsed ? 'Expand' : 'Collapse' }}
+        </button>
       </div>
-      <div v-for="(comment, idx) in thread.comments.slice(1)" :key="idx"
-        class="px-4 py-3.5 bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-xl transition-all duration-200 hover:bg-white hover:border-gray-300 hover:shadow-md">
-        <div class="flex gap-3 items-center mb-2.5">
-          <div
-            class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm shadow-blue-500/20">
-            {{ getInitials(getAuthorName(comment[0])) }}
-          </div>
-          <div class="flex flex-col gap-1">
-            <span class="font-semibold text-sm text-gray-900">{{ getAuthorName(comment[0]) }}</span>
-            <div class="flex items-center gap-1.5 text-xs text-gray-600">
-              <Clock class="w-3 h-3" />
-              <span>{{ formatTimestamp(comment[2]) }}</span>
+
+      <!-- Default collapsed; toggle with v-show for instant UX -->
+      <div v-show="!repliesCollapsed" class="flex flex-col gap-3.5">
+        <div v-for="(comment, idx) in thread.comments.slice(1)" :key="idx"
+          class="px-4 py-3.5 bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-xl transition-all duration-200 hover:bg-white hover:border-gray-300 hover:shadow-md">
+          <div class="flex gap-3 items-center mb-2.5">
+            <div
+              class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm shadow-blue-500/20">
+              {{ getInitials(getAuthorName(comment[0])) }}
+            </div>
+            <div class="flex flex-col gap-1">
+              <span class="font-semibold text-sm text-gray-900">{{ getAuthorName(comment[0]) }}</span>
+              <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                <Clock class="w-3 h-3" />
+                <span>{{ formatTimestamp(comment[2]) }}</span>
+              </div>
             </div>
           </div>
+          <div class="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap break-words">{{ comment[1] }}</div>
         </div>
-        <div class="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap break-words">{{ comment[1] }}</div>
       </div>
     </div>
 
@@ -139,8 +151,7 @@
             {{ getInitials(user.displayName) }}
           </div>
           <div class="flex flex-col gap-1 flex-1 min-w-0">
-            <span class="font-semibold text-sm text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{
-              user.displayName }}</span>
+            <span class="font-semibold text-sm text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{ user.displayName }}</span>
             <div class="flex items-center gap-1.5 text-xs text-gray-600">
               <Building2 class="w-3 h-3" />
               <span>{{ user.department }}</span>
@@ -247,6 +258,7 @@ const replyInputRef = ref(null)
 
 // State
 const showReplyInput = ref(false)
+const repliesCollapsed = ref(true) // default collapsed
 const replyText = ref('')
 const mentionedUserIds = ref([])
 const isSubmittingReply = ref(false)
@@ -265,6 +277,14 @@ const canResolve = computed(() => {
   return props.thread.comments[0][0] === props.currentUserId
 })
 
+// Mention display: only actually mentioned IDs mapped to users and filtered
+const mentionedUsers = computed(() => {
+  const ids = Array.isArray(props.thread.mention) ? props.thread.mention : []
+  return ids
+    .map(id => props.allUsers.find(u => u.uid === id))
+    .filter(Boolean)
+})
+
 const filteredCollaboratorsForReply = computed(() => {
   return props.collaborators.filter(user => user.uid !== props.currentUserId)
 })
@@ -273,7 +293,6 @@ const filteredMentionList = computed(() => {
   if (!mentionSearchQuery.value) {
     return filteredCollaboratorsForReply.value
   }
-
   const query = mentionSearchQuery.value.toLowerCase()
   return filteredCollaboratorsForReply.value.filter(user => {
     const name = user.displayName?.toLowerCase() || ''
@@ -304,22 +323,18 @@ function getInitials(name) {
 
 function formatTimestamp(timestamp) {
   if (!timestamp) return 'Unknown time'
-
   const date = new Date(timestamp * 1000)
   const now = new Date()
   const diffInSeconds = Math.floor((now - date) / 1000)
-
   if (diffInSeconds < 60) return 'Just now'
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
-
   return date.toLocaleDateString('en-SG', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function toggleReplyInput() {
   showReplyInput.value = !showReplyInput.value
-
   if (showReplyInput.value) {
     nextTick(() => {
       replyInputRef.value?.focus()
@@ -342,7 +357,6 @@ function handleReplyInput(event) {
   const textarea = event.target
   const text = textarea.value
   const position = textarea.selectionStart
-
   cursorPosition.value = position
 
   // Calculate dropdown position
@@ -358,8 +372,6 @@ function handleReplyInput(event) {
 
   if (atIndex !== -1 && filteredCollaboratorsForReply.value.length > 0) {
     const textAfterAt = textBeforeCursor.substring(atIndex + 1)
-
-    // Check if there's a space after @ (which would close the mention)
     if (!textAfterAt.includes(' ')) {
       mentionSearchQuery.value = textAfterAt
       showMentionDropdown.value = true
@@ -389,7 +401,6 @@ function selectMention(user) {
     // Replace @query with @DisplayName
     const beforeAt = text.substring(0, atIndex)
     const afterCursor = text.substring(cursorPosition.value)
-
     replyText.value = `${beforeAt}@${user.displayName} ${afterCursor}`
 
     // Add to mentioned users if not already there
@@ -426,9 +437,7 @@ function removeMention(userId) {
 
 async function submitReply() {
   if (!canSubmitReply.value) return
-
   isSubmittingReply.value = true
-
   try {
     const payload = {
       type: props.parentType,

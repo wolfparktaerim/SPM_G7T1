@@ -70,8 +70,7 @@
               {{ getInitials(user.displayName) }}
             </div>
             <div class="flex flex-col gap-1 flex-1 min-w-0">
-              <span class="font-semibold text-base text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{
-                user.displayName }}</span>
+              <span class="font-semibold text-base text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{ user.displayName }}</span>
               <div class="flex items-center gap-1.5 text-xs text-gray-600">
                 <Building2 class="w-3 h-3" />
                 <span>{{ user.department }}</span>
@@ -517,4 +516,3 @@ onMounted(() => {
   }
 }
 </style>
-
