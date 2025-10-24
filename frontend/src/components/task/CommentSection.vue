@@ -91,7 +91,7 @@
       </div>
     </div>
 
-    <!-- Tab Navigation (NEW) -->
+    <!-- Tab Navigation -->
     <div class="flex border-b-2 border-gray-200 bg-white px-6 flex-shrink-0">
       <button @click="activeTab = 'active'" :class="[
         'px-4 py-3 font-semibold text-sm transition-all duration-200 border-b-2 -mb-[2px]',
@@ -137,13 +137,22 @@
         <p class="text-sm text-gray-500">Please wait while we fetch the discussion</p>
       </div>
 
-      <!-- Active Tab Content (NEW) -->
+      <!-- Active Tab Content -->
       <div v-else-if="activeTab === 'active'">
-        <div v-if="activeThreads.length > 0" class="flex flex-col gap-4">
-          <CommentThread v-for="(thread, index) in activeThreads" :key="index" :thread="thread" :thread-index="index"
-            :parent-id="parentId" :parent-type="parentType" :current-user-id="currentUserId" :all-users="allUsers"
-            :collaborators="collaboratorUsers" @reply-added="handleReplyAdded"
-            @thread-resolved="handleThreadResolved" />
+        <div v-if="activeThreadsWithIndex.length > 0" class="flex flex-col gap-4">
+          <CommentThread
+            v-for="item in activeThreadsWithIndex"
+            :key="item.thread.id || item.originalIndex"
+            :thread="item.thread"
+            :thread-index="item.originalIndex"
+            :parent-id="parentId"
+            :parent-type="parentType"
+            :current-user-id="currentUserId"
+            :all-users="allUsers"
+            :collaborators="collaboratorUsers"
+            @reply-added="handleReplyAdded"
+            @thread-resolved="handleThreadResolved"
+          />
         </div>
         <div v-else class="flex flex-col items-center justify-center px-8 py-16 text-center h-full">
           <div class="mb-6 p-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full">
@@ -154,13 +163,23 @@
         </div>
       </div>
 
-      <!-- Resolved Tab Content (NEW) -->
+      <!-- Resolved Tab Content -->
       <div v-else-if="activeTab === 'resolved'">
-        <div v-if="resolvedThreads.length > 0" class="flex flex-col gap-4">
-          <CommentThread v-for="(thread, index) in resolvedThreads" :key="index" :thread="thread"
-            :thread-index="getOriginalThreadIndex(thread)" :parent-id="parentId" :parent-type="parentType"
-            :current-user-id="currentUserId" :all-users="allUsers" :collaborators="collaboratorUsers"
-            :is-resolved="true" @reply-added="handleReplyAdded" @thread-resolved="handleThreadResolved" />
+        <div v-if="resolvedThreadsWithIndex.length > 0" class="flex flex-col gap-4">
+          <CommentThread
+            v-for="item in resolvedThreadsWithIndex"
+            :key="item.thread.id || item.originalIndex"
+            :thread="item.thread"
+            :thread-index="item.originalIndex"
+            :parent-id="parentId"
+            :parent-type="parentType"
+            :current-user-id="currentUserId"
+            :all-users="allUsers"
+            :collaborators="collaboratorUsers"
+            :is-resolved="true"
+            @reply-added="handleReplyAdded"
+            @thread-resolved="handleThreadResolved"
+          />
         </div>
         <div v-else class="flex flex-col items-center justify-center px-8 py-16 text-center h-full">
           <div class="mb-6 p-6 bg-gradient-to-br from-green-100 to-green-200 rounded-full">
@@ -218,7 +237,6 @@ const props = defineProps({
 
 const emit = defineEmits(['thread-created', 'thread-updated', 'thread-resolved'])
 const activeTab = ref('active') // 'active' or 'resolved'
-// Composables
 const toast = useToast()
 
 // Refs
@@ -238,33 +256,41 @@ const mentionSearchQuery = ref('')
 const cursorPosition = ref(0)
 const mentionDropdownTop = ref('auto')
 
-// Computed
+// Computed: slices and mapped indices
 const activeThreads = computed(() => {
   return commentThreads.value.filter(thread => thread.active !== false)
 })
-
 const resolvedThreads = computed(() => {
   return commentThreads.value.filter(thread => thread.active === false)
 })
 
-// Get full user objects for collaborators (excluding current user)
+// Map original indices before filtering, then filter
+const activeThreadsWithIndex = computed(() => {
+  return commentThreads.value
+    .map((thread, idx) => ({ thread, originalIndex: idx }))
+    .filter(x => x.thread.active !== false)
+})
+const resolvedThreadsWithIndex = computed(() => {
+  return commentThreads.value
+    .map((thread, idx) => ({ thread, originalIndex: idx }))
+    .filter(x => x.thread.active === false)
+})
+
+// Collaborators
 const collaboratorUsers = computed(() => {
   return props.allUsers.filter(user =>
     props.collaborators.includes(user.uid)
   )
 })
-
-// Filter out current user from collaborators list for mentioning
 const availableCollaborators = computed(() => {
   return collaboratorUsers.value.filter(user => user.uid !== props.currentUserId)
 })
 
-// Filter mention list based on search query
+// Mention filtering
 const filteredMentionList = computed(() => {
   if (!mentionSearchQuery.value) {
     return availableCollaborators.value
   }
-
   const query = mentionSearchQuery.value.toLowerCase()
   return availableCollaborators.value.filter(user => {
     const name = user.displayName?.toLowerCase() || ''
@@ -277,22 +303,15 @@ const canSubmitComment = computed(() => {
   return newComment.value.trim().length > 0 && !isSubmitting.value
 })
 
-// Functions
+// API
 async function fetchComments() {
   if (!props.parentId) return
-
   isLoading.value = true
-
   try {
     const response = await axios.get(
       `${import.meta.env.VITE_BACKEND_API}comments/${props.parentId}`,
-      {
-        params: {
-          type: props.parentType
-        }
-      }
+      { params: { type: props.parentType } }
     )
-
     if (response.data.commentThreads) {
       commentThreads.value = response.data.commentThreads
     }
@@ -304,27 +323,23 @@ async function fetchComments() {
   }
 }
 
+// Mention handlers
 function handleInput(event) {
   const textarea = event.target
   const text = textarea.value
   const position = textarea.selectionStart
-
   cursorPosition.value = position
 
-  // Calculate dropdown position
   if (commentInputRef.value) {
     const textareaRect = commentInputRef.value.getBoundingClientRect()
     mentionDropdownTop.value = `${textareaRect.bottom - textareaRect.top + 80}px`
   }
 
-  // Check for @ mention trigger
   const textBeforeCursor = text.substring(0, position)
   const atIndex = textBeforeCursor.lastIndexOf('@')
 
   if (atIndex !== -1 && availableCollaborators.value.length > 0) {
     const textAfterAt = textBeforeCursor.substring(atIndex + 1)
-
-    // Check if there's a space after @ (which would close the mention)
     if (!textAfterAt.includes(' ')) {
       mentionSearchQuery.value = textAfterAt
       showMentionDropdown.value = true
@@ -337,7 +352,6 @@ function handleInput(event) {
 }
 
 function handleKeyDown(event) {
-  // Close dropdown on Escape
   if (event.key === 'Escape' && showMentionDropdown.value) {
     showMentionDropdown.value = false
     mentionSearchQuery.value = ''
@@ -351,54 +365,44 @@ function selectMention(user) {
   const atIndex = textBeforeCursor.lastIndexOf('@')
 
   if (atIndex !== -1) {
-    // Replace @query with @DisplayName
     const beforeAt = text.substring(0, atIndex)
     const afterCursor = text.substring(cursorPosition.value)
-
     newComment.value = `${beforeAt}@${user.displayName} ${afterCursor}`
 
-    // Add to mentioned users if not already there
     if (!mentionedUserIds.value.includes(user.uid)) {
       mentionedUserIds.value.push(user.uid)
     }
 
-    // Close dropdown
     showMentionDropdown.value = false
     mentionSearchQuery.value = ''
 
-    // Focus back on textarea
     nextTick(() => {
       textarea.focus()
-      const newPosition = atIndex + user.displayName.length + 2 // +2 for @ and space
+      const newPosition = atIndex + user.displayName.length + 2 // @ + space
       textarea.setSelectionRange(newPosition, newPosition)
     })
   }
 }
 
 function removeMention(userId) {
-  // Remove user from mentioned list
   mentionedUserIds.value = mentionedUserIds.value.filter(id => id !== userId)
-
-  // Remove @mention from text
   const user = props.allUsers.find(u => u.uid === userId)
   if (user) {
     const mentionPattern = new RegExp(`@${user.displayName}\\s?`, 'g')
     newComment.value = newComment.value.replace(mentionPattern, '')
   }
-
   toast.info(`Removed mention: ${getUserDisplayName(userId)}`)
 }
 
+// No longer needed where it was used in template; kept for utility if required elsewhere
 function getOriginalThreadIndex(thread) {
-  // Find the original index in the full commentThreads array
   return commentThreads.value.findIndex(t => t === thread)
 }
 
+// Submit
 async function submitComment() {
   if (!canSubmitComment.value) return
-
   isSubmitting.value = true
-
   try {
     const payload = {
       comment: newComment.value.trim(),
@@ -408,23 +412,16 @@ async function submitComment() {
       type: props.parentType,
       parentId: props.parentId
     }
-
     const response = await axios.post(
       `${import.meta.env.VITE_BACKEND_API}comments`,
       payload
     )
-
     if (response.data.commentThread) {
       commentThreads.value.push(response.data.commentThread)
       emit('thread-created', response.data.commentThread)
-
-      // Clear inputs
       newComment.value = ''
       mentionedUserIds.value = []
-
       toast.success('Comment posted successfully')
-
-      // Scroll to bottom
       nextTick(() => {
         if (commentsContainerRef.value) {
           commentsContainerRef.value.scrollTop = commentsContainerRef.value.scrollHeight
@@ -439,8 +436,8 @@ async function submitComment() {
   }
 }
 
+// Child event handlers expect indices from the full array
 function handleReplyAdded(data) {
-  // Update the thread in our local state
   if (data.threadIndex >= 0 && data.threadIndex < commentThreads.value.length) {
     commentThreads.value[data.threadIndex] = data.thread
     emit('thread-updated', data)
@@ -448,13 +445,13 @@ function handleReplyAdded(data) {
 }
 
 function handleThreadResolved(data) {
-  // Update the thread's active status
   if (data.threadIndex >= 0 && data.threadIndex < commentThreads.value.length) {
     commentThreads.value[data.threadIndex] = data.thread
     emit('thread-resolved', data)
   }
 }
 
+// Utils
 function getUserDisplayName(userId) {
   const user = props.allUsers.find(u => u.uid === userId)
   return user?.displayName || 'Unknown User'
@@ -470,17 +467,15 @@ function getInitials(name) {
     .substring(0, 2)
 }
 
+// Watchers / lifecycle
 watch(
   () => [props.parentId, props.parentType],
   () => {
-    // Clear state
     commentThreads.value = []
     newComment.value = ''
     mentionedUserIds.value = []
     showMentionDropdown.value = false
     activeTab.value = 'active'
-
-    // Fetch if valid
     if (props.parentId && props.parentType) {
       fetchComments()
     }
@@ -488,14 +483,12 @@ watch(
   { immediate: true }
 )
 
-// Clean up on unmount
 onUnmounted(() => {
   commentThreads.value = []
   newComment.value = ''
   mentionedUserIds.value = []
 })
 
-// Lifecycle
 onMounted(() => {
   fetchComments()
 })
@@ -506,21 +499,17 @@ onMounted(() => {
 .overflow-y-auto::-webkit-scrollbar {
   width: 10px;
 }
-
 .overflow-y-auto::-webkit-scrollbar-track {
   background: #f9fafb;
   border-radius: 5px;
 }
-
 .overflow-y-auto::-webkit-scrollbar-thumb {
   background: linear-gradient(to bottom, #d1d5db, #9ca3af);
   border-radius: 5px;
 }
-
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(to bottom, #9ca3af, #6b7280);
 }
-
 @media (max-width: 640px) {
   .flex-col.gap-3 {
     flex-direction: column;
@@ -528,3 +517,4 @@ onMounted(() => {
   }
 }
 </style>
+
