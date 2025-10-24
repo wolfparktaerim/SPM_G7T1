@@ -128,8 +128,8 @@ services:
       JSON_PATH: "/app/firebase.json"
       DATABASE_URL: "${DATABASE_URL}"
       NOTIFICATION_SERVICE_URL: "${NOTIFICATION_SERVICE_URL}"
-      TASK_SERVICE_URL: "${SUBTASK_SERVICE_URL}"
-      SUBTASK_SERVICE_URL: "${DATABASE_URL}"
+      TASK_SERVICE_URL: "${TASK_SERVICE_URL}"
+      SUBTASK_SERVICE_URL: "${SUBTASK_SERVICE_URL}"
     depends_on:
       - notification-service
       - task-service
