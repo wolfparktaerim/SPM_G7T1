@@ -304,31 +304,33 @@ def send_deadline_extension_response_notification():
     """Send notification for deadline extension response"""
     try:
         data = request.json
-        
+
         required_fields = ['requesterId', 'itemId', 'itemType', 'status']
         for field in required_fields:
             if field not in data:
                 return jsonify(error=f"Missing required field: {field}"), 400
-        
+
         requester_id = data['requesterId']
         item_id = data['itemId']
         item_type = data['itemType']
         status = data['status']
         rejection_reason = data.get('rejectionReason')
-        
-        # Get item title
-        if item_type == 'task':
-            item_ref = notification_service.db.reference(f"tasks/{item_id}")
-        else:
-            item_ref = notification_service.db.reference(f"subtasks/{item_id}")
-        
-        item_data = item_ref.get()
-        item_title = item_data.get('title', 'Untitled') if item_data else 'Untitled'
-        
+
+        # Get item title from request data if provided, otherwise fetch from database
+        item_title = data.get('itemTitle')
+        if not item_title:
+            if item_type == 'task':
+                item_ref = notification_service.db.reference(f"tasks/{item_id}")
+            else:
+                item_ref = notification_service.db.reference(f"subtasks/{item_id}")
+
+            item_data = item_ref.get()
+            item_title = item_data.get('title', 'Untitled') if item_data else 'Untitled'
+
         notification_id = notification_service.create_deadline_extension_response_notification(
             requester_id, item_id, item_type, item_title, status, rejection_reason
         )
-        
+
         if notification_id:
             return jsonify(
                 message="Extension response notification sent",
@@ -336,7 +338,7 @@ def send_deadline_extension_response_notification():
             ), 200
         else:
             return jsonify(error="Failed to create notification"), 500
-            
+
     except Exception as e:
         logger.error(f"Failed to send extension response notification: {str(e)}")
         return jsonify(error=f"Failed to send notification: {str(e)}"), 500

@@ -289,45 +289,46 @@ class ExtensionRequestService:
             traceback.print_exc()
 
 
-    def _send_response_notification(self, requester_id: str, item_id: str, 
-                                    item_title: str, item_type: str, 
+    def _send_response_notification(self, requester_id: str, item_id: str,
+                                    item_title: str, item_type: str,
                                     status: str, rejection_reason: Optional[str],
                                     new_deadline: Optional[int] = None):
         """Send notification to requester about request response"""
-            
+
         if not self.notification_service_url:
             print("⚠️  Skipping notification: NOTIFICATION_SERVICE_URL not configured")
             return
-        
+
         try:
             notification_data = {
                 "requesterId": requester_id,
                 "itemId": item_id,
+                "itemTitle": item_title,
                 "itemType": item_type,
                 "status": status
             }
-            
+
             if rejection_reason:
                 notification_data["rejectionReason"] = rejection_reason
-            
+
             print(f"🔔 Creating response notification for requester: {requester_id}")
-            
+
             # ✅ CORRECT ENDPOINT
             response = requests.post(
                 f"{self.notification_service_url}/notifications/deadline-extension-response",
                 json=notification_data,
                 timeout=10
             )
-            
+
             print(f"✅ Response status: {response.status_code}")
-            
+
             if response.status_code not in [200, 201]:
                 print(f"❌ Failed to send notification: {response.text}")
-                
+
         except Exception as e:
             print(f"❌ Error sending notification: {str(e)}")
             import traceback
-        traceback.print_exc()
+            traceback.print_exc()
 
     def _notify_deadline_change(self, item_id: str, item_title: str, item_type: str, 
                            user_ids: List[str], new_deadline: int):

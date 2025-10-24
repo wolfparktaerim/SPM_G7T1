@@ -360,15 +360,14 @@ class NotificationService:
             logger.error(f"Error checking duplicate comment notification: {str(e)}")
             return False
 
-    def create_deadline_extension_request_notification(self, owner_id: str, item_id: str, 
-                                                        item_title: str, requester_id: str, 
+    def create_deadline_extension_request_notification(self, owner_id: str, item_id: str,
+                                                        item_title: str, requester_id: str,
                                                         item_type: str, extension_request_id: str):  # ADD this parameter
         """Create notification for deadline extension request"""
         import uuid
-        from datetime import datetime
-        
+
         notification_id = str(uuid.uuid4())
-        current_time = int(datetime.now().timestamp())
+        current_time = current_timestamp()
         
         # Get requester name
         requester_name = self._get_user_name(requester_id)
@@ -398,10 +397,9 @@ class NotificationService:
                                                         status: str, rejection_reason: str = None):
         """Create notification for deadline extension response"""
         import uuid
-        from datetime import datetime
-        
+
         notification_id = str(uuid.uuid4())
-        current_time = int(datetime.now().timestamp())
+        current_time = current_timestamp()
         
         if status == "approved":
             message = f"Your deadline extension request for {item_type}: {item_title} has been approved"
@@ -428,15 +426,15 @@ class NotificationService:
         self.notifications_ref.child(requester_id).child(notification_id).set(notification_data)
         return notification_id
 
-    def create_deadline_changed_notification(self, user_id: str, item_id: str, 
-                                            item_type: str, item_title: str, 
+    def create_deadline_changed_notification(self, user_id: str, item_id: str,
+                                            item_type: str, item_title: str,
                                             new_deadline: int):
         """Create notification for deadline change (for all collaborators)"""
         import uuid
         from datetime import datetime
-        
+
         notification_id = str(uuid.uuid4())
-        current_time = int(datetime.now().timestamp())
+        current_time = current_timestamp()
         
         # Format the new deadline
         deadline_str = datetime.fromtimestamp(new_deadline).strftime("%B %d, %Y")
