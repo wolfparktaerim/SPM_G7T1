@@ -119,8 +119,11 @@ class TestNotificationService:
         """Test creating a task notification"""
         mock_notifications = Mock()
         mock_sent = Mock()
-        mock_db_refs['notification'].side_effect = lambda x: (
-            mock_notifications if x == "notifications" else mock_sent
+        mock_db = Mock()
+        mock_db_refs['notification'].side_effect = lambda x=None: (
+            mock_notifications if x == "notifications"
+            else mock_sent if x == "notificationsSent"
+            else mock_db
         )
         
         mock_user_ref = Mock()
@@ -147,8 +150,11 @@ class TestNotificationService:
         """Test creating a subtask notification"""
         mock_notifications = Mock()
         mock_sent = Mock()
-        mock_db_refs['notification'].side_effect = lambda x: (
-            mock_notifications if x == "notifications" else mock_sent
+        mock_db = Mock()
+        mock_db_refs['notification'].side_effect = lambda x=None: (
+            mock_notifications if x == "notifications"
+            else mock_sent if x == "notificationsSent"
+            else mock_db
         )
         
         mock_user_ref = Mock()
@@ -338,8 +344,12 @@ class TestNotificationService:
     def test_should_send_notification_no_match(self, mock_db_refs):
         """Test should_send_notification with no matching reminder time"""
         mock_sent = Mock()
-        mock_db_refs['notification'].side_effect = lambda x: (
-            Mock() if x == "notifications" else mock_sent
+        mock_notifications = Mock()
+        mock_db = Mock()
+        mock_db_refs['notification'].side_effect = lambda x=None: (
+            mock_notifications if x == "notifications"
+            else mock_sent if x == "notificationsSent"
+            else mock_db
         )
         
         service = NotificationService()
@@ -351,8 +361,11 @@ class TestNotificationService:
         """Test should_send_notification with matching reminder time"""
         mock_notifications = Mock()
         mock_sent = Mock()
-        mock_db_refs['notification'].side_effect = lambda x: (
-            mock_notifications if x == "notifications" else mock_sent
+        mock_db = Mock()
+        mock_db_refs['notification'].side_effect = lambda x=None: (
+            mock_notifications if x == "notifications"
+            else mock_sent if x == "notificationsSent"
+            else mock_db
         )
         
         mock_sent_ref = Mock()
@@ -367,8 +380,12 @@ class TestNotificationService:
     def test_mark_notification_sent(self, mock_db_refs):
         """Test marking notification as sent"""
         mock_sent = Mock()
-        mock_db_refs['notification'].side_effect = lambda x: (
-            Mock() if x == "notifications" else mock_sent
+        mock_notifications = Mock()
+        mock_db = Mock()
+        mock_db_refs['notification'].side_effect = lambda x=None: (
+            mock_notifications if x == "notifications"
+            else mock_sent if x == "notificationsSent"
+            else mock_db
         )
         
         mock_sent_ref = Mock()

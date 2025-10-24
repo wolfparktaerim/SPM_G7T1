@@ -601,8 +601,15 @@ class TestExtensionRequestService:
     def test_respond_to_request_reject_with_reason(self, mock_db, mock_requests):
         """Test rejecting an extension request with reason"""
         mock_requests_ref = Mock()
-        mock_db.return_value = mock_requests_ref
-        
+        mock_users_ref = Mock()
+        mock_notification_prefs_ref = Mock()
+
+        mock_db.side_effect = lambda path: {
+            "deadlineExtensionRequests": mock_requests_ref,
+            "users": mock_users_ref,
+            "notificationPreferences": mock_notification_prefs_ref
+        }.get(path, Mock())
+
         request_data = {
             "requestId": "req-123",
             "itemId": "task-123",
@@ -615,32 +622,36 @@ class TestExtensionRequestService:
             "status": "pending",
             "createdAt": 1699000000
         }
-        
+
         updated_request_data = {
             **request_data,
             "status": "rejected",
             "rejectionReason": "Timeline is fixed",
             "respondedAt": 1699500000
         }
-        
+
         mock_request_ref = Mock()
         mock_requests_ref.child.return_value = mock_request_ref
         mock_request_ref.get.side_effect = [request_data, updated_request_data]
-        
+
+        # Mock user data
+        mock_users_ref.child.return_value.get.return_value = {"email": "user@test.com", "name": "Test User"}
+        mock_notification_prefs_ref.child.return_value.get.return_value = {"channel": "both", "enabled": True}
+
         # Mock notification call
         mock_requests.post.return_value.status_code = 200
-        
+
         service = ExtensionRequestService()
-        
+
         req = UpdateExtensionRequestRequest(
             request_id="req-123",
             responder_id="owner-user",
             status="rejected",
             rejection_reason="Timeline is fixed"
         )
-        
+
         extension_request, error = service.respond_to_request(req)
-        
+
         assert error is None
         assert extension_request.status == "rejected"
         assert extension_request.rejection_reason == "Timeline is fixed"
@@ -792,14 +803,14 @@ class TestExtensionRequestEndpoints:
             status="pending",
             created_at=1699000000
         )
-        
+
         mock_get.return_value = (mock_request, None)
-        
+
         response = client.get('/extension-requests/req-123')
-        
+
         assert response.status_code == 200
         data = response.get_json()
-        assert data['request']['requestId'] == "req-123"
+        assert data['requestId'] == "req-123"
     
     @patch('app.extension_request_service.get_request_by_id')
     def test_get_extension_request_endpoint_not_found(self, mock_get, client):
