@@ -302,6 +302,13 @@ class ExtensionRequestService:
             requester_name = self._get_user_name(requester_id)
             owner_email = self._get_user_email(owner_id)
             channel = self._get_user_notification_preference(owner_id)
+
+            # Override email-only preference to "both" for actionable notifications
+            # Deadline extension requests require in-app notification for approve/reject actions
+            # Email templates don't include action buttons, so users need the in-app UI
+            if channel == "email":
+                channel = "both"
+
             parent_task_title = self._get_parent_task_title(item_id, item_type)
 
             notification_data = {
