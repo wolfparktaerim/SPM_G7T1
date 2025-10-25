@@ -156,17 +156,16 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
               </button>
-              <!-- Add inside quick actions or suitable place -->
-<button @click="openReport" class="quick-action-btn group">
-  <div class="quick-action-icon bg-indigo-100 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white">
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-    </svg>
-  </div>
-  <span class="font-medium text-gray-700 group-hover:text-gray-900">Generate Project Report</span>
-</button>
-
+              <!-- Generate Project Report -->
+              <button @click="openReport" class="quick-action-btn group">
+                <div class="quick-action-icon bg-indigo-100 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <span class="font-medium text-gray-700 group-hover:text-gray-900">Generate Project Report</span>
+              </button>
             </div>
           </div>
 
@@ -469,72 +468,193 @@
       </button>
     </header>
 
-    <!-- Report Content -->
-<div id="report-content" class="space-y-8">
-  <!-- Project Sections -->
-  <section
-    v-for="project in projects"
-    :key="project.projectId"
-    class="border-b pb-6"
-  >
-    <h3 class="text-2xl font-semibold text-indigo-700 mb-3">
-      {{ project.title }}
-    </h3>
-
-    <div
-      v-if="tasksByProject(project.projectId).length === 0"
-      class="italic text-gray-400 ml-4"
-    >
-      No tasks for this project.
-    </div>
-
-    <ul v-else class="space-y-3">
-      <li
-        v-for="task in tasksByProject(project.projectId)"
-        :key="task.taskId"
-        class="p-4 border rounded-lg bg-gray-50"
+    <!-- Access Level Indicator -->
+    <div class="mb-4 p-3 bg-blue-50 rounded-lg text-sm">
+      <span class="font-semibold">Viewing as:</span>
+      <span class="ml-2">
+        {{ currentUserDepartment }} 
+        <template v-if="currentRole">
+          - {{ currentRole }}
+        </template>
+      </span>
+      <span 
+        v-if="currentUserDepartment?.toLowerCase() === 'hr' || currentUserDepartment?.toLowerCase() === 'admin'" 
+        class="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs"
       >
-        <div class="font-semibold text-lg text-gray-800">
-          {{ task.title }}
-        </div>
-
-        <div class="text-sm text-gray-600">
-          Status:
-          <span class="capitalize font-medium text-gray-800">
-            {{ task.status }}
-          </span>
-        </div>
-
-       
-        <!-- Collaborators Section -->
-       <div v-if="task.collaborators?.length" class="mt-4">
-  <h3 class="text-sm font-semibold text-gray-700 mb-2">Collaborators</h3>
-  <div class="flex flex-wrap gap-2">
-    <div
-      v-for="user in getCollaboratorsForTask(task)"
-      :key="user.uid"
-      class="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full"
-    >
-      <img
-        v-if="user.photoURL"
-        :src="user.photoURL"
-        alt="profile"
-        class="w-6 h-6 rounded-full object-cover"
-      />
-      <span>{{ user.name || user.displayName || user.email }}</span>
+        Full Access
+      </span>
+      <span 
+        v-else-if="currentRole?.toLowerCase() === 'director'" 
+        class="ml-2 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs"
+      >
+        Department Access
+      </span>
     </div>
-  </div>
-</div>
 
+    <!-- Report Content -->
+    <div id="report-content" class="space-y-8">
+      <!-- Project Sections -->
+      <section
+        v-for="project in filteredProjects"
+        :key="project.projectId"
+        class="border-b pb-6"
+      >
+        <!-- Project Header with Progress -->
+        <div class="mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-2xl font-semibold text-indigo-700">
+              {{ project.title }}
+              
+              <!-- Optional: Show department badge for directors -->
+              <span 
+                v-if="currentRole?.toLowerCase() === 'director' && currentUserDepartment?.toLowerCase() !== 'hr' && currentUserDepartment?.toLowerCase() !== 'admin'"
+                class="ml-2 text-sm px-2 py-1 bg-indigo-100 rounded-full"
+              >
+                {{ project.department }}
+              </span>
+            </h3>
+            
+            <!-- Progress Stats -->
+            <div class="text-right">
+              <span class="text-sm font-semibold text-gray-700">
+                {{ getProjectProgress(project.projectId).completed }} / {{ getProjectProgress(project.projectId).total }} tasks
+              </span>
+              <span class="text-xs text-gray-500 ml-2">
+                ({{ getProjectProgress(project.projectId).percentage }}%)
+              </span>
+            </div>
+          </div>
 
-        <div v-else class="mt-4 text-gray-500 text-sm italic">
-          No collaborators assigned.
+          <!-- Progress Bar -->
+          <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
+            <div 
+              class="h-full rounded-full transition-all duration-500 ease-out flex items-center justify-end pr-2 bg-gradient-to-r from-green-500 to-green-600"
+              :style="{ width: `${getProjectProgress(project.projectId).percentage}%` }"
+            >
+              <span 
+                v-if="getProjectProgress(project.projectId).percentage > 10" 
+                class="text-xs font-bold text-white drop-shadow"
+              >
+                {{ getProjectProgress(project.projectId).percentage }}%
+              </span>
+            </div>
+          </div>
+
+          <!-- Status Summary -->
+          <div class="flex gap-4 mt-3 text-xs flex-wrap">
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-green-500"></span>
+              <span class="text-gray-600">Completed: {{ getProjectStatusCount(project.projectId, 'completed') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span class="text-gray-600">Ongoing: {{ getProjectStatusCount(project.projectId, 'ongoing') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+              <span class="text-gray-600">Under Review: {{ getProjectStatusCount(project.projectId, 'under_review') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+              <span class="text-gray-600">Unassigned: {{ getProjectStatusCount(project.projectId, 'unassigned') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-red-500"></span>
+              <span class="text-gray-600">Overdue: {{ getProjectOverdueCount(project.projectId) }}</span>
+            </span>
+          </div>
         </div>
-      </li>
-    </ul>
-  </section>
-</div>
 
+        <!-- Tasks List -->
+        <div
+          v-if="tasksByProject(project.projectId).length === 0"
+          class="italic text-gray-400 ml-4"
+        >
+          No tasks for this project.
+        </div>
+
+        <ul v-else class="space-y-3">
+          <li
+            v-for="task in tasksByProject(project.projectId)"
+            :key="task.taskId"
+            class="p-4 border rounded-lg"
+            :class="isTaskOverdue(task) ? 'bg-red-50 border-red-200' : 'bg-gray-50'"
+          >
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="font-semibold text-lg text-gray-800">
+                    {{ task.title }}
+                  </div>
+                  
+                  <!-- Overdue Badge -->
+                  <span 
+                    v-if="isTaskOverdue(task)"
+                    class="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-full font-medium"
+                  >
+                    ⚠️ Overdue
+                  </span>
+                </div>
+
+                <div class="text-sm text-gray-600">
+                  Status:
+                  <span class="capitalize font-medium text-gray-800">
+                    {{ task.status }}
+                  </span>
+                </div>
+
+                <!-- Duration Section (for completed tasks) -->
+                <div
+                  v-if="task.status === 'completed'"
+                  class="text-sm text-gray-600 mt-1"
+                >
+                  Duration:
+                  <span class="font-medium text-gray-800">
+                    {{ formatDuration(task.startedAt, task.completedAt) }}
+                  </span>
+                </div>
+                
+                <!-- Deadline Section (for incomplete tasks) -->
+                <div 
+                  v-else-if="task.deadline"
+                  class="text-sm mt-1"
+                  :class="isTaskOverdue(task) ? 'text-red-600 font-semibold' : 'text-gray-600'"
+                >
+                  Deadline: {{ formatDeadline(task.deadline) }}
+                  <span v-if="isTaskOverdue(task)">
+                    ({{ getDaysOverdue(task.deadline) }} days overdue)
+                  </span>
+                </div>
+              </div>
+            </div>
+           
+            <!-- Collaborators Section -->
+            <div v-if="task.collaborators?.length" class="mt-4">
+              <h3 class="text-sm font-semibold text-gray-700 mb-2">Collaborators</h3>
+              <div class="flex flex-wrap gap-2">
+                <div
+                  v-for="user in getCollaboratorsForTask(task)"
+                  :key="user.uid"
+                  class="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full"
+                >
+                  <img
+                    v-if="user.photoURL"
+                    :src="user.photoURL"
+                    alt="profile"
+                    class="w-6 h-6 rounded-full object-cover"
+                  />
+                  <span class="text-sm">{{ user.name || user.displayName || user.email }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="mt-4 text-gray-500 text-sm italic">
+              No collaborators assigned.
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
 
     <!-- Footer Buttons -->
     <footer class="mt-8 flex justify-end gap-4">
@@ -595,8 +715,10 @@ const showReport = ref(false)
 const tasksForReport = ref([])
 const projectsForReport = ref([])
 
-
-
+// Role and Department state
+const currentUser = ref(null)
+const currentRole = ref('')
+const currentUserDepartment = ref('')
 
 const statistics = ref({
   totalTasks: 0,
@@ -614,16 +736,37 @@ const statistics = ref({
 /* ========================
    Computed Properties
 ======================== */
+
+// Filtered projects based on department and role
+const filteredProjects = computed(() => {
+  // HR and Admin can see all projects
+  if (
+    currentUserDepartment.value?.toLowerCase() === 'hr' ||
+    currentUserDepartment.value?.toLowerCase() === 'admin'
+  ) {
+    return projects.value;
+  }
+
+  // Directors (non-HR/Admin) can only see their department's projects
+  if (currentRole.value?.toLowerCase() === 'director') {
+    return projects.value.filter(
+      project => project.department === currentUserDepartment.value
+    );
+  }
+
+  // Regular users see projects they own or collaborate on
+  return projects.value.filter(
+    project =>
+      project.ownerId === authStore.user?.uid ||
+      project.collaborators?.includes(authStore.user?.uid)
+  );
+});
+
 const completionRate = computed(() =>
   statistics.value.totalTasks === 0
     ? 0
     : Math.round((statistics.value.completedTasks / statistics.value.totalTasks) * 100)
 )
-const logCollaborators = (task) => {
-  console.log('Collaborators for task:', task.title)
-  console.log(task.collaborators)
-  return task.collaborators
-}
 
 const upcomingTasks = computed(() => {
   const now = Date.now() / 1000
@@ -643,20 +786,17 @@ const getCollaboratorsForTask = (task) => {
   if (!task?.collaborators?.length) return []
   return task.collaborators
     .map(uid => allUsers.value.find(u => u.uid === uid))
-    .filter(Boolean) // remove undefined if a uid doesn’t match
+    .filter(Boolean) // remove undefined if a uid doesn't match
 }
 
-
-
 /* ========================
-   Fetch Data
+   Data Fetching
 ======================== */
-
 
 async function fetchData() {
   loading.value = true
   try {
-    await Promise.all([fetchTasks(), fetchSubtasks(), fetchProjects()])
+    await Promise.all([fetchTasks(), fetchSubtasks(), fetchProjects(), fetchUsers(), fetchCurrentUserInfo()])
     calculateStatistics()
   } catch (err) {
     console.error('Error fetching dashboard data:', err)
@@ -666,13 +806,25 @@ async function fetchData() {
   }
 }
 
+async function fetchCurrentUserInfo() {
+  try {
+    if (!authStore.user?.uid) return
+    const info = await usersService.getUserById(authStore.user.uid)
+    currentUser.value = authStore.user.uid
+    currentRole.value = info.role || ''
+    currentUserDepartment.value = info.department || ''
+  } catch (error) {
+    console.error('Error fetching current user info:', error)
+  }
+}
+
 async function fetchTasks() {
   try {
     console.log('Fetching tasks from:', `${import.meta.env.VITE_BACKEND_API}tasks`)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
     const data = response.data
 
-    // UPDATED: Filter tasks where user is involved (owner, collaborator, or creator)
+    // Filter tasks where user is involved (owner, collaborator, or creator)
     const currentUserId = authStore.user?.uid
     tasks.value = data.tasks?.filter(task => {
       return task.ownerId === currentUserId ||
@@ -685,17 +837,11 @@ async function fetchTasks() {
   } catch (error) {
     console.error('Error fetching tasks:', error.response?.status, error.response?.data)
     if (error.response?.status === 404) {
-      if (isManualRefresh.value) {
-        toast.error('Tasks API not found. Please check if the backend services are running.')
-      }
+      toast.error('Tasks API not found. Please check if the backend services are running.')
     } else if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-      if (isManualRefresh.value) {
-        toast.error('Cannot connect to backend. Please ensure services are running.')
-      }
+      toast.error('Cannot connect to backend. Please ensure services are running.')
     } else {
-      if (isManualRefresh.value) {
-        toast.error('Failed to load tasks')
-      }
+      toast.error('Failed to load tasks')
     }
     throw error
   }
@@ -717,12 +863,68 @@ async function fetchSubtasks() {
 async function fetchProjects() {
   try {
     if (!authStore.user?.uid) return
-    const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
-    projects.value = data.projects || []
+    
+    // If HR or Admin, fetch all projects
+    if (
+      currentUserDepartment.value?.toLowerCase() === 'hr' ||
+      currentUserDepartment.value?.toLowerCase() === 'admin'
+    ) {
+      const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project`)
+      projects.value = data.projects || []
+    } 
+    // If Director, fetch department projects
+    else if (currentRole.value?.toLowerCase() === 'director' && currentUserDepartment.value) {
+      const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/department/${currentUserDepartment.value}`)
+      projects.value = data.projects || []
+    }
+    // Regular user: fetch their projects
+    else {
+      const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
+      projects.value = data.projects || []
+    }
   } catch (err) {
     console.error('Error fetching projects:', err)
     projects.value = []
   }
+}
+
+async function fetchUsers() {
+  try {
+    const users = await usersService.getAllUsers()
+    allUsers.value = users
+    console.log(`Loaded ${allUsers.value.length} users`)
+  } catch (error) {
+    console.error('Error fetching users:', error)
+  }
+}
+/* ========================
+   Progress Calculation Functions
+======================== */
+
+// Get project progress statistics
+function getProjectProgress(projectId) {
+  const projectTasks = tasksForReport.value.filter(t => t.projectId === projectId)
+  const total = projectTasks.length
+  const completed = projectTasks.filter(t => t.status === 'completed').length
+  const percentage = total === 0 ? 0 : Math.round((completed / total) * 100)
+  
+  return { total, completed, percentage }
+}
+
+// Get count of tasks by status for a project
+function getProjectStatusCount(projectId, status) {
+  return tasksForReport.value.filter(
+    t => t.projectId === projectId && t.status === status
+  ).length
+}
+
+// Get progress bar color based on percentage
+function getProgressBarColor(percentage) {
+  if (percentage === 100) return 'bg-gradient-to-r from-green-500 to-green-600'
+  if (percentage >= 75) return 'bg-gradient-to-r from-blue-500 to-blue-600'
+  if (percentage >= 50) return 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+  if (percentage >= 25) return 'bg-gradient-to-r from-yellow-500 to-yellow-600'
+  return 'bg-gradient-to-r from-red-500 to-red-600'
 }
 
 /* ========================
@@ -730,7 +932,7 @@ async function fetchProjects() {
 ======================== */
 function openReport() {
   tasksForReport.value = tasks.value
-  projectsForReport.value = projects.value
+  projectsForReport.value = filteredProjects.value  // Use filtered projects
   showReport.value = true
 }
 
@@ -749,6 +951,42 @@ async function exportPDF() {
     console.error("Error exporting PDF:", err)
   }
 }
+// Get count of overdue tasks for a project
+function getProjectOverdueCount(projectId) {
+  const now = Date.now() / 1000; // Current time in seconds
+  
+  return tasksForReport.value.filter(task => {
+    // Task must belong to this project
+    if (task.projectId !== projectId) return false;
+    
+    // Task must have a deadline
+    if (!task.deadline) return false;
+    
+    // Task must not be completed
+    if (task.status === 'completed') return false;
+    
+    // Deadline must be in the past
+    return task.deadline < now;
+  }).length;
+}
+
+// Check if a task is overdue
+function isTaskOverdue(task) {
+  if (!task.deadline) return false;
+  if (task.status === 'completed') return false;
+  
+  const now = Date.now() / 1000;
+  return task.deadline < now;
+}
+
+// Get how many days overdue
+function getDaysOverdue(deadline) {
+  const now = Date.now() / 1000;
+  const diffSeconds = now - deadline;
+  const days = Math.floor(diffSeconds / (60 * 60 * 24));
+  return days;
+}
+
 
 /* ========================
    Calculations
@@ -777,19 +1015,6 @@ function calculateStatistics() {
 ======================== */
 const tasksByProject = id => tasksForReport.value.filter(t => t.projectId === id)
 
-function categorizedTasksByStatus(projectId) {
-  const grouped = {
-    projected: [],
-    'in progress': [],
-    'under review': [],
-    completed: []
-  }
-  tasksByProject(projectId).forEach(t => {
-    if (grouped[t.status]) grouped[t.status].push(t)
-  })
-  return Object.fromEntries(Object.entries(grouped).filter(([_, arr]) => arr.length))
-}
-
 const getUserDisplayName = () =>
   authStore.user?.displayName || authStore.user?.name || authStore.user?.email || 'User'
 
@@ -805,7 +1030,7 @@ const getProjectTaskCount = id => tasks.value.filter(t => t.projectId === id).le
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline'
   const date = new Date(deadline * 1000)
-  return date.toLocaleDateString('en-SG', {
+  return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
@@ -826,6 +1051,28 @@ function formatRelativeTime(ts) {
   return formatDate(ts)
 }
 
+function formatDuration(startedAt, completedAt) {
+  // Convert to milliseconds if epoch is in seconds
+  const normalize = (t) => (t < 1e12 ? t * 1000 : t)
+
+  const start = new Date(normalize(startedAt))
+  const end = new Date(normalize(completedAt))
+  const diffMs = end - start
+
+  if (isNaN(diffMs) || diffMs < 0) return '—'
+
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const diffHours = Math.floor((diffMs / (1000 * 60 * 60)) % 24)
+  const diffMinutes = Math.floor((diffMs / (1000 * 60)) % 60)
+
+  let result = []
+  if (diffDays) result.push(`${diffDays}d`)
+  if (diffHours) result.push(`${diffHours}h`)
+  if (diffMinutes && !diffDays) result.push(`${diffMinutes}m`)
+
+  return result.length ? result.join(' ') : '<1m'
+}
+
 function getDeadlineStatus(deadline) {
   if (!deadline) return 'No deadline'
   const days = Math.ceil((deadline - Date.now() / 1000) / 86400)
@@ -844,11 +1091,6 @@ function getDeadlineClass(deadline) {
   if (days <= 3) return 'text-orange-500'
   if (days <= 7) return 'text-amber-500'
   return 'text-gray-500'
-}
-function getTaskCollaborators(task) {
-  if (!task?.collaborators?.length) return []
-  console.log(allUsers)
-  return allUsers.value.filter(u => task.collaborators.includes(u.uid))
 }
 
 /* ========================
@@ -872,15 +1114,6 @@ const getActivityIconClass = s =>
 
 const getActivityDescription = t =>
   t.subTaskId ? `Subtask is ${formatStatus(t.status).toLowerCase()}` : `Task is ${formatStatus(t.status).toLowerCase()}`
-async function fetchUsers() {
-  try {
-    const users = await usersService.getAllUsers()
-    allUsers.value = users
-    console.log(`Loaded ${allUsers.value.length} users`)
-  } catch (error) {
-    console.error('Error fetching users:', error)
-  }
-}
 
 /* ========================
    Lifecycle
@@ -889,7 +1122,7 @@ onMounted(async () => {
   console.log('Dashboard mounted, route query:', route.query)
   await fetchData()
   await nextTick()
-  await fetchUsers()
+  
   if (route.query.newUser === 'true') {
     setTimeout(() => {
       toast.success('Account created successfully! Welcome to Smart Task Management System.', {
@@ -904,6 +1137,8 @@ onMounted(async () => {
   }
 })
 </script>
+
+
 
 
 
@@ -1310,4 +1545,33 @@ onMounted(async () => {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Progress bar animations and styling */
+.progress-bar-container {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  background-color: #e5e7eb;
+  border-radius: 9999px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  transition: width 0.5s ease-out;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+}
+
+/* Status indicator dots */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
 </style>
