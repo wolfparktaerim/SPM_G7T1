@@ -88,7 +88,8 @@ class TestTaskServiceStartedAt:
                 title="Test Task",
                 creator_id="u1",
                 deadline=1800000000,
-                owner_id="u1"  # Same as creator
+                owner_id="u1",  # Same as creator
+                status="unassigned"  # Explicitly set status to unassigned
             )
             
             task, error = service.create_task(req)
@@ -118,7 +119,8 @@ class TestTaskServiceStartedAt:
             req = CreateTaskRequest(
                 title="Test Task",
                 creator_id="u1",
-                deadline=1800000000
+                deadline=1800000000,
+                status="unassigned"  # Explicitly set status to unassigned
                 # No owner_id specified, should default to creator
             )
             
@@ -483,7 +485,8 @@ class TestTaskServiceCombinedScenarios:
             req = CreateTaskRequest(
                 title="Test Task",
                 creator_id="u1",
-                deadline=1800000000
+                deadline=1800000000,
+                status="unassigned"  # Explicitly set status to unassigned
             )
             
             task, _ = service.create_task(req)
