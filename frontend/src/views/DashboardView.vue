@@ -478,7 +478,7 @@
         </template>
       </span>
       <span 
-        v-if="currentUserDepartment?.toLowerCase() === 'hr' || currentUserDepartment?.toLowerCase() === 'admin'" 
+        v-if="currentUserDepartment?.toLowerCase() === 'hr and admin'" 
         class="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs"
       >
         Full Access
@@ -507,7 +507,7 @@
               
               <!-- Optional: Show department badge for directors -->
               <span 
-                v-if="currentRole?.toLowerCase() === 'director' && currentUserDepartment?.toLowerCase() !== 'hr' && currentUserDepartment?.toLowerCase() !== 'admin'"
+                v-if="currentRole?.toLowerCase() === 'director' && currentUserDepartment?.toLowerCase() !== 'hr and admin'"
                 class="ml-2 text-sm px-2 py-1 bg-indigo-100 rounded-full"
               >
                 {{ project.department }}
@@ -753,28 +753,20 @@ const statistics = ref({
 
 // Filtered projects based on department and role
 const filteredProjects = computed(() => {
-  // HR and Admin can see all projects
-  if (
-    currentUserDepartment.value?.toLowerCase() === 'hr' ||
-    currentUserDepartment.value?.toLowerCase() === 'admin'
-  ) {
-    return projects.value;
+  const dept = currentUserDepartment.value?.toLowerCase()
+  const role = currentRole.value?.toLowerCase()
+  const uid = authStore.user?.uid
+
+  if (dept === 'hr and admin') return projects.value
+
+  if (role === 'director') {
+    return projects.value.filter(p => p.department === dept)
   }
 
-  // Directors (non-HR/Admin) can only see their department's projects
-  if (currentRole.value?.toLowerCase() === 'director') {
-    return projects.value.filter(
-      project => project.department === currentUserDepartment.value
-    );
-  }
-
-  // Regular users see projects they own or collaborate on
   return projects.value.filter(
-    project =>
-      project.ownerId === authStore.user?.uid ||
-      project.collaborators?.includes(authStore.user?.uid)
-  );
-});
+    p => p.ownerId === uid || p.collaborators?.includes(uid)
+  )
+})
 
 const completionRate = computed(() =>
   statistics.value.totalTasks === 0
@@ -810,7 +802,16 @@ const getCollaboratorsForTask = (task) => {
 async function fetchData() {
   loading.value = true
   try {
-    await Promise.all([fetchTasks(), fetchSubtasks(), fetchProjects(), fetchUsers(), fetchCurrentUserInfo()])
+    // 1️⃣ Fetch current user info first (role + department)
+    await fetchCurrentUserInfo()
+
+    // 2️⃣ Fetch projects AFTER knowing role/department
+    await fetchProjects()
+
+    // 3️⃣ Fetch tasks, subtasks, users (parallel)
+    await Promise.all([fetchTasks(), fetchSubtasks(), fetchUsers()])
+
+    // 4️⃣ Compute statistics
     calculateStatistics()
   } catch (err) {
     console.error('Error fetching dashboard data:', err)
@@ -820,17 +821,22 @@ async function fetchData() {
   }
 }
 
+
 async function fetchCurrentUserInfo() {
   try {
     if (!authStore.user?.uid) return
     const info = await usersService.getUserById(authStore.user.uid)
-    currentUser.value = authStore.user.uid
+
+    currentUser.value = info // store full user object, not just UID
     currentRole.value = info.role || ''
     currentUserDepartment.value = info.department || ''
+
+    console.log('Current user info:', currentUser.value)
   } catch (error) {
     console.error('Error fetching current user info:', error)
   }
 }
+
 
 async function fetchTasks() {
   try {
@@ -876,31 +882,48 @@ async function fetchSubtasks() {
 
 async function fetchProjects() {
   try {
-    if (!authStore.user?.uid) return
-    
-    // If HR or Admin, fetch all projects
-    if (
-      currentUserDepartment.value?.toLowerCase() === 'hr' ||
-      currentUserDepartment.value?.toLowerCase() === 'admin'
-    ) {
-      const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project`)
-      projects.value = data.projects || []
-    } 
-    // If Director, fetch department projects
-    else if (currentRole.value?.toLowerCase() === 'director' && currentUserDepartment.value) {
-      const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/department/${currentUserDepartment.value}`)
-      projects.value = data.projects || []
+    const API = import.meta.env.VITE_BACKEND_API
+    const role = currentRole.value?.toLowerCase()
+    const dept = currentUserDepartment.value?.toLowerCase()
+    const uid = authStore.user?.uid
+
+    if (!uid) {
+      console.warn('fetchProjects: user UID not available yet')
+      projects.value = []
+      return
     }
-    // Regular user: fetch their projects
-    else {
-      const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
-      projects.value = data.projects || []
+
+    console.log('fetchProjects → role:', role, 'department:', dept, 'uid:', uid)
+
+    let response
+
+    if (dept === 'hr and admin') {
+      // HR/Admin: all projects
+      response = await axios.get(`${API}project/all`)
+    } else if (role === 'director') {
+      // Directors: department projects
+      response = await axios.get(`${API}project/department/${currentUserDepartment.value}`)
+    } else {
+      // Regular users: own projects
+      response = await axios.get(`${API}project/${uid}`)
     }
+
+    // Ensure projects have department property in lowercase for filtering
+    projects.value = (response.data.projects || []).map(p => ({
+      ...p,
+      department: p.department?.toLowerCase() || ''
+    }))
+
+    console.log(`Loaded ${projects.value.length} projects for user ${uid}`)
   } catch (err) {
     console.error('Error fetching projects:', err)
     projects.value = []
+    toast.error('Failed to load projects')
   }
 }
+
+
+
 
 async function fetchUsers() {
   try {
