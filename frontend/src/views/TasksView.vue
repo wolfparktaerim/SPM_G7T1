@@ -133,11 +133,13 @@ import TaskCreateEditModal from '@/components/task/TaskCreateEditModal.vue'
 import TaskDetailModal from '@/components/task/TaskDetailModal.vue'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
 import { RefreshCw, Filter, Plus } from 'lucide-vue-next'
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router'
+import { useNotificationEvents } from '@/composables/useNotificationEvents'
 
 // Composables
 const toast = useToast()
 const authStore = useAuthStore()
+const { triggerNotificationUpdate } = useNotificationEvents()
 
 // Reactive data
 const loading = ref(false)
@@ -504,14 +506,12 @@ function handleDeleteFromDetail() {
 // Task operations
 async function handleSaveTask(taskData) {
   try {
-    console.log('Saving task:', taskData)
     const endpoint = isSubtask.value ? 'subtasks' : 'tasks'
     let response
 
     if (isEditing.value) {
       // Update existing task/subtask
       const id = isSubtask.value ? selectedTask.value.subTaskId : selectedTask.value.taskId
-      console.log(`Updating ${endpoint}/${id}`)
       response = await axios.put(`${import.meta.env.VITE_BACKEND_API}${endpoint}/${id}`, taskData)
     } else {
       // Create new task/subtask
@@ -519,12 +519,15 @@ async function handleSaveTask(taskData) {
         taskData.taskId = parentTaskId.value
       }
       taskData.creatorId = authStore.user?.uid
-
-      console.log(`Creating new ${endpoint}`)
       response = await axios.post(`${import.meta.env.VITE_BACKEND_API}${endpoint}`, taskData)
     }
 
-    console.log('Save response:', response.data)
+    // Trigger notification badge update if editing (status may have changed)
+    // IMPORTANT: Do this BEFORE closeCreateEditModal() which resets isEditing to false
+    if (isEditing.value) {
+      triggerNotificationUpdate()
+    }
+
     toast.success(`${isSubtask.value ? 'Subtask' : 'Task'} ${isEditing.value ? 'updated' : 'created'} successfully`)
     closeCreateEditModal()
 
@@ -641,13 +644,15 @@ async function handleTaskMoved(taskId, newStatus, oldStatus) {
 async function confirmMoveTask(taskId, newStatus) {
   confirmModal.value.loading = true
   try {
-    console.log(`Moving task ${taskId} to status: ${newStatus}`)
     await axios.put(`${import.meta.env.VITE_BACKEND_API}tasks/${taskId}`, {
       status: newStatus
     })
 
     toast.success('Task moved successfully')
     closeConfirmModal()
+
+    // Trigger notification badge update
+    triggerNotificationUpdate()
 
     // Refresh data after successful move
     isManualRefresh.value = false // Don't show success message for this refresh

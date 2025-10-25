@@ -1,0 +1,439 @@
+openapi: 3.0.3
+
+info:
+  title: Comment Management API
+  description: RESTful API for managing comments and comment threads for tasks and subtasks
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:6003
+    description: Local development server
+
+components:
+  schemas:
+    CommentThread:
+      type: object
+      properties:
+        active:
+          type: boolean
+          description: Whether the comment thread is active
+          example: true
+        comments:
+          type: array
+          items:
+            type: array
+            items:
+              oneOf:
+                - type: string
+                - type: number
+            minItems: 3
+            maxItems: 3
+          description: Array of comments, each containing [userId, commentText, timestamp]
+          example: 
+            - ["5zcCFvcx1jMGFojvz7R5RMubtsN2", "Can I get @John to verify this task", 1727092800]
+            - ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2", "I'll verify this now", 1727096400]
+        mention:
+          type: array
+          items:
+            type: string
+          description: Array of user IDs mentioned in the comment thread
+          example: ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"]
+        creation_date:
+          type: number
+          format: int64
+          description: Timestamp when the thread was created (epoch format)
+          example: 1727092800
+
+    CreateCommentRequest:
+      type: object
+      required:
+        - comment
+        - userId
+        - creationDate
+        - mention
+        - type
+        - parentId
+      properties:
+        comment:
+          type: string
+          description: The comment text content
+          example: "Can I get @John to verify this task"
+        userId:
+          type: string
+          description: ID of the user creating the comment
+          example: "5zcCFvcx1jMGFojvz7R5RMubtsN2"
+        creationDate:
+          type: number
+          format: int64
+          description: Creation timestamp in epoch format
+          example: 1727092800
+        mention:
+          type: array
+          items:
+            type: string
+          description: Array of user IDs mentioned in the comment
+          example: ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"]
+        type:
+          type: string
+          enum: [task, subtask]
+          description: Type of parent entity
+          example: "task"
+        parentId:
+          type: string
+          description: ID of the parent task or subtask
+          example: "-ObqP3PlcdaKb_2J9UbQ"
+
+    UpdateCommentRequest:
+      type: object
+      required:
+        - type
+        - parentId
+        - threadIndex
+        - comment
+        - userId
+        - creationDate
+      properties:
+        type:
+          type: string
+          enum: [task, subtask]
+          description: Type of parent entity
+          example: "task"
+        parentId:
+          type: string
+          description: ID of the parent task or subtask
+          example: "-ObqP3PlcdaKb_2J9UbQ"
+        threadIndex:
+          type: integer
+          minimum: 0
+          description: Index of the comment thread to add reply to
+          example: 0
+        comment:
+          type: string
+          description: Comment text for the reply
+          example: "I'll verify this now"
+        userId:
+          type: string
+          description: User ID for the reply
+          example: "Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"
+        creationDate:
+          type: number
+          format: int64
+          description: Timestamp for the reply
+          example: 1727096400
+        mention:
+          type: array
+          items:
+            type: string
+          description: Additional mentions for the reply (optional)
+          example: ["user_789"]
+
+    ArchiveCommentRequest:
+      type: object
+      required:
+        - type
+        - parentId
+        - threadIndex
+      properties:
+        type:
+          type: string
+          enum: [task, subtask]
+          description: Type of parent entity
+          example: "task"
+        parentId:
+          type: string
+          description: ID of the parent task or subtask
+          example: "-ObqP3PlcdaKb_2J9UbQ"
+        threadIndex:
+          type: integer
+          minimum: 0
+          description: Index of the comment thread to archive
+          example: 0
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Task not found"
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Comment created successfully"
+        commentThread:
+          $ref: "#/components/schemas/CommentThread"
+
+paths:
+  /comments:
+    post:
+      summary: Create a new comment thread
+      description: Creates a new comment thread on a task or subtask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommentRequest"
+            examples:
+              taskComment:
+                summary: Comment on a task
+                value:
+                  comment: "Can I get @John to verify this task"
+                  userId: "5zcCFvcx1jMGFojvz7R5RMubtsN2"
+                  creationDate: 1727092800
+                  mention: ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"]
+                  type: "task"
+                  parentId: "-ObqP3PlcdaKb_2J9UbQ"
+              subtaskComment:
+                summary: Comment on a subtask
+                value:
+                  comment: "This subtask needs review"
+                  userId: "user_123"
+                  creationDate: 1727092800
+                  mention: []
+                  type: "subtask"
+                  parentId: "subtask_abc"
+      responses:
+        "201":
+          description: Comment thread created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid input data or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missingField:
+                  value:
+                    error: "Validation failed: userId is required"
+                invalidType:
+                  value:
+                    error: "Validation failed: type must be either 'task' or 'subtask'"
+                invalidTimestamp:
+                  value:
+                    error: "creationDate must be a valid epoch timestamp"
+
+    put:
+      summary: Add a reply to a comment thread
+      description: Add a new comment reply to an existing comment thread and optionally update mentions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCommentRequest"
+            examples:
+              addReply:
+                summary: Add a simple reply
+                value:
+                  type: "task"
+                  parentId: "-ObqP3PlcdaKb_2J9UbQ"
+                  threadIndex: 0
+                  comment: "I'll verify this now"
+                  userId: "Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"
+                  creationDate: 1727096400
+              addReplyWithMention:
+                summary: Add reply with new mentions
+                value:
+                  type: "subtask"
+                  parentId: "subtask_abc"
+                  threadIndex: 1
+                  comment: "Let's also include @Sarah"
+                  userId: "user_456"
+                  creationDate: 1727100000
+                  mention: ["user_789"]
+      responses:
+        "200":
+          description: Reply added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Reply added successfully"
+                  commentThread:
+                    $ref: "#/components/schemas/CommentThread"
+        "400":
+          description: Invalid input data or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidIndex:
+                  value:
+                    error: "Invalid thread_index: 5"
+                missingFields:
+                  value:
+                    error: "Validation failed: comment is required and cannot be empty"
+        "404":
+          description: Parent task/subtask not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: "Task not found"
+
+  /comments/archive:
+    put:
+      summary: Archive a comment thread
+      description: Set the active status of a comment thread to False
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveCommentRequest"
+            examples:
+              archiveTask:
+                summary: Archive task comment thread
+                value:
+                  type: "task"
+                  parentId: "-ObqP3PlcdaKb_2J9UbQ"
+                  threadIndex: 0
+              archiveSubtask:
+                summary: Archive subtask comment thread
+                value:
+                  type: "subtask"
+                  parentId: "subtask_xyz"
+                  threadIndex: 2
+      responses:
+        "200":
+          description: Comment thread archived successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Comment thread archived successfully"
+                  commentThread:
+                    $ref: "#/components/schemas/CommentThread"
+        "400":
+          description: Invalid input data or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidIndex:
+                  value:
+                    error: "Invalid thread_index: 5"
+                missingField:
+                  value:
+                    error: "Validation failed: parentId is required"
+        "404":
+          description: Parent task/subtask not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: "Task not found"
+
+  /comments/{parentId}:
+    get:
+      summary: Get all comment threads
+      description: Retrieve all comment threads for a specific task or subtask
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ID of the parent task or subtask
+          example: "-ObqP3PlcdaKb_2J9UbQ"
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [task, subtask]
+            default: task
+          description: Type of parent entity (defaults to 'task')
+          example: "task"
+      responses:
+        "200":
+          description: Comment threads retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  commentThreads:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CommentThread"
+              examples:
+                multipleThreads:
+                  value:
+                    commentThreads:
+                      - active: true
+                        comments:
+                          - ["5zcCFvcx1jMGFojvz7R5RMubtsN2", "Can I get @John to verify this task", 1727092800]
+                          - ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2", "I'll verify this now", 1727096400]
+                        mention: ["Ii1o7fxzoMMJ1JcjIMWqGJ4AhxO2"]
+                        creation_date: 1727092800
+                      - active: false
+                        comments:
+                          - ["user_789", "Archived comment thread", 1727100000]
+                        mention: []
+                        creation_date: 1727100000
+                emptyThreads:
+                  value:
+                    commentThreads: []
+        "400":
+          description: Invalid query parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalidType:
+                  value:
+                    error: "type parameter must be either 'task' or 'subtask'"
+        "404":
+          description: Parent task/subtask not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    error: "Task not found"
+
+  /health:
+    get:
+      summary: Health check
+      description: Returns the health status of the comment service
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  service:
+                    type: string
+                    example: "comment-service"

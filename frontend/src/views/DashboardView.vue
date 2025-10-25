@@ -805,7 +805,7 @@ const getProjectTaskCount = id => tasks.value.filter(t => t.projectId === id).le
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline'
   const date = new Date(deadline * 1000)
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('en-SG', {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined

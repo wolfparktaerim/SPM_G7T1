@@ -45,6 +45,13 @@
               <span class="btn-text">Delete</span>
             </button>
 
+            <button v-if="canRequestExtension" @click="showExtensionRequestModal = true"
+              class="action-btn bg-amber-500 hover:bg-amber-600 text-white font-medium px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+              title="Request Extension">
+              <Clock class="w-5 h-5" />
+              <span class="btn-text">Request Extension</span>
+            </button>
+
             <button @click="$emit('close')" class="action-btn close-btn">
               <X class="w-5 h-5" />
             </button>
@@ -82,8 +89,8 @@
               </div>
             </div>
 
-            <!-- Priority Display (Tasks only) -->
-            <div v-if="!isSubtask && taskData?.priority" class="info-item">
+            <!-- Priority Display (for both tasks AND subtasks) -->
+            <div v-if="taskData?.priority" class="info-item">
               <label class="info-label">
                 <Zap class="w-4 h-4" />
                 Priority
@@ -162,6 +169,26 @@
               </label>
               <div class="info-value">
                 {{ formatDateTime(taskData?.updatedAt) }}
+              </div>
+            </div>
+
+            <div v-if="taskData?.startedAt" class="info-item">
+              <label class="info-label">
+                <Clock class="w-4 h-4" />
+                Started
+              </label>
+              <div class="info-value">
+                {{ formatDateTime(taskData.startedAt) }}
+              </div>
+            </div>
+
+            <div v-if="taskData?.completedAt" class="info-item">
+              <label class="info-label">
+                <Clock class="w-4 h-4" />
+                Completed
+              </label>
+              <div class="info-value">
+                {{ formatDateTime(taskData.completedAt) }}
               </div>
             </div>
           </div>
@@ -313,12 +340,30 @@
         </button>
       </div>
     </div>
+
+
+    <!-- Comment Section -->
+    <div class="section">
+      <CommentSection
+        :key="`comment-${isSubtask ? 'subtask' : 'task'}-${isSubtask ? taskData?.subtaskId : taskData?.taskId}`"
+        :parent-id="isSubtask ? taskData.subTaskId : taskData.taskId" :parent-type="isSubtask ? 'subtask' : 'task'"
+        :current-user-id="currentUserId" :all-users="allUsers" :collaborators="taskData?.collaborators || []"
+        @thread-created="handleCommentThreadCreated" @thread-updated="handleCommentThreadUpdated"
+        @thread-resolved="handleCommentThreadResolved" />
+    </div>
+
+    <!-- Deadline extension modal -->
+    <!-- Deadline Extension Request Modal -->
+    <DeadlineExtensionRequestModal :show="showExtensionRequestModal" :task-id="getTaskId"
+      :task-title="taskData?.title || 'Untitled'" :current-deadline="taskData?.deadline || 0" :is-subtask="isSubtask"
+      :owner-id="taskData?.ownerId || ''" :owner-name="getOwnerName" @close="showExtensionRequestModal = false"
+      @success="handleExtensionRequestSuccess" />
   </div>
 </template>
 
 <script setup>
 import axios from 'axios'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'vue-toastification'
 import {
@@ -341,6 +386,9 @@ import {
   Repeat
 } from 'lucide-vue-next'
 
+import CommentSection from './CommentSection.vue'
+import DeadlineExtensionRequestModal from './DeadlineExtensionRequestModal.vue'
+
 const props = defineProps({
   show: {
     type: Boolean,
@@ -360,7 +408,9 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'edit', 'delete', 'view-subtask'])
+const emit = defineEmits(['close', 'edit', 'delete', 'view-subtask', 'extension-requested'])
+
+const showExtensionRequestModal = ref(false)
 
 // Composables
 const authStore = useAuthStore()
@@ -400,6 +450,38 @@ const isDueSoon = computed(() => {
   const daysUntilDue = (props.taskData.deadline * 1000 - Date.now()) / (1000 * 60 * 60 * 24)
   return daysUntilDue <= 7
 })
+
+const canRequestExtension = computed(() => {
+  const status = (props.taskData?.status ?? '').toLowerCase()
+  // Must be collaborator, must NOT be owner, and task must not be completed
+  return isCollaborator.value && !isOwner.value && status !== 'completed'
+})
+
+const getTaskId = computed(() => {
+  if (props.isSubtask) {
+    return props.taskData?.subtaskId || props.taskData?.subTaskId || ''
+  }
+  return props.taskData?.taskId || ''
+})
+
+const getOwnerName = computed(() => {
+  return formatOwner(props.taskData?.ownerId)
+})
+
+const handleGlobalDeadlineUpdate = (event) => {
+  // Check if this task/subtask was updated
+  const { itemId, itemType } = event.detail || {}
+  const currentItemId = props.isSubtask
+    ? props.taskData?.subtaskId || props.taskData?.subTaskId
+    : props.taskData?.taskId
+  const currentItemType = props.isSubtask ? 'subtask' : 'task'
+
+  if (itemId === currentItemId && itemType === currentItemType) {
+    // Emit event to parent to refresh data
+    toast.info('Deadline has been updated')
+    emit('refresh-needed')
+  }
+}
 
 // Methods
 function handleBackdropClick() {
@@ -483,7 +565,7 @@ function getStatusClass(status) {
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline set'
   const date = new Date(deadline * 1000)
-  return date.toLocaleString('en-US', {
+  return date.toLocaleString('en-SG', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -495,7 +577,7 @@ function formatDeadline(deadline) {
 function formatDateTime(timestamp) {
   if (!timestamp) return 'Unknown'
   const date = new Date(timestamp * 1000)
-  return date.toLocaleString('en-US', {
+  return date.toLocaleString('en-SG', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -581,7 +663,7 @@ function downloadAttachment(attachment, index) {
   try {
     // Remove data URL prefix if present
     const base64Data = attachment.replace(/^data:.*?;base64,/, '')
-    
+
     // Decode base64 to binary
     const byteCharacters = atob(base64Data)
     const byteNumbers = new Array(byteCharacters.length)
@@ -591,13 +673,13 @@ function downloadAttachment(attachment, index) {
     }
 
     const byteArray = new Uint8Array(byteNumbers)
-    
+
     // Detect MIME type and extension from file signature
     const { mimeType, extension } = detectFileType(byteArray, attachment)
-    
+
     // Create blob with proper MIME type
     const blob = new Blob([byteArray], { type: mimeType })
-    
+
     // Generate filename
     const filename = getAttachmentName(attachment, index) + '.' + extension
 
@@ -625,58 +707,58 @@ function detectFileType(byteArray, base64String) {
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
     .toUpperCase()
-  
+
   // Check base64 string prefix for quicker detection
   const prefix = base64String.substring(0, 20)
-  
+
   // PDF: starts with %PDF (hex: 25 50 44 46)
   if (header.startsWith('25504446') || prefix.startsWith('JVBERi0')) {
     return { mimeType: 'application/pdf', extension: 'pdf' }
   }
-  
+
   // PNG: starts with PNG signature (89 50 4E 47)
   if (header.startsWith('89504E47') || prefix.startsWith('iVBORw0KGgo')) {
     return { mimeType: 'image/png', extension: 'png' }
   }
-  
+
   // JPEG: starts with FF D8 FF
   if (header.startsWith('FFD8FF') || prefix.startsWith('/9j/')) {
     return { mimeType: 'image/jpeg', extension: 'jpg' }
   }
-  
+
   // ZIP-based formats (DOCX, XLSX): start with PK (50 4B)
   if (header.startsWith('504B0304') || header.startsWith('504B0506') || prefix.startsWith('UEs')) {
     // Check for Office Open XML formats
     const text = String.fromCharCode(...byteArray.slice(0, 200))
-    
+
     if (text.includes('word/') || text.includes('document.xml')) {
-      return { 
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
-        extension: 'docx' 
+      return {
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        extension: 'docx'
       }
     }
-    
+
     if (text.includes('xl/') || text.includes('workbook.xml')) {
-      return { 
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
-        extension: 'xlsx' 
+      return {
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        extension: 'xlsx'
       }
     }
-    
+
     // Generic ZIP
     return { mimeType: 'application/zip', extension: 'zip' }
   }
-  
+
   // Old Word doc format: D0 CF 11 E0
   if (header.startsWith('D0CF11E0')) {
     return { mimeType: 'application/msword', extension: 'doc' }
   }
-  
+
   // CSV/TXT: Check if all characters are printable ASCII/UTF-8
   const sample = byteArray.slice(0, 512)
   let isPrintable = true
   let hasCommas = false
-  
+
   for (let i = 0; i < sample.length; i++) {
     const byte = sample[i]
     if ((byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) || byte === 127) {
@@ -685,20 +767,20 @@ function detectFileType(byteArray, base64String) {
     }
     if (byte === 44) hasCommas = true // comma character
   }
-  
+
   if (isPrintable) {
     if (hasCommas) {
       return { mimeType: 'text/csv', extension: 'csv' }
     }
     return { mimeType: 'text/plain', extension: 'txt' }
   }
-  
+
   // GIF: starts with GIF89a or GIF87a
-  if (header.startsWith('474946383961') || header.startsWith('474946383761') || 
-      prefix.startsWith('R0lGOD')) {
+  if (header.startsWith('474946383961') || header.startsWith('474946383761') ||
+    prefix.startsWith('R0lGOD')) {
     return { mimeType: 'image/gif', extension: 'gif' }
   }
-  
+
   // Default fallback
   return { mimeType: 'application/octet-stream', extension: 'bin' }
 }
@@ -708,6 +790,25 @@ function viewSubtask(subtask) {
   emit('close')
   emit('view-subtask', subtask)
 }
+
+const handleExtensionRequestSuccess = (request) => {
+  toast.success('Extension request submitted successfully')
+  showExtensionRequestModal.value = false
+  // Optionally refresh the task data or emit an event
+  emit('extension-requested', request)
+}
+
+// ✅ Add listener on mount
+onMounted(() => {
+  window.addEventListener('deadline-updated', handleGlobalDeadlineUpdate)
+})
+
+// ✅ Remove listener on unmount
+onUnmounted(() => {
+  window.removeEventListener('deadline-updated', handleGlobalDeadlineUpdate)
+})
+
+
 </script>
 
 <style scoped>
@@ -1460,5 +1561,7 @@ function viewSubtask(subtask) {
   .footer-info {
     text-align: center;
   }
+
+
 }
 </style>
