@@ -804,7 +804,16 @@ async function handleSubmit() {
 
     await new Promise(resolve => setTimeout(resolve, 500))
 
-    emit('save', submitData)
+    // Emit save with the data and operation type
+    emit('save', submitData, props.isEditing)
+    
+    // Show success message based on operation type
+    const actionText = props.isEditing ? 'updated' : 'created'
+    const itemType = props.isSubtask ? 'Subtask' : 'Task'
+    toast.success(`${itemType} ${actionText} successfully`)
+    
+    // Close the modal after successful submission
+    emit('close')
 
   } catch (error) {
     console.error('Error submitting form:', error)
@@ -929,7 +938,6 @@ onMounted(async () => {
 .clear-all-btn:hover {
   background-color: #fee2e2;
 }
-
 
 .chip-icon {
   font-size: 1rem;

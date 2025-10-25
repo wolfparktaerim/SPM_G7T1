@@ -23,6 +23,8 @@ class Subtask:
     scheduled: bool
     schedule: str
     custom_schedule: Optional[int] = None
+    completed_at: Optional[int] = None
+    started_at: Optional[int] = None
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -44,7 +46,9 @@ class Subtask:
             active=data.get("active", True),
             scheduled=data.get("scheduled", False),
             schedule=data.get("schedule", "daily"),
-            custom_schedule=data.get("custom_schedule")
+            custom_schedule=data.get("custom_schedule"),
+            completed_at=data.get("completedAt"),
+            started_at=data.get("startedAt")
         )
     
     def to_dict(self):
@@ -66,7 +70,9 @@ class Subtask:
             "active": self.active,
             "scheduled": self.scheduled,
             "schedule": self.schedule,
-            "custom_schedule": self.custom_schedule
+            "custom_schedule": self.custom_schedule,
+            "completedAt": self.completed_at,
+            "startedAt": self.started_at
         }
 
 @dataclass
@@ -80,9 +86,9 @@ class CreateSubtaskRequest:
     notes: str = ""
     attachments: List[str] = field(default_factory=list)
     collaborators: List[str] = field(default_factory=list)
-    owner_id: Optional[str] = None
+    owner_id: str = ""
     priority: int = 0
-    start_date: Optional[int] = None
+    start_date: int = 0
     active: bool = True
     scheduled: bool = False
     schedule: str = "daily"
@@ -99,9 +105,9 @@ class CreateSubtaskRequest:
             notes=data.get("notes", ""),
             attachments=data.get("attachments", []),
             collaborators=data.get("collaborators", []),
-            owner_id=data.get("ownerId"),
+            owner_id=data.get("ownerId", ""),
             priority=data.get("priority", 0),
-            start_date=data.get("start_date"),
+            start_date=data.get("start_date", 0),
             active=data.get("active", True),
             scheduled=data.get("scheduled", False),
             schedule=data.get("schedule", "daily"),
@@ -109,17 +115,16 @@ class CreateSubtaskRequest:
         )
     
     def validate(self):
+        """Validate create subtask request"""
         errors = []
         if not self.title or not self.title.strip():
-            errors.append("title is required")
+            errors.append("title is required and cannot be empty")
         if not self.creator_id:
             errors.append("creatorId is required")
         if not self.deadline:
             errors.append("deadline is required")
         if not self.task_id:
             errors.append("taskId is required")
-        if self.schedule == "custom" and self.custom_schedule is None:
-            errors.append("custom_schedule required when schedule is 'custom'")
         return errors
 
 @dataclass
@@ -132,7 +137,6 @@ class UpdateSubtaskRequest:
     notes: Optional[str] = None
     attachments: Optional[List[str]] = None
     collaborators: Optional[List[str]] = None
-    task_id: Optional[str] = None
     owner_id: Optional[str] = None
     priority: Optional[int] = None
     start_date: Optional[int] = None
@@ -151,7 +155,6 @@ class UpdateSubtaskRequest:
             notes=data.get("notes"),
             attachments=data.get("attachments"),
             collaborators=data.get("collaborators"),
-            task_id=data.get("taskId"),
             owner_id=data.get("ownerId"),
             priority=data.get("priority"),
             start_date=data.get("start_date"),

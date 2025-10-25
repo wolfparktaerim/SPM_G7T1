@@ -27,6 +27,20 @@ services:
       - name: notification-route
         paths: [/notification]
         strip_path: true
+  - name: comment-service
+    url: ${COMMENT_SERVICE_URL}
+    routes:
+      - name: comment-route
+        paths: [/comments]
+        strip_path: false
+
+  - name: extension-request-service
+    url: ${EXTENSION_REQUEST_SERVICE_URL}  
+    routes:
+      - name: extension-request-route
+        paths: [/extension-requests, /extension-requests/]
+        strip_path: false
+        methods: [GET, POST, PATCH, OPTIONS]
 
 
 plugins:

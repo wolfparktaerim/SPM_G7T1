@@ -598,7 +598,7 @@ function getProjectTaskCount(projectId) {
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline'
   const date = new Date(deadline * 1000)
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('en-SG', {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
@@ -608,7 +608,7 @@ function formatDeadline(deadline) {
 function formatDate(timestamp) {
   if (!timestamp) return 'Unknown'
   const date = new Date(timestamp * 1000)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return date.toLocaleDateString('en-SG', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function formatRelativeTime(timestamp) {

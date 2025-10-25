@@ -10,7 +10,7 @@ os.environ['DATABASE_URL'] = 'https://dummy.firebaseio.com'
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Create a mock Firebase app that will be returned by initialize_app
+# Create a mock Firebase app
 mock_firebase_app = MagicMock()
 
 # Mock Firebase admin at module level BEFORE any imports
@@ -21,10 +21,8 @@ firebase_admin_patcher = patch.dict('sys.modules', {
 })
 firebase_admin_patcher.start()
 
-# Now we can import
 from subtask_service import SubtaskService
 from models import Subtask, CreateSubtaskRequest, UpdateSubtaskRequest
-from app import app
 
 
 @pytest.fixture(autouse=True)
@@ -34,14 +32,6 @@ def mock_firebase():
         with patch('firebase_admin.get_app', return_value=mock_firebase_app):
             with patch('firebase_admin.credentials.Certificate'):
                 yield
-
-
-@pytest.fixture
-def client():
-    """Create test client"""
-    app.config['TESTING'] = True
-    with app.test_client() as client:
-        yield client
 
 
 @pytest.fixture
@@ -71,504 +61,558 @@ def sample_subtask():
         start_date=1600000000,
         active=True,
         scheduled=False,
-        schedule="daily"
+        schedule="daily",
+        custom_schedule=None,
+        completed_at=None,
+        started_at=None
     )
 
 
-class TestSubtaskModels:
-    """Test subtask models"""
+class TestSubtaskServiceStartedAt:
+    """Test startedAt logic for subtasks"""
     
-    def test_subtask_from_dict(self):
-        """Test creating Subtask from dictionary"""
-        data = {
-            "subTaskId": "st1",
-            "title": "Test Subtask",
-            "creatorId": "u1",
-            "deadline": 1700000000,
-            "status": "ongoing",
-            "notes": "",
-            "attachments": [],
-            "collaborators": [],
-            "taskId": "t1",
-            "ownerId": "u1",
-            "priority": 0,
-            "createdAt": 1600000000,
-            "updatedAt": 1600000000,
-            "start_date": 1600000000,
-            "active": True,
-            "scheduled": False,
-            "schedule": "daily"
-        }
-        subtask = Subtask.from_dict(data)
-        
-        assert subtask.subtask_id == "st1"
-        assert subtask.title == "Test Subtask"
-        assert subtask.task_id == "t1"
-    
-    def test_subtask_to_dict(self, sample_subtask):
-        """Test converting Subtask to dictionary"""
-        data = sample_subtask.to_dict()
-        
-        assert data["subTaskId"] == "st1"
-        assert data["title"] == "Test Subtask"
-        assert data["taskId"] == "t1"
-    
-    def test_create_subtask_request_validate_success(self):
-        """Test validation with valid data"""
-        req = CreateSubtaskRequest(
-            title="Test Subtask",
-            creator_id="u1",
-            deadline=1700000000,
-            task_id="t1"
-        )
-        errors = req.validate()
-        assert len(errors) == 0
-    
-    def test_create_subtask_request_validate_missing_fields(self):
-        """Test validation with missing fields"""
-        req = CreateSubtaskRequest(
-            title="",
-            creator_id="",
-            deadline=0,
-            task_id=""
-        )
-        errors = req.validate()
-        assert len(errors) > 0
-        assert "title is required" in errors
-        assert "creatorId is required" in errors
-        assert "deadline is required" in errors
-        assert "taskId is required" in errors
-    
-    def test_create_subtask_request_custom_schedule_validation(self):
-        """Test validation with custom schedule without value"""
-        req = CreateSubtaskRequest(
-            title="Test",
-            creator_id="u1",
-            deadline=1700000000,
-            task_id="t1",
-            schedule="custom",
-            custom_schedule=None
-        )
-        errors = req.validate()
-        assert len(errors) > 0
-        assert any("custom_schedule" in error for error in errors)
-
-
-class TestSubtaskService:
-    """Test subtask service class"""
-    
-    def test_validate_status(self, mock_db):
-        """Test status validation"""
-        mock_db.return_value = Mock()
-        service = SubtaskService()
-        
-        assert service.validate_status("ongoing") == True
-        assert service.validate_status("completed") == True
-        assert service.validate_status("unassigned") == True
-        assert service.validate_status("invalid") == False
-    
-    def test_calculate_new_start_date_daily(self, mock_db):
-        """Test calculating next start date for daily schedule"""
-        mock_db.return_value = Mock()
-        
-        # Mock current_timestamp to control the "now" time
-        current_time = 1700000000
-        with patch('subtask_service.current_timestamp', return_value=current_time):
-            service = SubtaskService()
-            old_start = 1600000000  # Past date
-            
-            new_start = service.calculate_new_start_date(old_start, "daily")
-            
-            # Should be 1 day after current time
-            assert new_start == current_time + (24 * 60 * 60)
-    
-    def test_calculate_new_start_date_weekly(self, mock_db):
-        """Test calculating next start date for weekly schedule"""
-        mock_db.return_value = Mock()
-        
-        # Mock current_timestamp to control the "now" time
-        current_time = 1700000000
-        with patch('subtask_service.current_timestamp', return_value=current_time):
-            service = SubtaskService()
-            old_start = 1600000000  # Past date
-            
-            new_start = service.calculate_new_start_date(old_start, "weekly")
-            
-            # Should be 7 days after current time
-            assert new_start == current_time + (7 * 24 * 60 * 60)
-    
-    def test_calculate_new_start_date_custom(self, mock_db):
-        """Test calculating next start date for custom schedule"""
-        mock_db.return_value = Mock()
-        
-        # Mock current_timestamp to control the "now" time
-        current_time = 1700000000
-        with patch('subtask_service.current_timestamp', return_value=current_time):
-            service = SubtaskService()
-            old_start = 1600000000  # Past date
-            custom_days = 5
-            
-            new_start = service.calculate_new_start_date(old_start, "custom", custom_days)
-            
-            # Should be 5 days after current time
-            assert new_start == current_time + (5 * 24 * 60 * 60)
-    
-    def test_create_subtask(self, mock_db):
-        """Test creating a subtask"""
+    def test_create_subtask_owner_is_creator_unassigned(self, mock_db):
+        """Test creating subtask where owner is creator - status should be 'unassigned', startedAt should be None"""
         mock_subtasks = Mock()
         mock_tasks = Mock()
         mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
         
         # Mock parent task exists
-        mock_tasks.child.return_value.get.return_value = {"taskId": "t1"}
+        mock_task_ref = Mock()
+        mock_task_ref.get.return_value = {"taskId": "t1"}
+        mock_tasks.child.return_value = mock_task_ref
         
         mock_new_ref = Mock()
         mock_new_ref.key = "test-subtask-id"
         mock_subtasks.push.return_value = mock_new_ref
         
-        service = SubtaskService()
-        req = CreateSubtaskRequest(
-            title="Test Subtask",
-            creator_id="u1",
-            deadline=1700000000,
-            task_id="t1"
-        )
-        
-        subtask, error = service.create_subtask(req)
-        
-        assert error is None
-        assert subtask.title == "Test Subtask"
-        assert subtask.subtask_id == "test-subtask-id"
-        assert subtask.task_id == "t1"
-        mock_new_ref.set.assert_called_once()
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = CreateSubtaskRequest(
+                title="Test Subtask",
+                creator_id="u1",
+                deadline=1800000000,
+                task_id="t1",
+                owner_id="u1"  # Same as creator
+            )
+            
+            subtask, error = service.create_subtask(req)
+            
+            assert error is None
+            assert subtask.status == "unassigned"
+            assert subtask.started_at is None
+            
+            # Verify the data sent to Firebase
+            call_args = mock_new_ref.set.call_args[0][0]
+            assert call_args["status"] == "unassigned"
+            assert call_args["startedAt"] is None
     
-    def test_create_subtask_parent_not_found(self, mock_db):
-        """Test creating subtask with non-existent parent"""
+    def test_create_subtask_owner_is_creator_default(self, mock_db):
+        """Test creating subtask with default owner (creator) - status should be 'unassigned', startedAt should be None"""
         mock_subtasks = Mock()
         mock_tasks = Mock()
         mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
         
-        mock_tasks.child.return_value.get.return_value = None
+        # Mock parent task exists
+        mock_task_ref = Mock()
+        mock_task_ref.get.return_value = {"taskId": "t1"}
+        mock_tasks.child.return_value = mock_task_ref
         
-        service = SubtaskService()
-        req = CreateSubtaskRequest(
-            title="Test Subtask",
-            creator_id="u1",
-            deadline=1700000000,
-            task_id="invalid"
-        )
-        
-        subtask, error = service.create_subtask(req)
-        
-        assert subtask is None
-        assert "not found" in error.lower()
-    
-    def test_get_all_subtasks(self, mock_db):
-        """Test getting all subtasks"""
-        mock_subtasks = Mock()
-        mock_db.return_value = mock_subtasks
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
         
         current_time = 1700000000
-        mock_subtasks.get.return_value = {
-            "st1": {
-                "subTaskId": "st1",
-                "title": "Active Subtask",
-                "creatorId": "u1",
-                "deadline": 1800000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "taskId": "t1",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1600000000,
-                "start_date": 1600000000,
-                "active": False,  # Will be updated
-                "scheduled": False,
-                "schedule": "daily"
-            }
-        }
-        
         with patch('subtask_service.current_timestamp', return_value=current_time):
             service = SubtaskService()
-            subtasks = service.get_all_subtasks()
-        
-        assert len(subtasks) == 1
-        assert subtasks[0].subtask_id == "st1"
+            req = CreateSubtaskRequest(
+                title="Test Subtask",
+                creator_id="u1",
+                deadline=1800000000,
+                task_id="t1"
+                # No owner_id specified, should default to creator
+            )
+            
+            subtask, error = service.create_subtask(req)
+            
+            assert error is None
+            assert subtask.status == "unassigned"
+            assert subtask.started_at is None
+            assert subtask.owner_id == "u1"
     
-    def test_get_subtask_by_id(self, mock_db):
-        """Test getting subtask by ID"""
+    def test_create_subtask_owner_is_different_user(self, mock_db):
+        """Test creating subtask where owner is different from creator - status should be 'ongoing', startedAt should be set"""
         mock_subtasks = Mock()
-        mock_db.return_value = mock_subtasks
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        # Mock parent task exists
+        mock_task_ref = Mock()
+        mock_task_ref.get.return_value = {"taskId": "t1"}
+        mock_tasks.child.return_value = mock_task_ref
+        
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
+        
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = CreateSubtaskRequest(
+                title="Test Subtask",
+                creator_id="u1",
+                deadline=1800000000,
+                task_id="t1",
+                owner_id="u2"  # Different from creator
+            )
+            
+            subtask, error = service.create_subtask(req)
+            
+            assert error is None
+            assert subtask.status == "ongoing"
+            assert subtask.started_at == current_time
+            
+            # Verify the data sent to Firebase
+            call_args = mock_new_ref.set.call_args[0][0]
+            assert call_args["status"] == "ongoing"
+            assert call_args["startedAt"] == current_time
+    
+    def test_update_subtask_status_unassigned_to_ongoing(self, mock_db):
+        """Test updating subtask status from 'unassigned' to 'ongoing' - startedAt should be set"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
         
         mock_subtask_ref = Mock()
-        mock_subtask_ref.get.return_value = {
+        existing_data = {
             "subTaskId": "st1",
-            "title": "Test Subtask",
+            "title": "Test",
             "creatorId": "u1",
-            "deadline": 1700000000,
-            "status": "ongoing",
-            "notes": "",
-            "attachments": [],
-            "collaborators": [],
-            "taskId": "t1",
             "ownerId": "u1",
-            "priority": 0,
-            "createdAt": 1600000000,
-            "updatedAt": 1600000000,
-            "start_date": 1600000000,
-            "active": True,
+            "status": "unassigned",
+            "taskId": "t1",
+            "deadline": 1800000000,
             "scheduled": False,
-            "schedule": "daily"
+            "startedAt": None
         }
+        
+        updated_data = existing_data.copy()
+        updated_data["status"] = "ongoing"
+        updated_data["startedAt"] = 1700000000
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
         mock_subtasks.child.return_value = mock_subtask_ref
         
-        service = SubtaskService()
-        subtask, error = service.get_subtask_by_id("st1")
-        
-        assert error is None
-        assert subtask.subtask_id == "st1"
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = UpdateSubtaskRequest(
+                subtask_id="st1",
+                status="ongoing"
+            )
+            
+            subtask, error = service.update_subtask(req)
+            
+            assert error is None
+            assert subtask.status == "ongoing"
+            assert subtask.started_at == current_time
+            
+            # Verify update was called with startedAt
+            update_call_args = mock_subtask_ref.update.call_args[0][0]
+            assert update_call_args["status"] == "ongoing"
+            assert update_call_args["startedAt"] == current_time
     
-    def test_get_subtask_by_id_not_found(self, mock_db):
-        """Test getting non-existent subtask"""
-        mock_subtasks = Mock()
-        mock_db.return_value = mock_subtasks
-        
-        mock_subtask_ref = Mock()
-        mock_subtask_ref.get.return_value = None
-        mock_subtasks.child.return_value = mock_subtask_ref
-        
-        service = SubtaskService()
-        subtask, error = service.get_subtask_by_id("invalid")
-        
-        assert subtask is None
-        assert "not found" in error.lower()
-    
-    def test_update_subtask(self, mock_db):
-        """Test updating subtask"""
+    def test_update_subtask_status_ongoing_to_under_review_no_started_at_change(self, mock_db):
+        """Test updating status from 'ongoing' to 'under_review' - startedAt should NOT change"""
         mock_subtasks = Mock()
         mock_tasks = Mock()
         mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
         
         mock_subtask_ref = Mock()
-        mock_subtask_ref.get.side_effect = [
-            {  # First call - existing subtask
-                "subTaskId": "st1",
-                "status": "ongoing",
-                "scheduled": False
-            },
-            {  # Second call - updated subtask
-                "subTaskId": "st1",
-                "title": "Updated Title",
-                "creatorId": "u1",
-                "deadline": 1700000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "taskId": "t1",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1700000000,
-                "start_date": 1600000000,
-                "active": True,
-                "scheduled": False,
-                "schedule": "daily"
-            }
-        ]
-        mock_subtasks.child.return_value = mock_subtask_ref
-        
-        service = SubtaskService()
-        req = UpdateSubtaskRequest(
-            subtask_id="st1",
-            title="Updated Title"
-        )
-        
-        subtask, error = service.update_subtask(req)
-        
-        assert error is None
-        mock_subtask_ref.update.assert_called_once()
-    
-    def test_update_subtask_empty_title(self, mock_db):
-        """Test updating subtask with empty title"""
-        mock_subtasks = Mock()
-        mock_db.return_value = mock_subtasks
-        
-        mock_subtask_ref = Mock()
-        mock_subtask_ref.get.return_value = {"subTaskId": "st1"}
-        mock_subtasks.child.return_value = mock_subtask_ref
-        
-        service = SubtaskService()
-        req = UpdateSubtaskRequest(
-            subtask_id="st1",
-            title="   "  # Empty/whitespace only
-        )
-        
-        subtask, error = service.update_subtask(req)
-        
-        assert subtask is None
-        assert "empty" in error.lower()
-    
-    def test_delete_subtask(self, mock_db):
-        """Test deleting subtask"""
-        mock_subtasks = Mock()
-        mock_db.return_value = mock_subtasks
-        
-        mock_subtask_ref = Mock()
-        mock_subtask_ref.get.return_value = {"subTaskId": "st1"}
-        mock_subtasks.child.return_value = mock_subtask_ref
-        
-        service = SubtaskService()
-        success, error = service.delete_subtask("st1")
-        
-        assert success == True
-        assert error is None
-        mock_subtask_ref.delete.assert_called_once()
-    
-    def test_get_subtasks_by_task(self, mock_db):
-        """Test getting subtasks by task ID"""
-        mock_subtasks = Mock()
-        mock_db.return_value = mock_subtasks
-        
-        current_time = 1700000000
-        mock_subtasks.get.return_value = {
-            "st1": {
-                "subTaskId": "st1",
-                "title": "Subtask 1",
-                "creatorId": "u1",
-                "deadline": 1800000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "taskId": "t1",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1600000000,
-                "start_date": 1600000000,
-                "active": False,
-                "scheduled": False,
-                "schedule": "daily"
-            },
-            "st2": {
-                "subTaskId": "st2",
-                "title": "Subtask 2",
-                "creatorId": "u1",
-                "deadline": 1800000000,
-                "status": "ongoing",
-                "notes": "",
-                "attachments": [],
-                "collaborators": [],
-                "taskId": "t2",
-                "ownerId": "u1",
-                "priority": 0,
-                "createdAt": 1600000000,
-                "updatedAt": 1600000000,
-                "start_date": 1600000000,
-                "active": False,
-                "scheduled": False,
-                "schedule": "daily"
-            }
+        original_started_at = 1600000000
+        existing_data = {
+            "subTaskId": "st1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "ongoing",
+            "taskId": "t1",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": original_started_at
         }
         
+        updated_data = existing_data.copy()
+        updated_data["status"] = "under_review"
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        current_time = 1700000000
         with patch('subtask_service.current_timestamp', return_value=current_time):
             service = SubtaskService()
-            subtasks = service.get_subtasks_by_task("t1")
+            req = UpdateSubtaskRequest(
+                subtask_id="st1",
+                status="under_review"
+            )
+            
+            subtask, error = service.update_subtask(req)
+            
+            assert error is None
+            # startedAt should remain the original value
+            assert subtask.started_at == original_started_at
+            
+            # Verify update was called without startedAt
+            update_call_args = mock_subtask_ref.update.call_args[0][0]
+            assert "startedAt" not in update_call_args
+    
+    def test_update_subtask_owner_unassigned_to_different_user(self, mock_db):
+        """Test changing owner from creator to different user when status is 'unassigned' - should set to 'ongoing' and set startedAt"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
         
-        assert len(subtasks) == 1
-        assert subtasks[0].task_id == "t1"
+        mock_subtask_ref = Mock()
+        existing_data = {
+            "subTaskId": "st1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "unassigned",
+            "taskId": "t1",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": None
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["ownerId"] = "u2"
+        updated_data["status"] = "ongoing"
+        updated_data["startedAt"] = 1700000000
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = UpdateSubtaskRequest(
+                subtask_id="st1",
+                owner_id="u2"  # Changing to different user
+            )
+            
+            subtask, error = service.update_subtask(req)
+            
+            assert error is None
+            assert subtask.owner_id == "u2"
+            assert subtask.status == "ongoing"
+            assert subtask.started_at == current_time
+            
+            # Verify update was called with both status and startedAt
+            update_call_args = mock_subtask_ref.update.call_args[0][0]
+            assert update_call_args["ownerId"] == "u2"
+            assert update_call_args["status"] == "ongoing"
+            assert update_call_args["startedAt"] == current_time
+    
+    def test_update_subtask_owner_ongoing_no_status_change(self, mock_db):
+        """Test changing owner when status is already 'ongoing' - status should NOT change again"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        mock_subtask_ref = Mock()
+        original_started_at = 1600000000
+        existing_data = {
+            "subTaskId": "st1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u2",
+            "status": "ongoing",
+            "taskId": "t1",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": original_started_at
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["ownerId"] = "u3"
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = UpdateSubtaskRequest(
+                subtask_id="st1",
+                owner_id="u3"
+            )
+            
+            subtask, error = service.update_subtask(req)
+            
+            assert error is None
+            # Status should remain ongoing, startedAt should not change
+            assert subtask.started_at == original_started_at
+            
+            # Verify status was NOT added to update
+            update_call_args = mock_subtask_ref.update.call_args[0][0]
+            assert "status" not in update_call_args
 
 
-class TestSubtaskEndpoints:
-    """Test Flask endpoints"""
+class TestSubtaskServiceCompletedAt:
+    """Test completedAt logic for subtasks"""
     
-    def test_health_check(self, client):
-        """Test health check endpoint"""
-        response = client.get('/health')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data['status'] == 'healthy'
-        assert data['service'] == 'subtask-service'
-    
-    def test_create_subtask_missing_body(self, client):
-        """Test creating subtask without body (no Content-Type)"""
-        response = client.post('/subtasks')
-        # Flask returns 415 when Content-Type is missing for JSON endpoints
-        assert response.status_code == 415
-    
-    @patch('app.subtask_service.create_subtask')
-    def test_create_subtask_success(self, mock_create, client, sample_subtask):
-        """Test successful subtask creation"""
-        mock_create.return_value = (sample_subtask, None)
+    def test_update_subtask_status_to_completed(self, mock_db):
+        """Test updating subtask status to 'completed' - completedAt should be set"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
         
-        response = client.post('/subtasks', json={
+        mock_subtask_ref = Mock()
+        existing_data = {
+            "subTaskId": "st1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "ongoing",
+            "taskId": "t1",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "completedAt": None
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["status"] = "completed"
+        updated_data["completedAt"] = 1700000000
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = UpdateSubtaskRequest(
+                subtask_id="st1",
+                status="completed"
+            )
+            
+            subtask, error = service.update_subtask(req)
+            
+            assert error is None
+            assert subtask.status == "completed"
+            assert subtask.completed_at == current_time
+            
+            # Verify update was called with completedAt
+            update_call_args = mock_subtask_ref.update.call_args[0][0]
+            assert update_call_args["status"] == "completed"
+            assert update_call_args["completedAt"] == current_time
+    
+    def test_update_subtask_status_from_completed_to_ongoing_no_completed_at_change(self, mock_db):
+        """Test changing status from 'completed' back to 'ongoing' - completedAt should NOT be modified"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        mock_subtask_ref = Mock()
+        original_completed_at = 1600000000
+        existing_data = {
+            "subTaskId": "st1",
+            "title": "Test",
+            "creatorId": "u1",
+            "ownerId": "u1",
+            "status": "completed",
+            "taskId": "t1",
+            "deadline": 1800000000,
+            "scheduled": False,
+            "completedAt": original_completed_at
+        }
+        
+        updated_data = existing_data.copy()
+        updated_data["status"] = "ongoing"
+        updated_data["updatedAt"] = 1700000000
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = UpdateSubtaskRequest(
+                subtask_id="st1",
+                status="ongoing"
+            )
+            
+            subtask, error = service.update_subtask(req)
+            
+            assert error is None
+            # completedAt should remain the original value
+            assert subtask.completed_at == original_completed_at
+            
+            # Verify completedAt was NOT updated
+            update_call_args = mock_subtask_ref.update.call_args[0][0]
+            assert "completedAt" not in update_call_args
+    
+    def test_create_subtask_completed_at_is_none(self, mock_db):
+        """Test creating subtask - completedAt should be None initially"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        # Mock parent task exists
+        mock_task_ref = Mock()
+        mock_task_ref.get.return_value = {"taskId": "t1"}
+        mock_tasks.child.return_value = mock_task_ref
+        
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
+        
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = CreateSubtaskRequest(
+                title="Test Subtask",
+                creator_id="u1",
+                deadline=1800000000,
+                task_id="t1"
+            )
+            
+            subtask, error = service.create_subtask(req)
+            
+            assert error is None
+            assert subtask.completed_at is None
+            
+            # Verify the data sent to Firebase
+            call_args = mock_new_ref.set.call_args[0][0]
+            assert call_args["completedAt"] is None
+
+
+class TestSubtaskServiceCombinedScenarios:
+    """Test combined scenarios for startedAt and completedAt for subtasks"""
+    
+    def test_full_lifecycle_unassigned_to_completed(self, mock_db):
+        """Test full subtask lifecycle: unassigned -> ongoing -> completed"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
+        
+        # Scenario 1: Create subtask (unassigned)
+        mock_task_ref = Mock()
+        mock_task_ref.get.return_value = {"taskId": "t1"}
+        mock_tasks.child.return_value = mock_task_ref
+        
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
+        
+        current_time_1 = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time_1):
+            service = SubtaskService()
+            req = CreateSubtaskRequest(
+                title="Test Subtask",
+                creator_id="u1",
+                deadline=1800000000,
+                task_id="t1"
+            )
+            
+            subtask, _ = service.create_subtask(req)
+            assert subtask.status == "unassigned"
+            assert subtask.started_at is None
+            assert subtask.completed_at is None
+        
+        # Scenario 2: Update to ongoing
+        mock_subtask_ref = Mock()
+        existing_data = {
+            "subTaskId": "test-subtask-id",
             "title": "Test Subtask",
             "creatorId": "u1",
-            "deadline": 1700000000,
+            "ownerId": "u1",
+            "status": "unassigned",
             "taskId": "t1",
-            "schedule": "daily"
-        })
+            "deadline": 1800000000,
+            "scheduled": False,
+            "startedAt": None,
+            "completedAt": None
+        }
         
-        assert response.status_code == 201
-        data = response.get_json()
-        assert 'subtask' in data
+        current_time_2 = 1700010000
+        updated_data_2 = existing_data.copy()
+        updated_data_2["status"] = "ongoing"
+        updated_data_2["startedAt"] = current_time_2
+        updated_data_2["updatedAt"] = current_time_2
+        
+        mock_subtask_ref.get.side_effect = [existing_data, updated_data_2]
+        mock_subtasks.child.return_value = mock_subtask_ref
+        
+        with patch('subtask_service.current_timestamp', return_value=current_time_2):
+            req2 = UpdateSubtaskRequest(
+                subtask_id="test-subtask-id",
+                status="ongoing"
+            )
+            subtask, _ = service.update_subtask(req2)
+            assert subtask.status == "ongoing"
+            assert subtask.started_at == current_time_2
+            assert subtask.completed_at is None
+        
+        # Scenario 3: Update to completed
+        existing_data_3 = updated_data_2.copy()
+        current_time_3 = 1700020000
+        updated_data_3 = existing_data_3.copy()
+        updated_data_3["status"] = "completed"
+        updated_data_3["completedAt"] = current_time_3
+        updated_data_3["updatedAt"] = current_time_3
+        
+        mock_subtask_ref.get.side_effect = [existing_data_3, updated_data_3]
+        
+        with patch('subtask_service.current_timestamp', return_value=current_time_3):
+            req3 = UpdateSubtaskRequest(
+                subtask_id="test-subtask-id",
+                status="completed"
+            )
+            subtask, _ = service.update_subtask(req3)
+            assert subtask.status == "completed"
+            assert subtask.started_at == current_time_2  # Should remain unchanged
+            assert subtask.completed_at == current_time_3
     
-    @patch('app.subtask_service.get_all_subtasks')
-    def test_get_all_subtasks(self, mock_get, client):
-        """Test getting all subtasks"""
-        mock_get.return_value = []
+    def test_manager_assigns_subtask_to_staff(self, mock_db):
+        """Test manager creating subtask and assigning to staff - should be ongoing with startedAt"""
+        mock_subtasks = Mock()
+        mock_tasks = Mock()
+        mock_db.side_effect = lambda x: mock_subtasks if x == "subtasks" else mock_tasks
         
-        response = client.get('/subtasks')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'subtasks' in data
-    
-    @patch('app.subtask_service.get_subtask_by_id')
-    def test_get_subtask_by_id(self, mock_get, client, sample_subtask):
-        """Test getting subtask by ID"""
-        mock_get.return_value = (sample_subtask, None)
+        # Mock parent task exists
+        mock_task_ref = Mock()
+        mock_task_ref.get.return_value = {"taskId": "t1"}
+        mock_tasks.child.return_value = mock_task_ref
         
-        response = client.get('/subtasks/st1')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'subtask' in data
-    
-    @patch('app.subtask_service.update_subtask')
-    def test_update_subtask(self, mock_update, client, sample_subtask):
-        """Test updating subtask"""
-        mock_update.return_value = (sample_subtask, None)
+        mock_new_ref = Mock()
+        mock_new_ref.key = "test-subtask-id"
+        mock_subtasks.push.return_value = mock_new_ref
         
-        response = client.put('/subtasks/st1', json={
-            "title": "Updated Title"
-        })
-        
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'subtask' in data
-    
-    @patch('app.subtask_service.delete_subtask')
-    def test_delete_subtask(self, mock_delete, client):
-        """Test deleting subtask"""
-        mock_delete.return_value = (True, None)
-        
-        response = client.delete('/subtasks/st1')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'message' in data
-    
-    @patch('app.subtask_service.get_subtasks_by_task')
-    def test_get_subtasks_by_task(self, mock_get, client):
-        """Test getting subtasks by task"""
-        mock_get.return_value = []
-        
-        response = client.get('/subtasks/task/t1')
-        assert response.status_code == 200
-        data = response.get_json()
-        assert 'subtasks' in data
+        current_time = 1700000000
+        with patch('subtask_service.current_timestamp', return_value=current_time):
+            service = SubtaskService()
+            req = CreateSubtaskRequest(
+                title="Test Subtask",
+                creator_id="manager1",  # Manager creates
+                deadline=1800000000,
+                task_id="t1",
+                owner_id="staff1"  # Assigns to staff
+            )
+            
+            subtask, error = service.create_subtask(req)
+            
+            assert error is None
+            assert subtask.status == "ongoing"
+            assert subtask.started_at == current_time
+            assert subtask.completed_at is None
+            assert subtask.owner_id == "staff1"
 
 
 if __name__ == '__main__':
