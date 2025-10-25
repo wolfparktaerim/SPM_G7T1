@@ -5,3 +5,4 @@ firebase_admin
 apscheduler
 pytest
 pytest-mock
+pytest-cov

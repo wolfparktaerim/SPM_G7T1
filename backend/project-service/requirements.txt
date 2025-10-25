@@ -6,3 +6,4 @@ requests
 firebase_admin
 pytest
 pytest-mock
+pytest-cov

@@ -615,5 +615,538 @@ class TestSubtaskServiceCombinedScenarios:
             assert subtask.owner_id == "staff1"
 
 
+class TestSubtaskEndpoints:
+    """Test Flask endpoints"""
+
+    @pytest.fixture
+    def client(self):
+        """Create test client"""
+        from app import app
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    @patch('app.subtask_service.create_subtask')
+    def test_create_subtask_endpoint(self, mock_create, client, sample_subtask):
+        """Test POST /subtasks"""
+        mock_create.return_value = (sample_subtask, None)
+
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "taskId": "t1",
+            "creatorId": "u1",
+            "deadline": 1700000000
+        })
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data['subtask']['title'] == "Test Subtask"
+
+    @patch('app.subtask_service.create_subtask')
+    def test_create_subtask_invalid_data(self, mock_create, client):
+        """Test POST /subtasks with invalid data"""
+        mock_create.return_value = (None, "Validation failed")
+
+        response = client.post('/subtasks', json={
+            "title": "",
+            "taskId": "t1"
+        })
+
+        assert response.status_code == 400
+
+    def test_create_subtask_missing_body(self, client):
+        """Test POST /subtasks with missing body"""
+        response = client.post('/subtasks')
+        assert response.status_code in [400, 415]
+
+    @patch('app.subtask_service.get_all_subtasks')
+    def test_get_all_subtasks_endpoint(self, mock_get, client, sample_subtask):
+        """Test GET /subtasks"""
+        mock_get.return_value = [sample_subtask]
+
+        response = client.get('/subtasks')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['subtasks']) == 1
+
+    @patch('app.subtask_service.get_subtask_by_id')
+    def test_get_subtask_by_id_endpoint(self, mock_get, client, sample_subtask):
+        """Test GET /subtasks/<id>"""
+        mock_get.return_value = (sample_subtask, None)
+
+        response = client.get('/subtasks/s1')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['subtask']['subTaskId'] == "st1"
+
+    @patch('app.subtask_service.get_subtask_by_id')
+    def test_get_subtask_by_id_not_found(self, mock_get, client):
+        """Test GET /subtasks/<id> not found"""
+        mock_get.return_value = (None, "Subtask not found")
+
+        response = client.get('/subtasks/invalid')
+        assert response.status_code == 404
+
+    @patch('app.subtask_service.update_subtask')
+    @patch('app.subtask_service.get_subtask_by_id')
+    def test_update_subtask_endpoint(self, mock_get, mock_update, client, sample_subtask):
+        """Test PUT /subtasks/<id>"""
+        from models import Subtask
+        updated_subtask = Subtask(**{**sample_subtask.__dict__, 'title': 'Updated Subtask'})
+        mock_get.return_value = (sample_subtask, None)
+        mock_update.return_value = (updated_subtask, None)
+
+        response = client.put('/subtasks/s1', json={
+            "title": "Updated Subtask"
+        })
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['subtask']['title'] == "Updated Subtask"
+
+    @patch('app.subtask_service.update_subtask')
+    def test_update_subtask_not_found(self, mock_update, client):
+        """Test PUT /subtasks/<id> not found"""
+        mock_update.return_value = (None, "Subtask not found")
+
+        response = client.put('/subtasks/invalid', json={
+            "title": "Updated"
+        }, headers={'Content-Type': 'application/json'})
+
+        assert response.status_code == 404
+
+    def test_update_subtask_missing_body(self, client):
+        """Test PUT /subtasks/<id> with missing body"""
+        response = client.put('/subtasks/s1')
+        assert response.status_code in [400, 415]
+
+    @patch('app.subtask_service.delete_subtask')
+    def test_delete_subtask_endpoint(self, mock_delete, client):
+        """Test DELETE /subtasks/<id>"""
+        mock_delete.return_value = (True, None)
+
+        response = client.delete('/subtasks/s1')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['message'] == "Subtask deleted successfully"
+
+    @patch('app.subtask_service.delete_subtask')
+    def test_delete_subtask_not_found(self, mock_delete, client):
+        """Test DELETE /subtasks/<id> not found"""
+        mock_delete.return_value = (False, "Subtask not found")
+
+        response = client.delete('/subtasks/invalid')
+        assert response.status_code == 404
+
+    @patch('app.subtask_service.get_subtasks_by_task')
+    def test_get_subtasks_by_task_endpoint(self, mock_get, client, sample_subtask):
+        """Test GET /subtasks/task/<id>"""
+        mock_get.return_value = [sample_subtask]
+
+        response = client.get('/subtasks/task/t1')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['subtasks']) == 1
+        assert data['subtasks'][0]['taskId'] == "t1"
+
+    def test_health_check_endpoint(self, client):
+        """Test GET /health"""
+        response = client.get('/health')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'healthy'
+        assert data['service'] == 'subtask-service'
+
+    def test_create_subtask_invalid_deadline(self, client):
+        """Test POST /subtasks with invalid deadline"""
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "taskId": "t1",
+            "creatorId": "u1",
+            "deadline": "invalid"
+        })
+        assert response.status_code == 400
+
+    @patch('app.subtask_service.update_subtask')
+    @patch('app.subtask_service.get_subtask_by_id')
+    def test_update_subtask_invalid_data(self, mock_get, mock_update, client, sample_subtask):
+        """Test PUT /subtasks/<id> with invalid data"""
+        mock_get.return_value = (sample_subtask, None)
+        mock_update.return_value = (None, "Invalid data")
+
+        response = client.put('/subtasks/s1', json={
+            "status": "invalid_status"
+        })
+
+        assert response.status_code == 400
+
+    def test_create_subtask_invalid_status(self, client):
+        """Test POST /subtasks with invalid status"""
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "taskId": "t1",
+            "creatorId": "u1",
+            "deadline": 1700000000,
+            "status": "invalid_status"
+        })
+        assert response.status_code == 400
+
+    def test_create_subtask_invalid_schedule(self, client):
+        """Test POST /subtasks with invalid schedule"""
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "taskId": "t1",
+            "creatorId": "u1",
+            "deadline": 1700000000,
+            "schedule": "invalid"
+        })
+        assert response.status_code == 400
+
+    def test_create_subtask_with_negative_start_date(self, client):
+        """Test POST /subtasks with negative start_date"""
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "taskId": "t1",
+            "creatorId": "u1",
+            "deadline": 1700000000,
+            "start_date": -1
+        })
+        assert response.status_code == 400
+
+    @patch('app.subtask_service.create_subtask')
+    def test_create_subtask_service_error(self, mock_create, client):
+        """Test POST /subtasks when service returns error"""
+        mock_create.return_value = (None, "Task not found")
+
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "taskId": "invalid_task",
+            "creatorId": "u1",
+            "deadline": 1700000000
+        })
+        assert response.status_code == 404
+
+    @patch('app.subtask_service.create_subtask')
+    def test_create_subtask_service_error_400(self, mock_create, client):
+        """Test POST /subtasks with non-404 error"""
+        mock_create.return_value = (None, "Invalid data")
+
+        response = client.post('/subtasks', json={
+            "title": "Test Subtask",
+            "taskId": "t1",
+            "creatorId": "u1",
+            "deadline": 1700000000
+        })
+        assert response.status_code == 400
+
+    def test_update_subtask_invalid_deadline(self, client):
+        """Test PUT /subtasks/<id> with invalid deadline"""
+        response = client.put('/subtasks/s1', json={
+            "deadline": "invalid"
+        })
+        assert response.status_code == 400
+
+    def test_update_subtask_invalid_start_date(self, client):
+        """Test PUT /subtasks/<id> with invalid start_date"""
+        response = client.put('/subtasks/s1', json={
+            "startDate": -1
+        })
+        assert response.status_code == 400
+
+    def test_update_subtask_invalid_status(self, client):
+        """Test PUT /subtasks/<id> with invalid status"""
+        response = client.put('/subtasks/s1', json={
+            "status": "invalid"
+        })
+        assert response.status_code == 400
+
+    def test_update_subtask_invalid_schedule(self, client):
+        """Test PUT /subtasks/<id> with invalid schedule"""
+        response = client.put('/subtasks/s1', json={
+            "schedule": "invalid"
+        })
+        assert response.status_code == 400
+
+    @patch('app.subtask_service.update_subtask')
+    def test_update_subtask_service_error_404(self, mock_update, client):
+        """Test PUT /subtasks/<id> with not found error"""
+        mock_update.return_value = (None, "Subtask not found")
+
+        response = client.put('/subtasks/s1', json={
+            "title": "Updated"
+        })
+        assert response.status_code == 404
+
+    @patch('app.subtask_service.update_subtask')
+    def test_update_subtask_service_error_400(self, mock_update, client):
+        """Test PUT /subtasks/<id> with validation error"""
+        mock_update.return_value = (None, "Invalid update")
+
+        response = client.put('/subtasks/s1', json={
+            "title": "Updated"
+        })
+        assert response.status_code == 400
+
+    def test_create_subtask_with_null_body(self, client):
+        """Test POST /subtasks with null JSON body"""
+        response = client.post('/subtasks',
+                              data='null',
+                              content_type='application/json')
+        assert response.status_code == 400
+
+    def test_update_subtask_with_null_body(self, client):
+        """Test PUT /subtasks/<id> with null JSON body"""
+        response = client.put('/subtasks/s1',
+                             data='null',
+                             content_type='application/json')
+        assert response.status_code == 400
+
+
+class TestSubtaskServiceAdditionalMethods:
+    """Test additional SubtaskService methods for better coverage"""
+
+    @patch('subtask_service.current_timestamp')
+    def test_calculate_new_start_date_daily(self, mock_timestamp, mock_db):
+        """Test calculate_new_start_date for daily schedule"""
+        from datetime import datetime, timezone, timedelta
+        # Set current time to be in the future so the calculated date won't be adjusted
+        old_date = datetime(2023, 11, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_timestamp.return_value = int(old_date.timestamp())
+
+        service = SubtaskService()
+        old_ts = int(old_date.timestamp())
+        new_ts = service.calculate_new_start_date(old_ts, "daily")
+
+        # Should be 1 day later
+        new_date = datetime.fromtimestamp(new_ts, tz=timezone.utc)
+        expected_date = old_date + timedelta(days=1)
+        assert new_date.date() == expected_date.date()
+
+    @patch('subtask_service.current_timestamp')
+    def test_calculate_new_start_date_weekly(self, mock_timestamp, mock_db):
+        """Test calculate_new_start_date for weekly schedule"""
+        from datetime import datetime, timezone, timedelta
+        old_date = datetime(2023, 11, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_timestamp.return_value = int(old_date.timestamp())
+
+        service = SubtaskService()
+        old_ts = int(old_date.timestamp())
+        new_ts = service.calculate_new_start_date(old_ts, "weekly")
+
+        # Should be 7 days later
+        new_date = datetime.fromtimestamp(new_ts, tz=timezone.utc)
+        expected_date = old_date + timedelta(weeks=1)
+        assert new_date.date() == expected_date.date()
+
+    @patch('subtask_service.current_timestamp')
+    def test_calculate_new_start_date_monthly(self, mock_timestamp, mock_db):
+        """Test calculate_new_start_date for monthly schedule"""
+        from datetime import datetime, timezone
+        old_date = datetime(2023, 11, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_timestamp.return_value = int(old_date.timestamp())
+
+        service = SubtaskService()
+        old_ts = int(old_date.timestamp())
+        new_ts = service.calculate_new_start_date(old_ts, "monthly")
+
+        # Should be 1 month later
+        new_date = datetime.fromtimestamp(new_ts, tz=timezone.utc)
+        # Month should be incremented
+        assert new_date.month == 12 or (new_date.month == 1 and new_date.year == 2024)
+
+    @patch('subtask_service.requests.post')
+    def test_send_subtask_update_notification_success(self, mock_post, mock_db):
+        """Test send_subtask_update_notification successfully sends"""
+        mock_users_ref = Mock()
+        mock_prefs_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        # Setup user data
+        mock_users_ref.child.return_value.get.return_value = {"email": "user@test.com"}
+        mock_prefs_ref.child.return_value.get.return_value = {
+            "taskUpdateReminders": True,
+            "channel": "both"
+        }
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def db_side_effect(arg):
+            if arg == "users":
+                return mock_users_ref
+            elif arg == "notificationPreferences":
+                return mock_prefs_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+        mock_post.return_value.status_code = 200
+
+        service = SubtaskService()
+        service.send_subtask_update_notification("s1", "Test Subtask", "to_do", "in_progress", "u1", ["u2"], "t1")
+
+        # Should have made notification API call
+        assert mock_post.called
+
+    @patch('subtask_service.requests.post')
+    def test_send_subtask_update_notification_disabled_preference(self, mock_post, mock_db):
+        """Test send_subtask_update_notification with disabled user preference"""
+        mock_users_ref = Mock()
+        mock_prefs_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        # Setup user data with notifications disabled
+        mock_users_ref.child.return_value.get.return_value = {"email": "user@test.com"}
+        mock_prefs_ref.child.return_value.get.return_value = {
+            "taskUpdateReminders": False
+        }
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def db_side_effect(arg):
+            if arg == "users":
+                return mock_users_ref
+            elif arg == "notificationPreferences":
+                return mock_prefs_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+
+        service = SubtaskService()
+        service.send_subtask_update_notification("s1", "Test Subtask", "to_do", "in_progress", "u1", ["u2"], "t1")
+
+        # Should not make API call since preference is disabled
+        mock_post.assert_not_called()
+
+    @patch('subtask_service.requests.post')
+    def test_send_subtask_update_notification_no_preferences(self, mock_post, mock_db):
+        """Test send_subtask_update_notification with no user preferences set"""
+        mock_users_ref = Mock()
+        mock_prefs_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        # Setup user data but no preferences
+        mock_users_ref.child.return_value.get.return_value = {"email": "user@test.com"}
+        mock_prefs_ref.child.return_value.get.return_value = None
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def db_side_effect(arg):
+            if arg == "users":
+                return mock_users_ref
+            elif arg == "notificationPreferences":
+                return mock_prefs_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+        mock_post.return_value.status_code = 200
+
+        service = SubtaskService()
+        service.send_subtask_update_notification("s1", "Test Subtask", "to_do", "in_progress", "u1", ["u2"], "t1")
+
+        # Should use default settings and send notification
+        assert mock_post.called
+
+    @patch('subtask_service.requests.post')
+    def test_send_subtask_update_notification_api_failure(self, mock_post, mock_db):
+        """Test send_subtask_update_notification handles API failure"""
+        mock_users_ref = Mock()
+        mock_prefs_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        mock_users_ref.child.return_value.get.return_value = {"email": "user@test.com"}
+        mock_prefs_ref.child.return_value.get.return_value = None
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def db_side_effect(arg):
+            if arg == "users":
+                return mock_users_ref
+            elif arg == "notificationPreferences":
+                return mock_prefs_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+        mock_post.return_value.status_code = 500
+        mock_post.return_value.text = "Server error"
+
+        service = SubtaskService()
+        # Should not raise exception
+        service.send_subtask_update_notification("s1", "Test Subtask", "to_do", "in_progress", "u1", ["u2"], "t1")
+
+    @patch('subtask_service.requests.post')
+    def test_send_subtask_update_notification_exception(self, mock_post, mock_db):
+        """Test send_subtask_update_notification handles exceptions"""
+        mock_users_ref = Mock()
+        mock_prefs_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        mock_users_ref.child.return_value.get.return_value = {"email": "user@test.com"}
+        mock_prefs_ref.child.return_value.get.return_value = None
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def db_side_effect(arg):
+            if arg == "users":
+                return mock_users_ref
+            elif arg == "notificationPreferences":
+                return mock_prefs_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+        mock_post.side_effect = Exception("Network error")
+
+        service = SubtaskService()
+        # Should not raise exception, should handle gracefully
+        service.send_subtask_update_notification("s1", "Test Subtask", "to_do", "in_progress", "u1", ["u2"], "t1")
+
+    @patch('subtask_service.requests.post')
+    def test_send_subtask_update_notification_preference_fetch_error(self, mock_post, mock_db):
+        """Test send_subtask_update_notification when preference fetch fails"""
+        mock_users_ref = Mock()
+        mock_prefs_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        mock_users_ref.child.return_value.get.return_value = {"email": "user@test.com"}
+        # Simulate exception when fetching preferences
+        mock_prefs_ref.child.return_value.get.side_effect = Exception("DB error")
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def db_side_effect(arg):
+            if arg == "users":
+                return mock_users_ref
+            elif arg == "notificationPreferences":
+                return mock_prefs_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+        mock_post.return_value.status_code = 200
+
+        service = SubtaskService()
+        # Should fallback to default and still send
+        service.send_subtask_update_notification("s1", "Test Subtask", "to_do", "in_progress", "u1", ["u2"], "t1")
+
+        assert mock_post.called
+
+    def test_validate_status_valid(self, mock_db):
+        """Test validate_status with valid statuses"""
+        service = SubtaskService()
+        assert service.validate_status("ongoing") == True
+        assert service.validate_status("unassigned") == True
+        assert service.validate_status("under_review") == True
+        assert service.validate_status("completed") == True
+
+    def test_validate_status_invalid(self, mock_db):
+        """Test validate_status with invalid status"""
+        service = SubtaskService()
+        assert service.validate_status("invalid") == False
+        assert service.validate_status("") == False
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

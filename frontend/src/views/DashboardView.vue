@@ -156,6 +156,16 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
               </button>
+              <!-- Generate Project Report -->
+              <button @click="openReport" class="quick-action-btn group">
+                <div class="quick-action-icon bg-indigo-100 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <span class="font-medium text-gray-700 group-hover:text-gray-900">Generate Project Report</span>
+              </button>
             </div>
           </div>
 
@@ -437,30 +447,293 @@
           </div>
         </div>
       </div>
+
+<!-- Project Report Modal -->
+<div
+  v-if="showReport"
+  class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+>
+  <div
+    class="bg-white rounded-lg shadow-lg max-w-5xl w-full max-h-[80vh] overflow-y-auto p-6"
+  >
+    <!-- Header -->
+    <header class="flex items-center justify-between border-b pb-3 mb-6">
+      <h2 class="text-3xl font-bold text-gray-800">Project Report</h2>
+      <button
+        @click="showReport = false"
+        class="text-gray-500 hover:text-gray-700 text-xl"
+        title="Close"
+      >
+        &times;
+      </button>
+    </header>
+
+    <!-- Access Level Indicator -->
+    <div class="mb-4 p-3 bg-blue-50 rounded-lg text-sm">
+      <span class="font-semibold">Viewing as:</span>
+      <span class="ml-2">
+        {{ currentUserDepartment }} 
+        <template v-if="currentRole">
+          - {{ currentRole }}
+        </template>
+      </span>
+      <span 
+        v-if="currentUserDepartment?.toLowerCase() === 'hr and admin'" 
+        class="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs"
+      >
+        Full Access
+      </span>
+      <span 
+        v-else-if="currentRole?.toLowerCase() === 'director'" 
+        class="ml-2 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs"
+      >
+        Department Access
+      </span>
+    </div>
+
+    <!-- Report Content -->
+    <div id="report-content" class="space-y-8">
+      <!-- Project Sections -->
+      <section
+        v-for="project in filteredProjects"
+        :key="project.projectId"
+        class="border-b pb-6"
+      >
+        <!-- Project Header with Progress -->
+        <div class="mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-2xl font-semibold text-indigo-700">
+              {{ project.title }}
+              
+              <!-- Optional: Show department badge for directors -->
+              <span 
+                v-if="currentRole?.toLowerCase() === 'director' && currentUserDepartment?.toLowerCase() !== 'hr and admin'"
+                class="ml-2 text-sm px-2 py-1 bg-indigo-100 rounded-full"
+              >
+                {{ project.department }}
+              </span>
+            </h3>
+            
+            <!-- Progress Stats -->
+            <div class="text-right">
+              <span class="text-sm font-semibold text-gray-700">
+                {{ getProjectProgress(project.projectId).completed }} / {{ getProjectProgress(project.projectId).total }} tasks
+              </span>
+              <span class="text-xs text-gray-500 ml-2">
+                ({{ getProjectProgress(project.projectId).percentage }}%)
+              </span>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
+            <div 
+              class="h-full rounded-full transition-all duration-500 ease-out flex items-center justify-end pr-2 bg-gradient-to-r from-green-500 to-green-600"
+              :style="{ width: `${getProjectProgress(project.projectId).percentage}%` }"
+            >
+              <span 
+                v-if="getProjectProgress(project.projectId).percentage > 10" 
+                class="text-xs font-bold text-white drop-shadow"
+              >
+                {{ getProjectProgress(project.projectId).percentage }}%
+              </span>
+            </div>
+          </div>
+
+          <!-- Status Summary -->
+          <div class="flex gap-4 mt-3 text-xs flex-wrap">
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-green-500"></span>
+              <span class="text-gray-600">Completed: {{ getProjectStatusCount(project.projectId, 'completed') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span class="text-gray-600">Ongoing: {{ getProjectStatusCount(project.projectId, 'ongoing') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+              <span class="text-gray-600">Under Review: {{ getProjectStatusCount(project.projectId, 'under_review') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+              <span class="text-gray-600">Unassigned: {{ getProjectStatusCount(project.projectId, 'unassigned') }}</span>
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-red-500"></span>
+              <span class="text-gray-600">Overdue: {{ getProjectOverdueCount(project.projectId) }}</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Tasks List -->
+        <div
+          v-if="tasksByProject(project.projectId).length === 0"
+          class="italic text-gray-400 ml-4"
+        >
+          No tasks for this project.
+        </div>
+
+        <ul v-else class="space-y-3">
+          <li
+  v-for="task in tasksByProject(project.projectId)"
+  :key="task.taskId"
+  class="p-4 border rounded-lg"
+  :class="isTaskOverdue(task) ? 'bg-red-50 border-red-200' : 'bg-gray-50'"
+>
+  <div class="space-y-2">
+    <!-- Task Title and Overdue Badge -->
+    <div class="flex items-center gap-2">
+      <div class="font-semibold text-lg text-gray-800">
+        {{ task.title }}
+      </div>
+      
+      <!-- Overdue Badge -->
+      <span 
+        v-if="isTaskOverdue(task)"
+        class="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-full font-medium whitespace-nowrap"
+      >
+        ⚠️ Overdue
+      </span>
+    </div>
+
+    <!-- Status -->
+    <div class="text-sm text-gray-600">
+      <span class="font-medium">Status:</span>
+      <span class="capitalize font-medium text-gray-800 ml-1">
+        {{ task.status.replace('_', ' ') }}
+      </span>
+    </div>
+
+    <!-- Duration Section (for completed tasks) -->
+    <div
+      v-if="task.status === 'completed'"
+      class="text-sm text-gray-600"
+    >
+      <span class="font-medium">Duration:</span>
+      <span class="font-medium text-gray-800 ml-1">
+        {{ formatDuration(task.startedAt, task.completedAt) }}
+      </span>
+    </div>
+    
+    <!-- Deadline Section (for incomplete tasks) -->
+    <div 
+      v-else-if="task.deadline"
+      class="text-sm"
+    >
+      <span 
+        class="font-medium"
+        :class="isTaskOverdue(task) ? 'text-red-600' : 'text-gray-600'"
+      >
+        Deadline:
+      </span>
+      <span 
+        class="ml-1"
+        :class="isTaskOverdue(task) ? 'text-red-700 font-semibold' : 'text-gray-800'"
+      >
+        {{ formatDeadline(task.deadline) }}
+      </span>
+      <span 
+        v-if="isTaskOverdue(task)" 
+        class="text-red-700 font-bold ml-1"
+      >
+        ({{ getDaysOverdue(task.deadline) }} days overdue)
+      </span>
+    </div>
+   
+    <!-- Collaborators Section -->
+    <div v-if="task.collaborators?.length" class="pt-2 border-t border-gray-200">
+      <h4 class="text-sm font-semibold text-gray-700 mb-2">Collaborators</h4>
+      <div class="flex flex-wrap gap-2">
+        <div
+          v-for="user in getCollaboratorsForTask(task)"
+          :key="user.uid"
+          class="flex items-center gap-2 px-3 py-1 bg-white border border-gray-200 rounded-full"
+        >
+          <img
+            v-if="user.photoURL"
+            :src="user.photoURL"
+            alt="profile"
+            class="w-6 h-6 rounded-full object-cover"
+          />
+          <span class="text-sm">{{ user.name || user.displayName || user.email }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="pt-2 border-t border-gray-200 text-gray-500 text-sm italic">
+      No collaborators assigned.
+    </div>
+  </div>
+</li>
+
+        </ul>
+      </section>
+    </div>
+
+    <!-- Footer Buttons -->
+    <footer class="mt-8 flex justify-end gap-4">
+      <button
+        @click="exportPDF"
+        class="px-5 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition"
+      >
+        Export as PDF
+      </button>
+      <button
+        @click="showReport = false"
+        class="px-5 py-2 border rounded hover:bg-gray-100 transition"
+      >
+        Close
+      </button>
+    </footer>
+  </div>
+</div>
+
+
+
     </div>
   </div>
 </template>
 
 <script setup>
+/* ========================
+   Imports
+======================== */
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth'
+import { usersService } from '@/services/users'
 import NavigationBar from '@/components/NavigationBar.vue'
 import axios from 'axios'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas-pro'
 
+/* ========================
+   Setup
+======================== */
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
 
-// Reactive data
+/* ========================
+   Reactive State
+======================== */
 const loading = ref(true)
 const tasks = ref([])
 const subtasks = ref([])
 const projects = ref([])
+const allUsers = ref([])
 
-// Statistics
+const showReport = ref(false)
+const tasksForReport = ref([])
+const projectsForReport = ref([])
+
+// Role and Department state
+const currentUser = ref(null)
+const currentRole = ref('')
+const currentUserDepartment = ref('')
+
 const statistics = ref({
   totalTasks: 0,
   totalSubtasks: 0,
@@ -474,255 +747,615 @@ const statistics = ref({
   lowPriority: 0
 })
 
-// Computed properties
-const completionRate = computed(() => {
-  if (statistics.value.totalTasks === 0) return 0
-  return Math.round((statistics.value.completedTasks / statistics.value.totalTasks) * 100)
+/* ========================
+   Computed Properties
+======================== */
+
+// Filtered projects based on department and role
+const filteredProjects = computed(() => {
+  const dept = currentUserDepartment.value?.toLowerCase()
+  const role = currentRole.value?.toLowerCase()
+  const uid = authStore.user?.uid
+
+  if (dept === 'hr and admin') return projects.value
+
+  if (role === 'director') {
+    return projects.value.filter(p => p.department === dept)
+  }
+
+  return projects.value.filter(
+    p => p.ownerId === uid || p.collaborators?.includes(uid)
+  )
 })
+
+const completionRate = computed(() =>
+  statistics.value.totalTasks === 0
+    ? 0
+    : Math.round((statistics.value.completedTasks / statistics.value.totalTasks) * 100)
+)
 
 const upcomingTasks = computed(() => {
   const now = Date.now() / 1000
-  const allTasks = [...tasks.value, ...subtasks.value]
-
-  return allTasks
-    .filter(task => task.deadline && task.deadline > now && task.status !== 'completed')
+  return [...tasks.value, ...subtasks.value]
+    .filter(t => t.deadline && t.deadline > now && t.status !== 'completed')
     .sort((a, b) => a.deadline - b.deadline)
     .slice(0, 5)
 })
 
-const recentTasks = computed(() => {
-  const allTasks = [...tasks.value, ...subtasks.value]
-
-  return allTasks
+const recentTasks = computed(() =>
+  [...tasks.value, ...subtasks.value]
     .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
     .slice(0, 5)
-})
+)
 
-// Methods
+const getCollaboratorsForTask = (task) => {
+  if (!task?.collaborators?.length) return []
+  return task.collaborators
+    .map(uid => allUsers.value.find(u => u.uid === uid))
+    .filter(Boolean) // remove undefined if a uid doesn't match
+}
+
+/* ========================
+   Data Fetching
+======================== */
+
 async function fetchData() {
   loading.value = true
   try {
-    await Promise.all([
-      fetchTasks(),
-      fetchSubtasks(),
-      fetchProjects()
-    ])
+    // 1️⃣ Fetch current user info first (role + department)
+    await fetchCurrentUserInfo()
+
+    // 2️⃣ Fetch projects AFTER knowing role/department
+    await fetchProjects()
+
+    // 3️⃣ Fetch tasks, subtasks, users (parallel)
+    await Promise.all([fetchTasks(), fetchSubtasks(), fetchUsers()])
+
+    // 4️⃣ Compute statistics
     calculateStatistics()
-  } catch (error) {
-    console.error('Error fetching dashboard data:', error)
+  } catch (err) {
+    console.error('Error fetching dashboard data:', err)
     toast.error('Failed to load dashboard data')
   } finally {
     loading.value = false
   }
 }
 
-async function fetchTasks() {
-  try {
-    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
-    const currentUserId = authStore.user?.uid
 
-    tasks.value = (response.data.tasks || []).filter(task =>
-      task.ownerId === currentUserId ||
-      task.collaborators?.includes(currentUserId) ||
-      task.creatorId === currentUserId
-    )
+async function fetchCurrentUserInfo() {
+  try {
+    if (!authStore.user?.uid) return
+    const info = await usersService.getUserById(authStore.user.uid)
+
+    currentUser.value = info // store full user object, not just UID
+    currentRole.value = info.role || ''
+    currentUserDepartment.value = info.department || ''
+
+    console.log('Current user info:', currentUser.value)
   } catch (error) {
-    console.error('Error fetching tasks:', error)
-    tasks.value = []
+    console.error('Error fetching current user info:', error)
   }
 }
 
+
+async function fetchTasks() {
+  try {
+    console.log('Fetching tasks from:', `${import.meta.env.VITE_BACKEND_API}tasks`)
+    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
+    const allTasks = response.data.tasks || []
+    const uid = authStore.user?.uid
+    const role = currentRole.value?.toLowerCase()
+    const dept = currentUserDepartment.value?.toLowerCase()
+
+    if (!uid) {
+      tasks.value = []
+      return
+    }
+
+    // HR/Admin + Directors: all tasks
+    if (dept === 'hr and admin' || role === 'director') {
+      tasks.value = allTasks
+    } else {
+      // Regular users: only tasks where user is owner/collaborator/creator
+      tasks.value = allTasks.filter(
+        t =>
+          t.ownerId === uid ||
+          t.collaborators?.includes(uid) ||
+          t.creatorId === uid
+      )
+    }
+
+    console.log(`Loaded ${tasks.value.length} tasks for user ${uid}`)
+  } catch (error) {
+    console.error('Error fetching tasks:', error)
+    tasks.value = []
+    toast.error('Failed to load tasks')
+  }
+}
+
+
 async function fetchSubtasks() {
   try {
-    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
-    const currentUserId = authStore.user?.uid
-
-    subtasks.value = (response.data.subtasks || []).filter(subtask =>
-      subtask.ownerId === currentUserId ||
-      subtask.collaborators?.includes(currentUserId) ||
-      subtask.creatorId === currentUserId
+    const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_API}subtasks`)
+    const userId = authStore.user?.uid
+    subtasks.value = (data.subtasks || []).filter(
+      s => s.ownerId === userId || s.collaborators?.includes(userId) || s.creatorId === userId
     )
-  } catch (error) {
-    console.error('Error fetching subtasks:', error)
+  } catch (err) {
+    console.error('Error fetching subtasks:', err)
     subtasks.value = []
   }
 }
 
 async function fetchProjects() {
   try {
-    if (!authStore.user?.uid) return
+    const API = import.meta.env.VITE_BACKEND_API
+    const role = currentRole.value?.toLowerCase()
+    const dept = currentUserDepartment.value?.toLowerCase()
+    const uid = authStore.user?.uid
 
-    const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}project/${authStore.user.uid}`)
-    projects.value = response.data.projects || []
-  } catch (error) {
-    console.error('Error fetching projects:', error)
+    if (!uid) {
+      console.warn('fetchProjects: user UID not available yet')
+      projects.value = []
+      return
+    }
+
+    console.log('fetchProjects → role:', role, 'department:', dept, 'uid:', uid)
+
+    let response
+
+    if (dept === 'hr and admin') {
+      // HR/Admin: all projects
+      response = await axios.get(`${API}project/all`)
+    } else if (role === 'director') {
+      // Directors: department projects
+      response = await axios.get(`${API}project/department/${currentUserDepartment.value}`)
+    } else {
+      // Regular users: own projects
+      response = await axios.get(`${API}project/${uid}`)
+    }
+
+    // Ensure projects have department property in lowercase for filtering
+    projects.value = (response.data.projects || []).map(p => ({
+      ...p,
+      department: p.department?.toLowerCase() || ''
+    }))
+
+    console.log(`Loaded ${projects.value.length} projects for user ${uid}`)
+  } catch (err) {
+    console.error('Error fetching projects:', err)
     projects.value = []
+    toast.error('Failed to load projects')
   }
 }
 
+
+
+
+async function fetchUsers() {
+  try {
+    const users = await usersService.getAllUsers()
+    allUsers.value = users
+    console.log(`Loaded ${allUsers.value.length} users`)
+  } catch (error) {
+    console.error('Error fetching users:', error)
+  }
+}
+/* ========================
+   Progress Calculation Functions
+======================== */
+
+// Get project progress statistics
+function getProjectProgress(projectId) {
+  const projectTasks = tasksForReport.value.filter(t => t.projectId === projectId)
+  const total = projectTasks.length
+  const completed = projectTasks.filter(t => t.status === 'completed').length
+  const percentage = total === 0 ? 0 : Math.round((completed / total) * 100)
+  
+  return { total, completed, percentage }
+}
+
+// Get count of tasks by status for a project
+function getProjectStatusCount(projectId, status) {
+  return tasksForReport.value.filter(
+    t => t.projectId === projectId && t.status === status
+  ).length
+}
+
+// Get progress bar color based on percentage
+function getProgressBarColor(percentage) {
+  if (percentage === 100) return 'bg-gradient-to-r from-green-500 to-green-600'
+  if (percentage >= 75) return 'bg-gradient-to-r from-blue-500 to-blue-600'
+  if (percentage >= 50) return 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+  if (percentage >= 25) return 'bg-gradient-to-r from-yellow-500 to-yellow-600'
+  return 'bg-gradient-to-r from-red-500 to-red-600'
+}
+
+/* ========================
+   Report + PDF
+======================== */
+function openReport() {
+  tasksForReport.value = tasks.value
+  projectsForReport.value = filteredProjects.value  // Use filtered projects
+  showReport.value = true
+}
+
+import autoTable from 'jspdf-autotable'
+
+async function exportPDF() {
+  try {
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    let yPosition = 20
+
+    // Add header
+    pdf.setFontSize(20)
+    pdf.setFont(undefined, 'bold')
+    pdf.text('Project Report', pageWidth / 2, yPosition, { align: 'center' })
+    yPosition += 10
+
+    // Add access level info
+    pdf.setFontSize(10)
+    pdf.setFont(undefined, 'normal')
+    pdf.text(`Viewing as: ${currentUserDepartment.value} - ${currentRole.value}`, 14, yPosition)
+    yPosition += 10
+
+    // Loop through each project
+    for (const project of filteredProjects.value) {
+      const projectTasks = tasksByProject(project.projectId)
+      const progress = getProjectProgress(project.projectId)
+
+      // Check if we need a new page
+      if (yPosition > 250) {
+        pdf.addPage()
+        yPosition = 20
+      }
+
+      // Project title
+      pdf.setFontSize(16)
+      pdf.setFont(undefined, 'bold')
+      pdf.setTextColor(79, 70, 229) // Indigo color
+      pdf.text(project.title, 14, yPosition)
+      yPosition += 8
+
+      // Progress info
+      pdf.setFontSize(10)
+      pdf.setFont(undefined, 'normal')
+      pdf.setTextColor(0, 0, 0)
+      pdf.text(
+        `Progress: ${progress.completed}/${progress.total} tasks (${progress.percentage}%)`,
+        14,
+        yPosition
+      )
+      yPosition += 7
+
+      // Status counts
+      const statusText = [
+        `Completed: ${getProjectStatusCount(project.projectId, 'completed')}`,
+        `Ongoing: ${getProjectStatusCount(project.projectId, 'ongoing')}`,
+        `Under Review: ${getProjectStatusCount(project.projectId, 'under_review')}`,
+        `Unassigned: ${getProjectStatusCount(project.projectId, 'unassigned')}`,
+        `Overdue: ${getProjectOverdueCount(project.projectId)}`
+      ].join(' | ')
+      
+      pdf.setFontSize(9)
+      pdf.setTextColor(100, 100, 100)
+      pdf.text(statusText, 14, yPosition)
+      yPosition += 10
+
+      if (projectTasks.length === 0) {
+        pdf.setFontSize(10)
+        pdf.setTextColor(150, 150, 150)
+        pdf.text('No tasks for this project.', 20, yPosition)
+        yPosition += 10
+      } else {
+        // Create table data for tasks
+const tableData = projectTasks.map(task => {
+  let timeInfo = ''
+  
+  if (task.status === 'completed') {
+    // Show duration for completed tasks
+    timeInfo = `Duration: ${formatDuration(task.startedAt, task.completedAt)}`
+  } else if (task.deadline) {
+    // Show deadline for incomplete tasks
+    const deadlineStr = formatDeadline(task.deadline)
+    if (isTaskOverdue(task)) {
+      const daysOverdue = getDaysOverdue(task.deadline)
+      // Use plain text instead of emoji
+      timeInfo = `OVERDUE: ${deadlineStr} (${daysOverdue} days late)`
+    } else {
+      timeInfo = `Deadline: ${deadlineStr}`
+    }
+  } else {
+    timeInfo = 'No deadline'
+  }
+
+  const collaborators = task.collaborators?.length 
+    ? task.collaborators
+        .map(uid => {
+          const user = allUsers.value.find(u => u.uid === uid)
+          return user ? (user.name || user.displayName || user.email) : 'Unknown'
+        })
+        .join(', ')
+    : 'None'
+
+  return [
+    task.title,
+    task.status.replace('_', ' '),
+    timeInfo,
+    collaborators
+  ]
+})
+
+// Add styling to highlight overdue tasks
+autoTable(pdf, {
+  startY: yPosition,
+  head: [['Task', 'Status', 'Duration/Deadline', 'Collaborators']],
+  body: tableData,
+  theme: 'striped',
+  headStyles: {
+    fillColor: [79, 70, 229],
+    textColor: 255,
+    fontSize: 10,
+    fontStyle: 'bold'
+  },
+  styles: {
+    fontSize: 9,
+    cellPadding: 3
+  },
+  columnStyles: {
+    0: { cellWidth: 50 },
+    1: { cellWidth: 30 },
+    2: { cellWidth: 40 },
+    3: { cellWidth: 60 }
+  },
+  // Style overdue rows in red
+  didParseCell: function(data) {
+    if (data.column.index === 2 && data.cell.text[0]?.startsWith('OVERDUE')) {
+      data.cell.styles.textColor = [220, 38, 38] // Red color
+      data.cell.styles.fontStyle = 'bold'
+    }
+  },
+  margin: { left: 14, right: 14 }
+})
+
+
+        yPosition = pdf.lastAutoTable.finalY + 10
+      }
+
+      yPosition += 5
+    }
+
+    // Add footer with page numbers
+    const pageCount = pdf.internal.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i)
+      pdf.setFontSize(8)
+      pdf.setTextColor(150, 150, 150)
+      pdf.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        pdf.internal.pageSize.getHeight() - 10,
+        { align: 'center' }
+      )
+    }
+
+    // Download
+    const timestamp = new Date().toISOString().split('T')[0]
+    pdf.save(`ProjectReport_${timestamp}.pdf`)
+
+  } catch (err) {
+    console.error("Error exporting PDF:", err)
+    alert("Failed to export PDF. Please try again.")
+  }
+}
+
+// Get count of overdue tasks for a project
+function getProjectOverdueCount(projectId) {
+  const now = Date.now() / 1000; // Current time in seconds
+  
+  return tasksForReport.value.filter(task => {
+    // Task must belong to this project
+    if (task.projectId !== projectId) return false;
+    
+    // Task must have a deadline
+    if (!task.deadline) return false;
+    
+    // Task must not be completed
+    if (task.status === 'completed') return false;
+    
+    // Deadline must be in the past
+    return task.deadline < now;
+  }).length;
+}
+
+// Check if a task is overdue
+function isTaskOverdue(task) {
+  if (!task || !task.deadline) return false
+  if (task.status === 'completed') return false
+  
+  // Handle both seconds and milliseconds timestamps
+  const deadlineTimestamp = task.deadline < 10000000000 ? task.deadline * 1000 : task.deadline
+  const now = Date.now()
+  
+  return deadlineTimestamp < now
+}
+
+// Get how many days overdue
+function getDaysOverdue(deadline) {
+  if (!deadline) return 0
+  
+  // Handle both seconds and milliseconds timestamps
+  const deadlineTimestamp = deadline < 10000000000 ? deadline * 1000 : deadline
+  const now = Date.now()
+  
+  const diffMs = now - deadlineTimestamp
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  
+  return days > 0 ? days : 0
+}
+
+
+/* ========================
+   Calculations
+======================== */
 function calculateStatistics() {
   const now = Date.now() / 1000
-  const sevenDaysFromNow = now + (7 * 24 * 60 * 60)
+  const nextWeek = now + 7 * 24 * 60 * 60
 
+  const t = tasks.value
   statistics.value = {
-    totalTasks: tasks.value.length,
+    totalTasks: t.length,
     totalSubtasks: subtasks.value.length,
-    ongoingTasks: tasks.value.filter(t => t.status === 'ongoing').length,
-    completedTasks: tasks.value.filter(t => t.status === 'completed').length,
-    overdueTasks: tasks.value.filter(t => t.deadline && t.deadline < now && t.status !== 'completed').length,
-    dueSoonTasks: tasks.value.filter(t => t.deadline && t.deadline > now && t.deadline < sevenDaysFromNow).length,
-    criticalPriority: tasks.value.filter(t => (t.priority || 0) >= 8).length,
-    highPriority: tasks.value.filter(t => (t.priority || 0) >= 6 && (t.priority || 0) < 8).length,
-    mediumPriority: tasks.value.filter(t => (t.priority || 0) >= 4 && (t.priority || 0) < 6).length,
-    lowPriority: tasks.value.filter(t => (t.priority || 0) < 4).length
+    ongoingTasks: t.filter(x => x.status === 'ongoing').length,
+    completedTasks: t.filter(x => x.status === 'completed').length,
+    overdueTasks: t.filter(x => x.deadline && x.deadline < now && x.status !== 'completed').length,
+    dueSoonTasks: t.filter(x => x.deadline && x.deadline > now && x.deadline < nextWeek).length,
+    criticalPriority: t.filter(x => (x.priority || 0) >= 8).length,
+    highPriority: t.filter(x => (x.priority || 0) >= 6 && (x.priority || 0) < 8).length,
+    mediumPriority: t.filter(x => (x.priority || 0) >= 4 && (x.priority || 0) < 6).length,
+    lowPriority: t.filter(x => (x.priority || 0) < 4).length
   }
 }
 
-function getUserDisplayName() {
-  return authStore.user?.displayName || authStore.user?.name || authStore.user?.email || 'User'
-}
+/* ========================
+   Helpers
+======================== */
+const tasksByProject = id => tasksForReport.value.filter(t => t.projectId === id)
 
-function navigateTo(path) {
-  router.push(path)
-}
+const getUserDisplayName = () =>
+  authStore.user?.displayName || authStore.user?.name || authStore.user?.email || 'User'
+
+const navigateTo = path => router.push(path)
 
 function navigateToTask(task) {
   window.selectedTaskForView = task
   router.push('/tasks')
 }
 
-function getProjectTaskCount(projectId) {
-  return tasks.value.filter(t => t.projectId === projectId).length
-}
+const getProjectTaskCount = id => tasks.value.filter(t => t.projectId === id).length
 
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline'
-  const date = new Date(deadline * 1000)
-  return date.toLocaleDateString('en-SG', {
+  
+  // Handle both seconds and milliseconds timestamps
+  const timestamp = deadline < 10000000000 ? deadline * 1000 : deadline
+  const date = new Date(timestamp)
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) return 'Invalid date'
+  
+  return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
   })
 }
 
-function formatDate(timestamp) {
-  if (!timestamp) return 'Unknown'
-  const date = new Date(timestamp * 1000)
-  return date.toLocaleDateString('en-SG', { month: 'short', day: 'numeric', year: 'numeric' })
+const formatDate = ts =>
+  ts ? new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown'
+
+function formatRelativeTime(ts) {
+  if (!ts) return 'Unknown'
+  const diff = Date.now() - ts * 1000
+  const minutes = diff / 60000
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${Math.floor(minutes)}m ago`
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`
+  if (minutes < 10080) return `${Math.floor(minutes / 1440)}d ago`
+  return formatDate(ts)
 }
 
-function formatRelativeTime(timestamp) {
-  if (!timestamp) return 'Unknown'
-  const now = Date.now()
-  const time = timestamp * 1000
-  const diff = now - time
+function formatDuration(startedAt, completedAt) {
+  // Convert to milliseconds if epoch is in seconds
+  const normalize = (t) => (t < 1e12 ? t * 1000 : t)
 
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
+  const start = new Date(normalize(startedAt))
+  const end = new Date(normalize(completedAt))
+  const diffMs = end - start
 
-  if (minutes < 1) return 'Just now'
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-  return formatDate(timestamp)
+  if (isNaN(diffMs) || diffMs < 0) return '—'
+
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const diffHours = Math.floor((diffMs / (1000 * 60 * 60)) % 24)
+  const diffMinutes = Math.floor((diffMs / (1000 * 60)) % 60)
+
+  let result = []
+  if (diffDays) result.push(`${diffDays}d`)
+  if (diffHours) result.push(`${diffHours}h`)
+  if (diffMinutes && !diffDays) result.push(`${diffMinutes}m`)
+
+  return result.length ? result.join(' ') : '<1m'
 }
 
 function getDeadlineStatus(deadline) {
   if (!deadline) return 'No deadline'
-  const now = Date.now() / 1000
-  const daysUntil = Math.ceil((deadline - now) / 86400)
-
-  if (daysUntil < 0) return 'Overdue'
-  if (daysUntil === 0) return 'Due today'
-  if (daysUntil === 1) return 'Due tomorrow'
-  if (daysUntil <= 7) return `Due in ${daysUntil} days`
+  const days = Math.ceil((deadline - Date.now() / 1000) / 86400)
+  if (days < 0) return 'Overdue'
+  if (days === 0) return 'Due today'
+  if (days === 1) return 'Due tomorrow'
+  if (days <= 7) return `Due in ${days} days`
   return ''
 }
 
 function getDeadlineClass(deadline) {
   if (!deadline) return ''
-  const now = Date.now() / 1000
-  const daysUntil = (deadline - now) / 86400
-
-  if (daysUntil < 0) return 'text-red-600'
-  if (daysUntil <= 1) return 'text-red-500'
-  if (daysUntil <= 3) return 'text-orange-500'
-  if (daysUntil <= 7) return 'text-amber-500'
+  const days = (deadline - Date.now() / 1000) / 86400
+  if (days < 0) return 'text-red-600'
+  if (days <= 1) return 'text-red-500'
+  if (days <= 3) return 'text-orange-500'
+  if (days <= 7) return 'text-amber-500'
   return 'text-gray-500'
 }
 
-function formatStatus(status) {
-  const statusMap = {
-    'unassigned': 'Unassigned',
-    'ongoing': 'Ongoing',
-    'under_review': 'Under Review',
-    'completed': 'Completed'
-  }
-  return statusMap[status] || status
-}
+/* ========================
+   Status / Priority Styling
+======================== */
+const formatStatus = s =>
+  ({ unassigned: 'Unassigned', ongoing: 'Ongoing', under_review: 'Under Review', completed: 'Completed' }[s] || s)
 
-function getStatusClass(status) {
-  const classMap = {
-    'unassigned': 'status-unassigned',
-    'ongoing': 'status-ongoing',
-    'under_review': 'status-review',
-    'completed': 'status-completed'
-  }
-  return classMap[status] || 'status-default'
-}
+const getStatusClass = s =>
+  ({ unassigned: 'status-unassigned', ongoing: 'status-ongoing', under_review: 'status-review', completed: 'status-completed' }[s] || 'status-default')
 
-function getPriorityBadgeClass(priority) {
-  const p = priority || 5
+function getPriorityBadgeClass(p = 5) {
   if (p >= 8) return 'priority-critical'
   if (p >= 6) return 'priority-high'
   if (p >= 4) return 'priority-medium'
   return 'priority-low'
 }
 
-function getActivityIconClass(status) {
-  const classMap = {
-    'completed': 'bg-green-100 text-green-600',
-    'ongoing': 'bg-blue-100 text-blue-600',
-    'under_review': 'bg-purple-100 text-purple-600',
-    'unassigned': 'bg-amber-100 text-amber-600'
-  }
-  return classMap[status] || 'bg-gray-100 text-gray-600'
-}
+const getActivityIconClass = s =>
+  ({ completed: 'bg-green-100 text-green-600', ongoing: 'bg-blue-100 text-blue-600', under_review: 'bg-purple-100 text-purple-600', unassigned: 'bg-amber-100 text-amber-600' }[s] || 'bg-gray-100 text-gray-600')
 
-function getActivityDescription(task) {
-  const status = formatStatus(task.status)
-  if (task.subTaskId) {
-    return `Subtask is ${status.toLowerCase()}`
-  }
-  return `Task is ${status.toLowerCase()}`
-}
+const getActivityDescription = t =>
+  t.subTaskId ? `Subtask is ${formatStatus(t.status).toLowerCase()}` : `Task is ${formatStatus(t.status).toLowerCase()}`
 
+/* ========================
+   Lifecycle
+======================== */
 onMounted(async () => {
   console.log('Dashboard mounted, route query:', route.query)
-
   await fetchData()
   await nextTick()
-
+  
   if (route.query.newUser === 'true') {
-    console.log('Showing welcome toast for new user')
     setTimeout(() => {
       toast.success('Account created successfully! Welcome to Smart Task Management System.', {
         timeout: 5000,
         closeOnClick: true,
-        pauseOnFocusLoss: false,
         pauseOnHover: true,
         draggable: true,
-        draggablePercent: 0.6,
-        showCloseButtonOnHover: false,
         hideProgressBar: false,
-        closeButton: "button",
         icon: true
       })
     }, 500)
   }
 })
 </script>
+
+
+
+
 
 <style scoped>
 /* Animations */
@@ -1127,4 +1760,33 @@ onMounted(async () => {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Progress bar animations and styling */
+.progress-bar-container {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  background-color: #e5e7eb;
+  border-radius: 9999px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  transition: width 0.5s ease-out;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+}
+
+/* Status indicator dots */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
 </style>

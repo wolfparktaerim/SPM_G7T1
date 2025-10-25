@@ -76,6 +76,24 @@ def sample_subtask_data():
     }
 
 
+@pytest.fixture
+def sample_extension_request():
+    """Sample extension request for testing"""
+    from models import ExtensionRequest
+    return ExtensionRequest(
+        request_id="req-123",
+        item_id="task-123",
+        item_type="task",
+        requester_id="collab-user-456",
+        owner_id="owner-user-123",
+        current_deadline=int(datetime.now().timestamp()) + 86400 * 7,
+        proposed_deadline=int(datetime.now().timestamp()) + 86400 * 14,
+        reason="Need more time to complete the task",
+        status="pending",
+        created_at=int(datetime.now().timestamp())
+    )
+
+
 class TestExtensionRequestModels:
     """Test data models"""
     
@@ -993,6 +1011,383 @@ class TestExtensionRequestIntegration:
         approved_request, error = service.respond_to_request(update_req)
         assert error is None
         assert approved_request.status == "approved"
+
+
+class TestAdditionalEndpoints:
+    """Test additional endpoints for better coverage"""
+
+    @patch('app.extension_request_service.get_requests_by_requester')
+    def test_get_requests_by_requester_endpoint(self, mock_get, client, sample_extension_request):
+        """Test GET /extension-requests/requester/<id>"""
+        mock_get.return_value = [sample_extension_request]
+
+        response = client.get('/extension-requests/requester/collab-456')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['requests']) == 1
+
+    @patch('app.extension_request_service.get_requests_by_requester')
+    def test_get_requests_by_requester_with_status_filter(self, mock_get, client, sample_extension_request):
+        """Test GET /extension-requests/requester/<id> with status filter"""
+        mock_get.return_value = [sample_extension_request]
+
+        response = client.get('/extension-requests/requester/collab-456?status=pending')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['requests']) == 1
+
+    @patch('app.extension_request_service.get_requests_by_item')
+    def test_get_requests_by_item_endpoint(self, mock_get, client, sample_extension_request):
+        """Test GET /extension-requests/item/<id>"""
+        mock_get.return_value = [sample_extension_request]
+
+        response = client.get('/extension-requests/item/task-123')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['requests']) == 1
+
+    def test_respond_to_request_missing_body(self, client):
+        """Test PATCH /extension-requests/<id>/respond without JSON body"""
+        response = client.patch('/extension-requests/req-123/respond')
+        assert response.status_code in [400, 415]  # 415 for missing Content-Type
+        # When status is 415, there might not be a JSON response
+        if response.status_code == 400:
+            data = response.get_json()
+            assert 'Missing JSON body' in data.get('error', '')
+
+    @patch('app.extension_request_service.respond_to_request')
+    def test_respond_to_request_not_found(self, mock_respond, client):
+        """Test PATCH /extension-requests/<id>/respond when request not found"""
+        mock_respond.return_value = (None, "Extension request not found")
+
+        response = client.patch('/extension-requests/req-123/respond', json={
+            "responderId": "owner-789",
+            "status": "approved"
+        })
+
+        assert response.status_code == 404
+
+    @patch('app.extension_request_service.respond_to_request')
+    def test_respond_to_request_already_responded(self, mock_respond, client):
+        """Test PATCH /extension-requests/<id>/respond when already responded"""
+        mock_respond.return_value = (None, "Request has already been responded to")
+
+        response = client.patch('/extension-requests/req-123/respond', json={
+            "responderId": "owner-789",
+            "status": "approved"
+        })
+
+        assert response.status_code == 400
+
+
+class TestServiceMethods:
+    """Test service methods for better coverage"""
+
+    def test_get_requests_by_requester_all(self, mock_db):
+        """Test getting all requests by requester"""
+        mock_requests_ref = Mock()
+        mock_db.side_effect = lambda path: mock_requests_ref if path == "deadlineExtensionRequests" else Mock()
+
+        mock_requests_ref.get.return_value = {
+            "req1": {
+                "requestId": "req1",
+                "itemId": "task-1",
+                "itemType": "task",
+                "requesterId": "user-1",
+                "ownerId": "owner-1",
+                "currentDeadline": 1700000000,
+                "proposedDeadline": 1700086400,
+                "reason": "Need more time",
+                "status": "pending",
+                "createdAt": 1699000000
+            },
+            "req2": {
+                "requestId": "req2",
+                "itemId": "task-2",
+                "itemType": "task",
+                "requesterId": "user-1",
+                "ownerId": "owner-1",
+                "currentDeadline": 1700000000,
+                "proposedDeadline": 1700086400,
+                "reason": "Need more time",
+                "status": "approved",
+                "createdAt": 1699000000,
+                "respondedAt": 1699500000
+            },
+            "req3": {
+                "requestId": "req3",
+                "itemId": "task-3",
+                "itemType": "task",
+                "requesterId": "user-2",
+                "ownerId": "owner-1",
+                "currentDeadline": 1700000000,
+                "proposedDeadline": 1700086400,
+                "reason": "Need more time",
+                "status": "pending",
+                "createdAt": 1699000000
+            }
+        }
+
+        service = ExtensionRequestService()
+
+        # Get all requests for user-1
+        requests = service.get_requests_by_requester("user-1")
+        assert len(requests) == 2
+
+        # Get pending requests for user-1
+        pending_requests = service.get_requests_by_requester("user-1", "pending")
+        assert len(pending_requests) == 1
+        assert pending_requests[0].status == "pending"
+
+    def test_get_requests_by_item(self, mock_db):
+        """Test getting all requests for a specific item"""
+        mock_requests_ref = Mock()
+        mock_db.side_effect = lambda path: mock_requests_ref if path == "deadlineExtensionRequests" else Mock()
+
+        mock_requests_ref.get.return_value = {
+            "req1": {
+                "requestId": "req1",
+                "itemId": "task-1",
+                "itemType": "task",
+                "requesterId": "user-1",
+                "ownerId": "owner-1",
+                "currentDeadline": 1700000000,
+                "proposedDeadline": 1700086400,
+                "reason": "Need more time",
+                "status": "pending",
+                "createdAt": 1699000000
+            },
+            "req2": {
+                "requestId": "req2",
+                "itemId": "task-1",
+                "itemType": "task",
+                "requesterId": "user-2",
+                "ownerId": "owner-1",
+                "currentDeadline": 1700000000,
+                "proposedDeadline": 1700172800,
+                "reason": "Extended deadline",
+                "status": "approved",
+                "createdAt": 1699000000,
+                "respondedAt": 1699500000
+            },
+            "req3": {
+                "requestId": "req3",
+                "itemId": "task-2",
+                "itemType": "task",
+                "requesterId": "user-1",
+                "ownerId": "owner-1",
+                "currentDeadline": 1700000000,
+                "proposedDeadline": 1700086400,
+                "reason": "Need more time",
+                "status": "pending",
+                "createdAt": 1699000000
+            }
+        }
+
+        service = ExtensionRequestService()
+
+        # Get all requests for task-1
+        requests = service.get_requests_by_item("task-1")
+        assert len(requests) == 2
+
+    @patch('extension_request_service.requests')
+    def test_respond_to_request_not_found(self, mock_requests_lib, mock_db):
+        """Test responding to non-existent request"""
+        mock_requests_ref = Mock()
+        mock_db.side_effect = lambda path: mock_requests_ref if path == "deadlineExtensionRequests" else Mock()
+
+        mock_request_ref = Mock()
+        mock_requests_ref.child.return_value = mock_request_ref
+        mock_request_ref.get.return_value = None
+
+        service = ExtensionRequestService()
+
+        update_req = UpdateExtensionRequestRequest(
+            request_id="non-existent",
+            responder_id="owner-1",
+            status="approved"
+        )
+
+        result, error = service.respond_to_request(update_req)
+        assert result is None
+        assert error == "Extension request not found"
+
+    @patch('extension_request_service.requests')
+    def test_respond_to_request_already_responded(self, mock_requests_lib, mock_db):
+        """Test responding to already-responded request"""
+        mock_requests_ref = Mock()
+        mock_db.side_effect = lambda path: mock_requests_ref if path == "deadlineExtensionRequests" else Mock()
+
+        mock_request_ref = Mock()
+        mock_requests_ref.child.return_value = mock_request_ref
+        mock_request_ref.get.return_value = {
+            "requestId": "req1",
+            "status": "approved",
+            "ownerId": "owner-1"
+        }
+
+        service = ExtensionRequestService()
+
+        update_req = UpdateExtensionRequestRequest(
+            request_id="req1",
+            responder_id="owner-1",
+            status="approved"
+        )
+
+        result, error = service.respond_to_request(update_req)
+        assert result is None
+        assert error == "Request has already been responded to"
+
+    @patch('extension_request_service.requests')
+    def test_respond_to_request_not_owner(self, mock_requests_lib, mock_db):
+        """Test responding when not the owner"""
+        mock_requests_ref = Mock()
+        mock_db.side_effect = lambda path: mock_requests_ref if path == "deadlineExtensionRequests" else Mock()
+
+        mock_request_ref = Mock()
+        mock_requests_ref.child.return_value = mock_request_ref
+        mock_request_ref.get.return_value = {
+            "requestId": "req1",
+            "status": "pending",
+            "ownerId": "owner-1"
+        }
+
+        service = ExtensionRequestService()
+
+        update_req = UpdateExtensionRequestRequest(
+            request_id="req1",
+            responder_id="wrong-owner",
+            status="approved"
+        )
+
+        result, error = service.respond_to_request(update_req)
+        assert result is None
+        assert error == "Only the owner can respond to this request"
+
+    @patch('extension_request_service.requests')
+    def test_respond_to_request_item_not_found(self, mock_requests_lib, mock_db):
+        """Test responding when item not found"""
+        mock_requests_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        def db_side_effect(path):
+            if path == "deadlineExtensionRequests":
+                return mock_requests_ref
+            elif path == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+
+        mock_request_ref = Mock()
+        mock_requests_ref.child.return_value = mock_request_ref
+        mock_request_ref.get.return_value = {
+            "requestId": "req1",
+            "status": "pending",
+            "ownerId": "owner-1",
+            "itemType": "task",
+            "itemId": "task-1"
+        }
+
+        mock_tasks_ref.child.return_value.get.return_value = None
+
+        service = ExtensionRequestService()
+
+        update_req = UpdateExtensionRequestRequest(
+            request_id="req1",
+            responder_id="owner-1",
+            status="approved"
+        )
+
+        result, error = service.respond_to_request(update_req)
+        assert result is None
+        assert error == "Item not found"
+
+    @patch('extension_request_service.requests')
+    def test_respond_to_request_update_deadline_fails(self, mock_requests_lib, mock_db, sample_task_data):
+        """Test responding when updating deadline fails"""
+        mock_requests_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        def db_side_effect(path):
+            if path == "deadlineExtensionRequests":
+                return mock_requests_ref
+            elif path == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+
+        mock_request_ref = Mock()
+        mock_requests_ref.child.return_value = mock_request_ref
+        mock_request_ref.get.return_value = {
+            "requestId": "req1",
+            "status": "pending",
+            "ownerId": sample_task_data["ownerId"],
+            "itemType": "task",
+            "itemId": "task-1",
+            "proposedDeadline": 1700086400
+        }
+
+        mock_tasks_ref.child.return_value.get.return_value = sample_task_data
+
+        # Mock PUT request failure
+        mock_requests_lib.put.return_value.status_code = 500
+
+        service = ExtensionRequestService()
+
+        update_req = UpdateExtensionRequestRequest(
+            request_id="req1",
+            responder_id=sample_task_data["ownerId"],
+            status="approved"
+        )
+
+        result, error = service.respond_to_request(update_req)
+        assert result is None
+        assert "Failed to update task deadline" in error
+
+    @patch('extension_request_service.requests')
+    def test_respond_to_request_update_deadline_exception(self, mock_requests_lib, mock_db, sample_task_data):
+        """Test responding when updating deadline raises exception"""
+        mock_requests_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        def db_side_effect(path):
+            if path == "deadlineExtensionRequests":
+                return mock_requests_ref
+            elif path == "tasks":
+                return mock_tasks_ref
+            return Mock()
+
+        mock_db.side_effect = db_side_effect
+
+        mock_request_ref = Mock()
+        mock_requests_ref.child.return_value = mock_request_ref
+        mock_request_ref.get.return_value = {
+            "requestId": "req1",
+            "status": "pending",
+            "ownerId": sample_task_data["ownerId"],
+            "itemType": "task",
+            "itemId": "task-1",
+            "proposedDeadline": 1700086400
+        }
+
+        mock_tasks_ref.child.return_value.get.return_value = sample_task_data
+
+        # Mock PUT request exception
+        mock_requests_lib.put.side_effect = Exception("Network error")
+
+        service = ExtensionRequestService()
+
+        update_req = UpdateExtensionRequestRequest(
+            request_id="req1",
+            responder_id=sample_task_data["ownerId"],
+            status="approved"
+        )
+
+        result, error = service.respond_to_request(update_req)
+        assert result is None
+        assert "Error updating deadline" in error
 
 
 if __name__ == '__main__':
