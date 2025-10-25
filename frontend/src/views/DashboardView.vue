@@ -575,83 +575,97 @@
 
         <ul v-else class="space-y-3">
           <li
-            v-for="task in tasksByProject(project.projectId)"
-            :key="task.taskId"
-            class="p-4 border rounded-lg"
-            :class="isTaskOverdue(task) ? 'bg-red-50 border-red-200' : 'bg-gray-50'"
-          >
-            <div class="flex items-start justify-between">
-              <div class="flex-1">
-                <div class="flex items-center gap-2 mb-2">
-                  <div class="font-semibold text-lg text-gray-800">
-                    {{ task.title }}
-                  </div>
-                  
-                  <!-- Overdue Badge -->
-                  <span 
-                    v-if="isTaskOverdue(task)"
-                    class="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-full font-medium"
-                  >
-                    ⚠️ Overdue
-                  </span>
-                </div>
+  v-for="task in tasksByProject(project.projectId)"
+  :key="task.taskId"
+  class="p-4 border rounded-lg"
+  :class="isTaskOverdue(task) ? 'bg-red-50 border-red-200' : 'bg-gray-50'"
+>
+  <div class="space-y-2">
+    <!-- Task Title and Overdue Badge -->
+    <div class="flex items-center gap-2">
+      <div class="font-semibold text-lg text-gray-800">
+        {{ task.title }}
+      </div>
+      
+      <!-- Overdue Badge -->
+      <span 
+        v-if="isTaskOverdue(task)"
+        class="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-full font-medium whitespace-nowrap"
+      >
+        ⚠️ Overdue
+      </span>
+    </div>
 
-                <div class="text-sm text-gray-600">
-                  Status:
-                  <span class="capitalize font-medium text-gray-800">
-                    {{ task.status }}
-                  </span>
-                </div>
+    <!-- Status -->
+    <div class="text-sm text-gray-600">
+      <span class="font-medium">Status:</span>
+      <span class="capitalize font-medium text-gray-800 ml-1">
+        {{ task.status.replace('_', ' ') }}
+      </span>
+    </div>
 
-                <!-- Duration Section (for completed tasks) -->
-                <div
-                  v-if="task.status === 'completed'"
-                  class="text-sm text-gray-600 mt-1"
-                >
-                  Duration:
-                  <span class="font-medium text-gray-800">
-                    {{ formatDuration(task.startedAt, task.completedAt) }}
-                  </span>
-                </div>
-                
-                <!-- Deadline Section (for incomplete tasks) -->
-                <div 
-                  v-else-if="task.deadline"
-                  class="text-sm mt-1"
-                  :class="isTaskOverdue(task) ? 'text-red-600 font-semibold' : 'text-gray-600'"
-                >
-                  Deadline: {{ formatDeadline(task.deadline) }}
-                  <span v-if="isTaskOverdue(task)">
-                    ({{ getDaysOverdue(task.deadline) }} days overdue)
-                  </span>
-                </div>
-              </div>
-            </div>
-           
-            <!-- Collaborators Section -->
-            <div v-if="task.collaborators?.length" class="mt-4">
-              <h3 class="text-sm font-semibold text-gray-700 mb-2">Collaborators</h3>
-              <div class="flex flex-wrap gap-2">
-                <div
-                  v-for="user in getCollaboratorsForTask(task)"
-                  :key="user.uid"
-                  class="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full"
-                >
-                  <img
-                    v-if="user.photoURL"
-                    :src="user.photoURL"
-                    alt="profile"
-                    class="w-6 h-6 rounded-full object-cover"
-                  />
-                  <span class="text-sm">{{ user.name || user.displayName || user.email }}</span>
-                </div>
-              </div>
-            </div>
+    <!-- Duration Section (for completed tasks) -->
+    <div
+      v-if="task.status === 'completed'"
+      class="text-sm text-gray-600"
+    >
+      <span class="font-medium">Duration:</span>
+      <span class="font-medium text-gray-800 ml-1">
+        {{ formatDuration(task.startedAt, task.completedAt) }}
+      </span>
+    </div>
+    
+    <!-- Deadline Section (for incomplete tasks) -->
+    <div 
+      v-else-if="task.deadline"
+      class="text-sm"
+    >
+      <span 
+        class="font-medium"
+        :class="isTaskOverdue(task) ? 'text-red-600' : 'text-gray-600'"
+      >
+        Deadline:
+      </span>
+      <span 
+        class="ml-1"
+        :class="isTaskOverdue(task) ? 'text-red-700 font-semibold' : 'text-gray-800'"
+      >
+        {{ formatDeadline(task.deadline) }}
+      </span>
+      <span 
+        v-if="isTaskOverdue(task)" 
+        class="text-red-700 font-bold ml-1"
+      >
+        ({{ getDaysOverdue(task.deadline) }} days overdue)
+      </span>
+    </div>
+   
+    <!-- Collaborators Section -->
+    <div v-if="task.collaborators?.length" class="pt-2 border-t border-gray-200">
+      <h4 class="text-sm font-semibold text-gray-700 mb-2">Collaborators</h4>
+      <div class="flex flex-wrap gap-2">
+        <div
+          v-for="user in getCollaboratorsForTask(task)"
+          :key="user.uid"
+          class="flex items-center gap-2 px-3 py-1 bg-white border border-gray-200 rounded-full"
+        >
+          <img
+            v-if="user.photoURL"
+            :src="user.photoURL"
+            alt="profile"
+            class="w-6 h-6 rounded-full object-cover"
+          />
+          <span class="text-sm">{{ user.name || user.displayName || user.email }}</span>
+        </div>
+      </div>
+    </div>
 
-            <div v-else class="mt-4 text-gray-500 text-sm italic">
-              No collaborators assigned.
-            </div>
-          </li>
+    <div v-else class="pt-2 border-t border-gray-200 text-gray-500 text-sm italic">
+      No collaborators assigned.
+    </div>
+  </div>
+</li>
+
         </ul>
       </section>
     </div>
@@ -936,21 +950,176 @@ function openReport() {
   showReport.value = true
 }
 
-async function exportPDF() {
-  const element = document.getElementById('report-content')
-  if (!element) return console.error("Report content element not found")
+import autoTable from 'jspdf-autotable'
 
+async function exportPDF() {
   try {
-    const canvas = await html2canvas(element, { scale: 2 })
     const pdf = new jsPDF('p', 'mm', 'a4')
-    const width = pdf.internal.pageSize.getWidth()
-    const height = (canvas.height * width) / canvas.width
-    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, width, height)
-    pdf.save('ProjectReport.pdf')
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    let yPosition = 20
+
+    // Add header
+    pdf.setFontSize(20)
+    pdf.setFont(undefined, 'bold')
+    pdf.text('Project Report', pageWidth / 2, yPosition, { align: 'center' })
+    yPosition += 10
+
+    // Add access level info
+    pdf.setFontSize(10)
+    pdf.setFont(undefined, 'normal')
+    pdf.text(`Viewing as: ${currentUserDepartment.value} - ${currentRole.value}`, 14, yPosition)
+    yPosition += 10
+
+    // Loop through each project
+    for (const project of filteredProjects.value) {
+      const projectTasks = tasksByProject(project.projectId)
+      const progress = getProjectProgress(project.projectId)
+
+      // Check if we need a new page
+      if (yPosition > 250) {
+        pdf.addPage()
+        yPosition = 20
+      }
+
+      // Project title
+      pdf.setFontSize(16)
+      pdf.setFont(undefined, 'bold')
+      pdf.setTextColor(79, 70, 229) // Indigo color
+      pdf.text(project.title, 14, yPosition)
+      yPosition += 8
+
+      // Progress info
+      pdf.setFontSize(10)
+      pdf.setFont(undefined, 'normal')
+      pdf.setTextColor(0, 0, 0)
+      pdf.text(
+        `Progress: ${progress.completed}/${progress.total} tasks (${progress.percentage}%)`,
+        14,
+        yPosition
+      )
+      yPosition += 7
+
+      // Status counts
+      const statusText = [
+        `Completed: ${getProjectStatusCount(project.projectId, 'completed')}`,
+        `Ongoing: ${getProjectStatusCount(project.projectId, 'ongoing')}`,
+        `Under Review: ${getProjectStatusCount(project.projectId, 'under_review')}`,
+        `Unassigned: ${getProjectStatusCount(project.projectId, 'unassigned')}`,
+        `Overdue: ${getProjectOverdueCount(project.projectId)}`
+      ].join(' | ')
+      
+      pdf.setFontSize(9)
+      pdf.setTextColor(100, 100, 100)
+      pdf.text(statusText, 14, yPosition)
+      yPosition += 10
+
+      if (projectTasks.length === 0) {
+        pdf.setFontSize(10)
+        pdf.setTextColor(150, 150, 150)
+        pdf.text('No tasks for this project.', 20, yPosition)
+        yPosition += 10
+      } else {
+        // Create table data for tasks
+const tableData = projectTasks.map(task => {
+  let timeInfo = ''
+  
+  if (task.status === 'completed') {
+    // Show duration for completed tasks
+    timeInfo = `Duration: ${formatDuration(task.startedAt, task.completedAt)}`
+  } else if (task.deadline) {
+    // Show deadline for incomplete tasks
+    const deadlineStr = formatDeadline(task.deadline)
+    if (isTaskOverdue(task)) {
+      const daysOverdue = getDaysOverdue(task.deadline)
+      // Use plain text instead of emoji
+      timeInfo = `OVERDUE: ${deadlineStr} (${daysOverdue} days late)`
+    } else {
+      timeInfo = `Deadline: ${deadlineStr}`
+    }
+  } else {
+    timeInfo = 'No deadline'
+  }
+
+  const collaborators = task.collaborators?.length 
+    ? task.collaborators
+        .map(uid => {
+          const user = allUsers.value.find(u => u.uid === uid)
+          return user ? (user.name || user.displayName || user.email) : 'Unknown'
+        })
+        .join(', ')
+    : 'None'
+
+  return [
+    task.title,
+    task.status.replace('_', ' '),
+    timeInfo,
+    collaborators
+  ]
+})
+
+// Add styling to highlight overdue tasks
+autoTable(pdf, {
+  startY: yPosition,
+  head: [['Task', 'Status', 'Duration/Deadline', 'Collaborators']],
+  body: tableData,
+  theme: 'striped',
+  headStyles: {
+    fillColor: [79, 70, 229],
+    textColor: 255,
+    fontSize: 10,
+    fontStyle: 'bold'
+  },
+  styles: {
+    fontSize: 9,
+    cellPadding: 3
+  },
+  columnStyles: {
+    0: { cellWidth: 50 },
+    1: { cellWidth: 30 },
+    2: { cellWidth: 40 },
+    3: { cellWidth: 60 }
+  },
+  // Style overdue rows in red
+  didParseCell: function(data) {
+    if (data.column.index === 2 && data.cell.text[0]?.startsWith('OVERDUE')) {
+      data.cell.styles.textColor = [220, 38, 38] // Red color
+      data.cell.styles.fontStyle = 'bold'
+    }
+  },
+  margin: { left: 14, right: 14 }
+})
+
+
+        yPosition = pdf.lastAutoTable.finalY + 10
+      }
+
+      yPosition += 5
+    }
+
+    // Add footer with page numbers
+    const pageCount = pdf.internal.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i)
+      pdf.setFontSize(8)
+      pdf.setTextColor(150, 150, 150)
+      pdf.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        pdf.internal.pageSize.getHeight() - 10,
+        { align: 'center' }
+      )
+    }
+
+    // Download
+    const timestamp = new Date().toISOString().split('T')[0]
+    pdf.save(`ProjectReport_${timestamp}.pdf`)
+
   } catch (err) {
     console.error("Error exporting PDF:", err)
+    alert("Failed to export PDF. Please try again.")
   }
 }
+
 // Get count of overdue tasks for a project
 function getProjectOverdueCount(projectId) {
   const now = Date.now() / 1000; // Current time in seconds
@@ -972,19 +1141,28 @@ function getProjectOverdueCount(projectId) {
 
 // Check if a task is overdue
 function isTaskOverdue(task) {
-  if (!task.deadline) return false;
-  if (task.status === 'completed') return false;
+  if (!task || !task.deadline) return false
+  if (task.status === 'completed') return false
   
-  const now = Date.now() / 1000;
-  return task.deadline < now;
+  // Handle both seconds and milliseconds timestamps
+  const deadlineTimestamp = task.deadline < 10000000000 ? task.deadline * 1000 : task.deadline
+  const now = Date.now()
+  
+  return deadlineTimestamp < now
 }
 
 // Get how many days overdue
 function getDaysOverdue(deadline) {
-  const now = Date.now() / 1000;
-  const diffSeconds = now - deadline;
-  const days = Math.floor(diffSeconds / (60 * 60 * 24));
-  return days;
+  if (!deadline) return 0
+  
+  // Handle both seconds and milliseconds timestamps
+  const deadlineTimestamp = deadline < 10000000000 ? deadline * 1000 : deadline
+  const now = Date.now()
+  
+  const diffMs = now - deadlineTimestamp
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  
+  return days > 0 ? days : 0
 }
 
 
@@ -1029,7 +1207,14 @@ const getProjectTaskCount = id => tasks.value.filter(t => t.projectId === id).le
 
 function formatDeadline(deadline) {
   if (!deadline) return 'No deadline'
-  const date = new Date(deadline * 1000)
+  
+  // Handle both seconds and milliseconds timestamps
+  const timestamp = deadline < 10000000000 ? deadline * 1000 : deadline
+  const date = new Date(timestamp)
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) return 'Invalid date'
+  
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
