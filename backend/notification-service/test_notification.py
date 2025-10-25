@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import sys
 import os
+import time
 
 # Set environment variables before imports
 os.environ['JSON_PATH'] = '/tmp/dummy.json'
@@ -16,11 +17,12 @@ with patch('firebase_admin.initialize_app'):
     with patch('firebase_admin.credentials.Certificate'):
         with patch('firebase_admin.db.reference') as mock_db_ref:
             mock_db_ref.return_value = Mock()
-            
+
             from notification_service import NotificationService
             from scheduler_service import SchedulerService
             from models import Notification
             from app import app
+            from shared import current_timestamp
 
 @pytest.fixture
 def client():
@@ -561,6 +563,749 @@ class TestNotificationEndpoints:
         response = client.post('/scheduler/trigger')
         assert response.status_code == 200
         mock_trigger.assert_called_once()
+
+    @patch('app.notification_service.create_task_update_notification')
+    @patch('app.notification_service.check_duplicate_update_notification')
+    def test_send_task_update_notification_in_app(self, mock_check_dup, mock_create, client):
+        """Test sending task update notification (in-app only)"""
+        mock_check_dup.return_value = False
+        mock_create.return_value = "notif123"
+
+        data = {
+            "itemId": "t1",
+            "taskTitle": "Test Task",
+            "oldStatus": "in_progress",
+            "newStatus": "completed",
+            "userIds": ["u1", "u2"],
+            "channel": "in-app"
+        }
+
+        response = client.post('/notifications/task-update', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['notificationsSent']) == 2
+
+    @patch('requests.post')
+    @patch('app.notification_service.create_task_update_notification')
+    @patch('app.notification_service.check_duplicate_update_notification')
+    def test_send_task_update_notification_both_channels(self, mock_check_dup, mock_create, mock_post, client):
+        """Test sending task update notification (both channels)"""
+        mock_check_dup.return_value = False
+        mock_create.return_value = "notif123"
+        mock_post.return_value.status_code = 200
+
+        data = {
+            "itemId": "st1",
+            "taskTitle": "Test Subtask",
+            "oldStatus": "to_do",
+            "newStatus": "in_progress",
+            "userIds": ["u1"],
+            "channel": "both",
+            "isSubtask": True,
+            "parentTaskTitle": "Parent Task",
+            "userEmails": {"u1": "user1@example.com"}
+        }
+
+        response = client.post('/notifications/task-update', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['notificationsSent']) == 1
+        assert len(data['emailsSent']) == 1
+
+    @patch('app.notification_service.check_duplicate_update_notification')
+    def test_send_task_update_notification_duplicate(self, mock_check_dup, client):
+        """Test skipping duplicate task update notification"""
+        mock_check_dup.return_value = True
+
+        data = {
+            "itemId": "t1",
+            "taskTitle": "Test Task",
+            "oldStatus": "in_progress",
+            "newStatus": "completed",
+            "userIds": ["u1"],
+            "channel": "in-app"
+        }
+
+        response = client.post('/notifications/task-update', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['notificationsSent']) == 0
+
+    def test_send_task_update_notification_missing_field(self, client):
+        """Test task update notification with missing fields"""
+        data = {
+            "itemId": "t1",
+            "taskTitle": "Test Task"
+        }
+
+        response = client.post('/notifications/task-update', json=data)
+        assert response.status_code == 400
+
+    @patch('app.notification_service.create_comment_notification')
+    @patch('app.notification_service.check_duplicate_comment_notification')
+    def test_send_comment_notification_in_app(self, mock_check_dup, mock_create, client):
+        """Test sending comment notification (in-app only)"""
+        mock_check_dup.return_value = False
+        mock_create.return_value = "notif456"
+
+        data = {
+            "itemId": "t1",
+            "taskTitle": "Test Task",
+            "commentText": "Great work!",
+            "commenterName": "John",
+            "commenterId": "u1",
+            "recipientIds": ["u2", "u3"],
+            "channel": "in-app"
+        }
+
+        response = client.post('/notifications/comment', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['notificationsSent']) == 2
+
+    @patch('app.notification_service.create_comment_notification')
+    @patch('app.notification_service.check_duplicate_comment_notification')
+    def test_send_comment_notification_skip_commenter(self, mock_check_dup, mock_create, client):
+        """Test comment notification doesn't notify commenter"""
+        mock_check_dup.return_value = False
+        mock_create.return_value = "notif456"
+
+        data = {
+            "itemId": "t1",
+            "taskTitle": "Test Task",
+            "commentText": "Great work!",
+            "commenterName": "John",
+            "commenterId": "u1",
+            "recipientIds": ["u1", "u2"],
+            "channel": "in-app"
+        }
+
+        response = client.post('/notifications/comment', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['notificationsSent']) == 1
+
+    @patch('requests.post')
+    @patch('app.notification_service.create_comment_notification')
+    @patch('app.notification_service.check_duplicate_comment_notification')
+    def test_send_comment_notification_with_email(self, mock_check_dup, mock_create, mock_post, client):
+        """Test sending comment notification with email"""
+        mock_check_dup.return_value = False
+        mock_create.return_value = "notif456"
+        mock_post.return_value.status_code = 200
+
+        data = {
+            "itemId": "st1",
+            "taskTitle": "Test Subtask",
+            "commentText": "Looks good",
+            "commenterName": "Jane",
+            "commenterId": "u1",
+            "recipientIds": ["u2"],
+            "channel": "both",
+            "isSubtask": True,
+            "parentTaskTitle": "Parent",
+            "taskDeadline": 1700000000,
+            "recipientEmails": {"u2": "user2@example.com"}
+        }
+
+        response = client.post('/notifications/comment', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['emailsSent']) == 1
+
+    @patch('app.notification_service.create_deadline_extension_request_notification')
+    def test_send_deadline_extension_request_in_app(self, mock_create, client):
+        """Test sending deadline extension request notification"""
+        mock_create.return_value = "notif789"
+
+        data = {
+            "ownerId": "u1",
+            "itemId": "t1",
+            "itemTitle": "Test Task",
+            "requesterId": "u2",
+            "itemType": "task",
+            "extensionRequestId": "er1"
+        }
+
+        response = client.post('/notifications/deadline-extension-request', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['notificationSent'] == True
+
+    @patch('requests.post')
+    @patch('app.notification_service.create_deadline_extension_request_notification')
+    def test_send_deadline_extension_request_with_email(self, mock_create, mock_post, client):
+        """Test sending deadline extension request with email"""
+        mock_create.return_value = "notif789"
+        mock_post.return_value.status_code = 200
+
+        data = {
+            "ownerId": "u1",
+            "itemId": "st1",
+            "itemTitle": "Test Subtask",
+            "requesterId": "u2",
+            "itemType": "subtask",
+            "extensionRequestId": "er1",
+            "channel": "both",
+            "ownerEmail": "owner@example.com",
+            "requesterName": "John",
+            "currentDeadline": 1700000000,
+            "proposedDeadline": 1710000000,
+            "reason": "Need more time",
+            "parentTaskTitle": "Parent"
+        }
+
+        response = client.post('/notifications/deadline-extension-request', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['emailSent'] == True
+
+    @patch('app.notification_service.create_deadline_extension_response_notification')
+    def test_send_deadline_extension_response(self, mock_create, client):
+        """Test sending deadline extension response notification"""
+        mock_create.return_value = "notif890"
+
+        data = {
+            "requesterId": "u2",
+            "itemId": "t1",
+            "itemType": "task",
+            "status": "approved",
+            "itemTitle": "Test Task",
+            "newDeadline": 1710000000
+        }
+
+        response = client.post('/notifications/deadline-extension-response', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['notificationSent'] == True
+
+    @patch('app.notification_service.create_deadline_extension_response_notification')
+    @patch('app.notification_service.db')
+    def test_send_deadline_extension_response_without_title(self, mock_db, mock_create, client):
+        """Test extension response notification fetching title from DB"""
+        mock_create.return_value = "notif890"
+        mock_ref = Mock()
+        mock_ref.get.return_value = {"title": "Fetched Task"}
+        mock_db.reference.return_value = mock_ref
+
+        data = {
+            "requesterId": "u2",
+            "itemId": "t1",
+            "itemType": "task",
+            "status": "rejected",
+            "rejectionReason": "Cannot extend"
+        }
+
+        response = client.post('/notifications/deadline-extension-response', json=data)
+        assert response.status_code == 200
+
+    @patch('requests.post')
+    @patch('app.notification_service.create_deadline_extension_response_notification')
+    def test_send_deadline_extension_response_with_email(self, mock_create, mock_post, client):
+        """Test extension response notification with email"""
+        mock_create.return_value = "notif890"
+        mock_post.return_value.status_code = 200
+
+        data = {
+            "requesterId": "u2",
+            "itemId": "st1",
+            "itemType": "subtask",
+            "status": "approved",
+            "itemTitle": "Test Subtask",
+            "newDeadline": 1710000000,
+            "channel": "both",
+            "requesterEmail": "requester@example.com",
+            "parentTaskTitle": "Parent"
+        }
+
+        response = client.post('/notifications/deadline-extension-response', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['emailSent'] == True
+
+    @patch('app.notification_service.create_deadline_changed_notification')
+    def test_send_deadline_changed_notification(self, mock_create, client):
+        """Test sending deadline changed notification"""
+        mock_create.return_value = "notif901"
+
+        data = {
+            "itemId": "t1",
+            "itemTitle": "Test Task",
+            "itemType": "task",
+            "collaboratorIds": ["u1", "u2"],
+            "newDeadline": 1710000000
+        }
+
+        response = client.post('/notifications/deadline-changed', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['notificationsSent']) == 2
+
+    @patch('requests.post')
+    @patch('app.notification_service.create_deadline_changed_notification')
+    def test_send_deadline_changed_notification_with_email(self, mock_create, mock_post, client):
+        """Test deadline changed notification with email"""
+        mock_create.return_value = "notif901"
+        mock_post.return_value.status_code = 200
+
+        data = {
+            "itemId": "st1",
+            "itemTitle": "Test Subtask",
+            "itemType": "subtask",
+            "collaboratorIds": ["u1"],
+            "newDeadline": 1710000000,
+            "requesterId": "u2",
+            "channel": "both",
+            "userEmails": {"u1": "user1@example.com"},
+            "requesterName": "John",
+            "parentTaskTitle": "Parent"
+        }
+
+        response = client.post('/notifications/deadline-changed', json=data)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['emailsSent']) == 1
+
+    # Error handling tests
+    @patch('app.notification_service.get_user_notifications')
+    def test_get_user_notifications_error(self, mock_get, client):
+        """Test error handling in get_user_notifications"""
+        mock_get.side_effect = Exception("Database error")
+
+        response = client.get('/notifications/u1')
+        assert response.status_code == 500
+
+    @patch('app.notification_service.get_unread_notifications')
+    def test_get_unread_notifications_error(self, mock_get, client):
+        """Test error handling in get_unread_notifications"""
+        mock_get.side_effect = Exception("Database error")
+
+        response = client.get('/notifications/u1/unread')
+        assert response.status_code == 500
+
+    @patch('app.notification_service.mark_notification_read')
+    def test_mark_notification_read_error(self, mock_mark, client):
+        """Test error handling in mark_notification_read"""
+        mock_mark.side_effect = Exception("Database error")
+
+        response = client.patch('/notifications/u1/n1/read')
+        assert response.status_code == 500
+
+    @patch('app.notification_service.delete_notification')
+    def test_delete_notification_error(self, mock_delete, client):
+        """Test error handling in delete_notification"""
+        mock_delete.side_effect = Exception("Database error")
+
+        response = client.delete('/notifications/u1/n1')
+        assert response.status_code == 500
+
+    @patch('app.notification_service.delete_notification')
+    def test_delete_notification_not_found(self, mock_delete, client):
+        """Test deleting non-existent notification"""
+        mock_delete.return_value = (False, "Notification not found")
+
+        response = client.delete('/notifications/u1/invalid')
+        assert response.status_code == 404
+
+    @patch('app.notification_service.mark_all_notifications_read')
+    def test_mark_all_read_error(self, mock_mark_all, client):
+        """Test error handling in mark_all_notifications_read"""
+        mock_mark_all.side_effect = Exception("Database error")
+
+        response = client.patch('/notifications/u1/mark-all-read')
+        assert response.status_code == 500
+
+    @patch('app.scheduler_service.trigger_manually')
+    def test_trigger_scheduler_error(self, mock_trigger, client):
+        """Test error handling in trigger_scheduler"""
+        mock_trigger.side_effect = Exception("Scheduler error")
+
+        response = client.post('/scheduler/trigger')
+        assert response.status_code == 500
+
+    @patch('app.notification_service.create_task_update_notification')
+    def test_send_task_update_notification_error(self, mock_create, client):
+        """Test error handling in send_task_update_notification"""
+        mock_create.side_effect = Exception("Creation error")
+
+        data = {
+            "itemId": "t1",
+            "taskTitle": "Test Task",
+            "oldStatus": "in_progress",
+            "newStatus": "completed",
+            "userIds": ["u1"],
+            "channel": "in-app"
+        }
+
+        response = client.post('/notifications/task-update', json=data)
+        assert response.status_code == 500
+
+    def test_send_comment_notification_missing_field(self, client):
+        """Test comment notification with missing fields"""
+        data = {
+            "itemId": "t1",
+            "taskTitle": "Test Task"
+        }
+
+        response = client.post('/notifications/comment', json=data)
+        assert response.status_code == 400
+
+    def test_send_deadline_extension_request_missing_field(self, client):
+        """Test extension request with missing fields"""
+        data = {
+            "ownerId": "u1",
+            "itemId": "t1"
+        }
+
+        response = client.post('/notifications/deadline-extension-request', json=data)
+        assert response.status_code == 400
+
+    def test_send_deadline_extension_response_missing_field(self, client):
+        """Test extension response with missing fields"""
+        data = {
+            "requesterId": "u2"
+        }
+
+        response = client.post('/notifications/deadline-extension-response', json=data)
+        assert response.status_code == 400
+
+    def test_send_deadline_changed_notification_missing_field(self, client):
+        """Test deadline changed with missing fields"""
+        data = {
+            "itemId": "t1"
+        }
+
+        response = client.post('/notifications/deadline-changed', json=data)
+        assert response.status_code == 400
+
+    @patch('app.notification_service.create_deadline_extension_request_notification')
+    def test_send_deadline_extension_request_failure(self, mock_create, client):
+        """Test extension request notification failure"""
+        mock_create.return_value = None
+
+        data = {
+            "ownerId": "u1",
+            "itemId": "t1",
+            "itemTitle": "Test Task",
+            "requesterId": "u2",
+            "itemType": "task",
+            "extensionRequestId": "er1"
+        }
+
+        response = client.post('/notifications/deadline-extension-request', json=data)
+        assert response.status_code == 500
+
+    @patch('app.notification_service.create_deadline_extension_response_notification')
+    def test_send_deadline_extension_response_failure(self, mock_create, client):
+        """Test extension response notification failure"""
+        mock_create.return_value = None
+
+        data = {
+            "requesterId": "u2",
+            "itemId": "t1",
+            "itemType": "task",
+            "status": "approved",
+            "itemTitle": "Test Task"
+        }
+
+        response = client.post('/notifications/deadline-extension-response', json=data)
+        assert response.status_code == 500
+
+class TestNotificationServiceMethods:
+    """Test additional notification service methods"""
+
+    @patch('notification_service.get_db_reference')
+    def test_create_task_update_notification_task(self, mock_ref):
+        """Test creating task status update notification"""
+        mock_notif_ref = Mock()
+        mock_new_ref = Mock()
+        mock_new_ref.key = "notif123"
+        mock_notif_ref.child.return_value.push.return_value = mock_new_ref
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        notif_id = service.create_task_update_notification(
+            "u1", "t1", "Test Task", "to_do", "in_progress"
+        )
+
+        assert notif_id == "notif123"
+        mock_new_ref.set.assert_called_once()
+
+    @patch('notification_service.get_db_reference')
+    def test_create_task_update_notification_subtask(self, mock_ref):
+        """Test creating subtask status update notification"""
+        mock_notif_ref = Mock()
+        mock_new_ref = Mock()
+        mock_new_ref.key = "notif456"
+        mock_notif_ref.child.return_value.push.return_value = mock_new_ref
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        notif_id = service.create_task_update_notification(
+            "u1", "st1", "Test Subtask", "in_progress", "completed",
+            is_subtask=True, parent_task_title="Parent Task"
+        )
+
+        assert notif_id == "notif456"
+
+    @patch('notification_service.get_db_reference')
+    def test_check_duplicate_update_notification_found(self, mock_ref):
+        """Test duplicate update notification detection"""
+        mock_notif_ref = Mock()
+        mock_notif_ref.child.return_value.get.return_value = {
+            "n1": {
+                "type": "task_status_update",
+                "taskId": "t1",
+                "newStatus": "completed",
+                "createdAt": current_timestamp() - 60
+            }
+        }
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        is_duplicate = service.check_duplicate_update_notification(
+            "u1", "t1", "completed", is_subtask=False
+        )
+
+        assert is_duplicate == True
+
+    @patch('notification_service.get_db_reference')
+    def test_check_duplicate_update_notification_not_found(self, mock_ref):
+        """Test no duplicate update notification"""
+        mock_notif_ref = Mock()
+        mock_notif_ref.child.return_value.get.return_value = {
+            "n1": {
+                "type": "task_status_update",
+                "taskId": "t1",
+                "newStatus": "in_progress",
+                "createdAt": current_timestamp() - 60
+            }
+        }
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        is_duplicate = service.check_duplicate_update_notification(
+            "u1", "t1", "completed", is_subtask=False
+        )
+
+        assert is_duplicate == False
+
+    @patch('notification_service.get_db_reference')
+    def test_create_comment_notification_task(self, mock_ref):
+        """Test creating comment notification for task"""
+        mock_notif_ref = Mock()
+        mock_new_ref = Mock()
+        mock_new_ref.key = "notif789"
+        mock_notif_ref.child.return_value.push.return_value = mock_new_ref
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        notif_id = service.create_comment_notification(
+            "u1", "t1", "Test Task", "Great work!", "John", "u2", 1700000000
+        )
+
+        assert notif_id == "notif789"
+
+    @patch('notification_service.get_db_reference')
+    def test_create_comment_notification_long_text(self, mock_ref):
+        """Test comment notification with long comment text"""
+        mock_notif_ref = Mock()
+        mock_new_ref = Mock()
+        mock_new_ref.key = "notif890"
+        mock_notif_ref.child.return_value.push.return_value = mock_new_ref
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        long_comment = "A" * 150
+        notif_id = service.create_comment_notification(
+            "u1", "st1", "Test Subtask", long_comment, "Jane", "u2",
+            is_subtask=True, parent_task_title="Parent"
+        )
+
+        assert notif_id == "notif890"
+
+    @patch('notification_service.get_db_reference')
+    def test_check_duplicate_comment_notification_found(self, mock_ref):
+        """Test duplicate comment notification detection"""
+        mock_notif_ref = Mock()
+        mock_notif_ref.child.return_value.get.return_value = {
+            "n1": {
+                "type": "task_comment_notification",
+                "taskId": "t1",
+                "commenterId": "u2",
+                "createdAt": current_timestamp() - 30
+            }
+        }
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        is_duplicate = service.check_duplicate_comment_notification(
+            "u1", "t1", "u2", is_subtask=False
+        )
+
+        assert is_duplicate == True
+
+    @patch('notification_service.get_db_reference')
+    def test_create_deadline_extension_request_notification_task(self, mock_ref):
+        """Test creating deadline extension request notification for task"""
+        mock_notif_ref = Mock()
+        mock_users_ref = Mock()
+        mock_users_ref.child.return_value.get.return_value = {"name": "John Doe"}
+
+        def side_effect(arg=None):
+            if arg == "users":
+                return mock_users_ref
+            return mock_notif_ref
+
+        mock_ref.side_effect = side_effect
+
+        service = NotificationService()
+        notif_id = service.create_deadline_extension_request_notification(
+            "u1", "t1", "Test Task", "u2", "task", "er1"
+        )
+
+        assert notif_id is not None
+
+    @patch('notification_service.get_db_reference')
+    def test_create_deadline_extension_request_notification_subtask(self, mock_ref):
+        """Test creating deadline extension request notification for subtask"""
+        mock_notif_ref = Mock()
+        mock_users_ref = Mock()
+        mock_subtasks_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        mock_users_ref.child.return_value.get.return_value = {"name": "Jane Doe"}
+        mock_subtasks_ref.child.return_value.get.return_value = {"taskId": "t1"}
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def side_effect(arg=None):
+            if arg == "users":
+                return mock_users_ref
+            elif arg == "subtasks":
+                return mock_subtasks_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return mock_notif_ref
+
+        mock_ref.side_effect = side_effect
+
+        service = NotificationService()
+        notif_id = service.create_deadline_extension_request_notification(
+            "u1", "st1", "Test Subtask", "u2", "subtask", "er1"
+        )
+
+        assert notif_id is not None
+
+    @patch('notification_service.get_db_reference')
+    def test_create_deadline_extension_response_notification_approved(self, mock_ref):
+        """Test creating extension response notification (approved)"""
+        mock_notif_ref = Mock()
+        mock_ref.return_value = mock_notif_ref
+
+        service = NotificationService()
+        notif_id = service.create_deadline_extension_response_notification(
+            "u2", "t1", "task", "Test Task", "approved", new_deadline=1710000000
+        )
+
+        assert notif_id is not None
+
+    @patch('notification_service.get_db_reference')
+    def test_create_deadline_extension_response_notification_rejected(self, mock_ref):
+        """Test creating extension response notification (rejected)"""
+        mock_notif_ref = Mock()
+        mock_subtasks_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        mock_subtasks_ref.child.return_value.get.return_value = {"taskId": "t1"}
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def side_effect(arg=None):
+            if arg == "subtasks":
+                return mock_subtasks_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return mock_notif_ref
+
+        mock_ref.side_effect = side_effect
+
+        service = NotificationService()
+        notif_id = service.create_deadline_extension_response_notification(
+            "u2", "st1", "subtask", "Test Subtask", "rejected",
+            rejection_reason="Cannot approve"
+        )
+
+        assert notif_id is not None
+
+    @patch('notification_service.get_db_reference')
+    def test_create_deadline_changed_notification_with_requester(self, mock_ref):
+        """Test creating deadline changed notification with requester"""
+        mock_notif_ref = Mock()
+        mock_users_ref = Mock()
+        mock_users_ref.child.return_value.get.return_value = {"name": "John Doe"}
+
+        def side_effect(arg=None):
+            if arg == "users":
+                return mock_users_ref
+            return mock_notif_ref
+
+        mock_ref.side_effect = side_effect
+
+        service = NotificationService()
+        notif_id = service.create_deadline_changed_notification(
+            "u1", "t1", "task", "Test Task", 1710000000, requester_id="u2"
+        )
+
+        assert notif_id is not None
+
+    @patch('notification_service.get_db_reference')
+    def test_create_deadline_changed_notification_no_requester(self, mock_ref):
+        """Test creating deadline changed notification without requester"""
+        mock_notif_ref = Mock()
+        mock_subtasks_ref = Mock()
+        mock_tasks_ref = Mock()
+
+        mock_subtasks_ref.child.return_value.get.return_value = {"taskId": "t1"}
+        mock_tasks_ref.child.return_value.get.return_value = {"title": "Parent Task"}
+
+        def side_effect(arg=None):
+            if arg == "subtasks":
+                return mock_subtasks_ref
+            elif arg == "tasks":
+                return mock_tasks_ref
+            return mock_notif_ref
+
+        mock_ref.side_effect = side_effect
+
+        service = NotificationService()
+        notif_id = service.create_deadline_changed_notification(
+            "u1", "st1", "subtask", "Test Subtask", 1710000000
+        )
+
+        assert notif_id is not None
+
+    @patch('notification_service.get_db_reference')
+    def test_get_user_name(self, mock_ref):
+        """Test getting user name"""
+        mock_users_ref = Mock()
+        mock_users_ref.child.return_value.get.return_value = {"name": "Test User"}
+        mock_ref.return_value = mock_users_ref
+
+        service = NotificationService()
+        name = service._get_user_name("u1")
+
+        assert name == "Test User"
+
+    @patch('notification_service.get_db_reference')
+    def test_get_user_name_not_found(self, mock_ref):
+        """Test getting user name when user not found"""
+        mock_users_ref = Mock()
+        mock_users_ref.child.return_value.get.return_value = None
+        mock_ref.return_value = mock_users_ref
+
+        service = NotificationService()
+        name = service._get_user_name("invalid")
+
+        assert name == "Unknown User"
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
