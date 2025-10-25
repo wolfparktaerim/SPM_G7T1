@@ -141,17 +141,7 @@ function getTasksByStatus(status) {
 
 // NEW: Sort tasks by priority (highest first), then by creation date
 function getSortedTasksByStatus(status) {
-  const tasks = getTasksByStatus(status)
-  return tasks.sort((a, b) => {
-    // First sort by priority (descending - higher priority first)
-    const priorityA = a.priority || 0
-    const priorityB = b.priority || 0
-    if (priorityB !== priorityA) {
-      return priorityB - priorityA
-    }
-
-    return (a.createdAt || 0) - (b.createdAt || 0)
-  })
+  return getTasksByStatus(status)
 }
 
 function handleSubtaskExpanded(expanded) {
