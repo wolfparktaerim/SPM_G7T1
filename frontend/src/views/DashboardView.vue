@@ -842,30 +842,37 @@ async function fetchTasks() {
   try {
     console.log('Fetching tasks from:', `${import.meta.env.VITE_BACKEND_API}tasks`)
     const response = await axios.get(`${import.meta.env.VITE_BACKEND_API}tasks`)
-    const data = response.data
+    const allTasks = response.data.tasks || []
+    const uid = authStore.user?.uid
+    const role = currentRole.value?.toLowerCase()
+    const dept = currentUserDepartment.value?.toLowerCase()
 
-    // Filter tasks where user is involved (owner, collaborator, or creator)
-    const currentUserId = authStore.user?.uid
-    tasks.value = data.tasks?.filter(task => {
-      return task.ownerId === currentUserId ||
-        task.collaborators?.includes(currentUserId) ||
-        task.creatorId === currentUserId
-    }) || []
-
-    console.log(`Loaded ${tasks.value.length} tasks for user ${currentUserId}`)
-
-  } catch (error) {
-    console.error('Error fetching tasks:', error.response?.status, error.response?.data)
-    if (error.response?.status === 404) {
-      toast.error('Tasks API not found. Please check if the backend services are running.')
-    } else if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-      toast.error('Cannot connect to backend. Please ensure services are running.')
-    } else {
-      toast.error('Failed to load tasks')
+    if (!uid) {
+      tasks.value = []
+      return
     }
-    throw error
+
+    // HR/Admin + Directors: all tasks
+    if (dept === 'hr and admin' || role === 'director') {
+      tasks.value = allTasks
+    } else {
+      // Regular users: only tasks where user is owner/collaborator/creator
+      tasks.value = allTasks.filter(
+        t =>
+          t.ownerId === uid ||
+          t.collaborators?.includes(uid) ||
+          t.creatorId === uid
+      )
+    }
+
+    console.log(`Loaded ${tasks.value.length} tasks for user ${uid}`)
+  } catch (error) {
+    console.error('Error fetching tasks:', error)
+    tasks.value = []
+    toast.error('Failed to load tasks')
   }
 }
+
 
 async function fetchSubtasks() {
   try {
